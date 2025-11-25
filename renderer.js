@@ -47,36 +47,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 이벤트 리스너 ---
 
-// 로그아웃
-const logoutBtn = document.getElementById('logout-btn');
-
-if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-        
-        // 1. confirm() 대화 상자를 띄워 사용자에게 확인 받기
-        const isConfirmed = confirm('정말 로그아웃을 하시겠습니까?');
-
-        if (isConfirmed) {
-            // 사용자가 '확인'을 누른 경우 (isConfirmed === true)
-            console.log('로그아웃 실행');
-            
-            // 2. 로그아웃 처리 로직 실행
-            isLoggedIn = false;
-            showView('logged-out-view');
-            // 로그아웃 후 기본 화면은 '로그인'
-            showScreen(loggedOutView, 'login-screen');
-            document.getElementById('nav-login').classList.add('active');
-            document.getElementById('nav-support').classList.remove('active');
-            
-        } else {
-            // 사용자가 '취소'를 누른 경우 (isConfirmed === false)
-            console.log('로그아웃 취소됨');
-            // 로그인 상태 유지 (별도의 추가 로직 없이 함수를 종료하면 됩니다.)
-        }
+    // [로그아웃 뷰] 네비게이션 (로그인, 고객센터)
+    document.querySelectorAll('#logged-out-view .nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            console.log(`로그아웃 네비 클릭: ${item.id}`);
+            document.querySelectorAll('#logged-out-view .nav-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            showScreen(loggedOutView, item.dataset.screen);
+        });
     });
-} else {
-    console.error('logout-btn을 찾을 수 없습니다.');
-}
 
     // 로그인 처리
     const loginForm = document.getElementById('login-form');
@@ -138,20 +117,35 @@ if (logoutBtn) {
     }
 
     // 로그아웃
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            console.log('로그아웃 버튼 클릭');
+const logoutBtn = document.getElementById('logout-btn');
+
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        
+        // 1. confirm() 대화 상자를 띄워 사용자에게 확인 받기
+        const isConfirmed = confirm('정말 로그아웃을 하시겠습니까?');
+
+        if (isConfirmed) {
+            // 사용자가 '확인'을 누른 경우 (isConfirmed === true)
+            console.log('로그아웃 실행');
+            
+            // 2. 로그아웃 처리 로직 실행
             isLoggedIn = false;
             showView('logged-out-view');
             // 로그아웃 후 기본 화면은 '로그인'
             showScreen(loggedOutView, 'login-screen');
             document.getElementById('nav-login').classList.add('active');
             document.getElementById('nav-support').classList.remove('active');
-        });
-    } else {
-        console.error('logout-btn을 찾을 수 없습니다.');
-    }
+            
+        } else {
+            // 사용자가 '취소'를 누른 경우 (isConfirmed === false)
+            console.log('로그아웃 취소됨');
+            // 로그인 상태 유지 (별도의 추가 로직 없이 함수를 종료하면 됩니다.)
+        }
+    });
+} else {
+    console.error('logout-btn을 찾을 수 없습니다.');
+}
 
     // 검사 생성 -> 검사 화면으로 이동 버튼
     const clientInfoForm = document.getElementById('client-info-form');

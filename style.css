@@ -104,25 +104,27 @@ p { color: #555; }
 /* 검사 생성 화면 */
 
 /* --- 폼 버튼 그룹 --- */
-#client-info-form button {
-    width: 100%; /* [수정] 모든 버튼을 꽉 차게 */
-    padding: 15px;
-    font-size: 16px;
-    margin-top: 15px; /* [수정] 버튼 사이의 간격 */
-}
-
 .form-button-group {
+    display: flex; /* Flexbox 사용 */
+    flex-direction: column-reverse; /* 시각적 순서를 역순으로 변경 (검사시작이 위로) */
     gap: 10px; /* 버튼 사이 간격 */
     margin-top: 20px;
 }
 
+#client-info-form button {
+    width: 100%; /* 버튼을 꽉 차게 */
+    padding: 15px;
+    font-size: 16px;
+    margin-top: 0; /* Flexbox의 gap으로 간격 관리 */
+}
+
 .form-button-group .primary-button {
-    flex-grow: 1; /* '검사 화면으로 이동' 버튼이 남은 공간을 채우도록 */
-    width: auto; /* 기존 width: 100% 오버라이드 */
+    flex-grow: 1; 
+    width: auto; 
 }
 
 .form-button-group .secondary-button {
-    flex-grow: 0; /* '정보 초기화' 버튼은 내용만큼만 */
+    flex-grow: 0; 
     width: auto;
 }
 
@@ -134,13 +136,10 @@ p { color: #555; }
     background-color: #c0392b; /* 마우스 올렸을 때: 더 어두운 빨간색 */
 }
 
-/* 폼 내부 버튼의 상단 여백을 그룹에서 관리하도록 변경 */
-#client-info-form button {
-    margin-top: 0;
-}
+/* 폼 내부 요소 스타일 (변경 없음) */
 #client-info-form label { display: block; margin: 15px 0 5px 0; font-weight: 500; }
 #client-info-form input { width: 95%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-#client-info-form button { margin-top: 20px; }
+#client-info-form button { margin-top: 20px; } /* 이 버튼은 그룹 밖에 있는 경우를 위해 유지 */
 
 /* 검사 진행 화면 */
 .scan-animation-card { text-align: center; }
