@@ -1,0 +1,21 @@
+{
+  "name": "bd-scanner",
+  "version": "1.0.0",
+  "description": "Mobile Spy App Scanner",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "adb": "^0.2.0",
+    "adbkit": "^2.11.1",
+    "xml2js": "^0.6.2"
+  }
+}

@@ -1,0 +1,19 @@
+/* print.css */
+@media print {
+    body * {
+        visibility: hidden; /* 모든 요소 숨기기 */
+    }
+
+    #results-content, #results-content * {
+        visibility: visible; /* 결과 컨텐츠만 보이게 */
+    }
+    
+    #results-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none;
+        border: none;
+    }
+}

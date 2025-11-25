@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com;">
+    <title>BigDream Security Scanner</title>
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="logged-out-view" class="app-view active">
+        <nav class="sidebar">
+            <div class="logo-area">
+                <img src="./assets/logo.png" alt="BigDream Logo" class="company-logo">
+                <span class="app-title">BD SCANNER</span>
+            </div>
+            <ul class="nav-menu">
+                <li id="nav-login" class="nav-item active" data-screen="login-screen">
+                    <span>로그인</span>
+                </li>
+                <li id="nav-support" class="nav-item" data-screen="support-screen">
+                    <span>고객센터</span>
+                </li>
+            </ul>
+        </nav>
+        <main class="main-content">
+            <section id="login-screen" class="screen active">
+                <div class="content-card login-card">
+                    <h2>환영합니다</h2>
+                    <p>로그인하여 서비스를 시작하세요.</p>
+                    <form id="login-form">
+                        <input type="text" id="username" placeholder="아이디">
+                        <input type="password" id="password" placeholder="비밀번호">
+                        <p id="login-error" class="error-message"></p>
+                        <button type="submit" class="primary-button">로그인</button>
+                    </form>
+                </div>
+            </section>
+            <section id="support-screen" class="screen">
+                <div class="content-card support-card">
+                    <img src="./assets/icon-headset.svg" alt="Support Icon" class="support-icon">
+                    <h1>BigDream Security Solutions</h1>
+                    <p class.support-subtitle">
+                        BigDream에서 개발한 안드로이드 및 iOS 악성프로그램 검사 프로그램입니다.
+                    </p>
+                    <div class="support-contact">
+                        <p><strong>사용 문의 및 기술 지원</strong></p>
+                        <span>010-8119-1837</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="logged-in-view" class="app-view">
+        <nav class="sidebar">
+            <div class="logo-area">
+                 <img src="./assets/logo.png" alt="BigDream Logo" class="company-logo">
+                <span class="app-title">BD SCANNER</span>
+            </div>
+            <ul class="nav-menu">
+                <li id="nav-create" class="nav-item active"><span>검사생성</span></li>
+                <li id="nav-open" class="nav-item"><span>검사열기</span></li>
+            </ul>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="sidebar-button">로그아웃</button>
+            </div>
+        </nav>
+        <main class="main-content">
+            <section id="create-scan-screen" class="screen active">
+                <h2>검사 생성</h2>
+                <p>검사를 진행할 대상자의 정보를 입력해주세요.</p>
+                <div class="content-card">
+                    <form id="client-info-form">
+                    <label>대상자 이름</label><input type="text" id="client-name">
+                    <label>생년월일</label><input type="date" id="client-dob">
+                    <label>휴대폰 번호</label><input type="tel" id="client-phone" placeholder="010-1234-5678">
+                <div class="form-button-group">
+                    <button id="reset-client-info-btn" type="button" class="secondary-button danger-button">정보 초기화</button>
+                
+                    <button id="start-scan-setup-btn" type="submit" class="primary-button" disabled>검사시작</button>
+            </div>
+        </form>
+     </div>
+</section>
+            <section id="open-scan-screen" class="screen">
+                <h2>검사 열기</h2>
+                <p>이전에 저장된 검사 결과 파일을 선택하여 불러옵니다.</p>
+                <div class="content-card file-drop-zone">
+                    <img src="./assets/icon-folder.svg" alt="Folder Icon">
+                    <p>아래 버튼을 클릭하여 파일을 선택하세요.</p>
+                    <button id="select-file-btn" type="button" class="secondary-button">파일 선택</button>
+                </div>
+            </section>
+            <section id="scan-progress-screen" class="screen">
+                <h2>검사 진행 중</h2>
+                <div class="content-card scan-animation-card">
+                    <div class="scanner-animation">
+                        <div class="radar"></div>
+                        <div class="device-icon">📱</div>
+                    </div>
+                    <p id="scan-status-text">기기 연결을 확인하는 중...</p>
+                    <div class="progress-bar-container"><div id="progress-bar" style="width: 0%;"></div></div>
+                    <div class="warning-box">
+                        <img src="./assets/icon-warning.svg" alt="Warning">
+                        <span><strong>경고:</strong> 검사가 완료될 때까지 USB 케이블을 절대 분리하지 마십시오.</span>
+                    </div>
+                </div>
+            </section>
+            <section id="scan-results-screen" class="screen">
+                <div class="results-header">
+                    <h2>검사 결과</h2>
+                    <button id="print-results-btn" type="button" class="secondary-button">결과 출력</button>
+                </div>
+                <div id="results-content" class="content-card">
+                    </div>
+            </section>
+        </main>
+    </div>
+
+    <link rel="stylesheet" href="print.css" media="print">
+    
+    <script src="./renderer.js"></script>
+</body>
+</html>
