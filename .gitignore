@@ -1,3 +1,6 @@
+#adb tools
+platform-tools/
+
 # Logs
 logs
 *.log
