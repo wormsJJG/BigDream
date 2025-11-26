@@ -78,11 +78,32 @@
                 <div class="form-button-group">
                     <button id="reset-client-info-btn" type="button" class="secondary-button danger-button">정보 초기화</button>
                 
-                    <button id="start-scan-setup-btn" type="submit" class="primary-button" disabled>검사시작</button>
+                    <button id="to-connection-screen-btn" type="submit" class="primary-button" disabled>다음</button>
             </div>
         </form>
      </div>
 </section>
+<section id="device-connection-screen" class="screen">
+                <h2>기기 연결 확인</h2>
+                <div class="content-card" style="text-align: center;">
+                    <div id="connection-status-icon" style="font-size: 80px; margin-bottom: 20px;">🔌</div>
+                    
+                    <h3 id="connection-status-title">기기를 연결해주세요</h3>
+                    <p id="connection-status-desc">
+                        Android 기기를 USB 케이블로 연결하고<br>
+                        화면에서 <strong>'USB 디버깅 허용'</strong>을 눌러주세요.
+                    </p>
+
+                    <div id="start-scan-container" style="display: none; margin-top: 30px;">
+                        <button id="real-start-scan-btn" class="primary-button" style="width: 100%; padding: 20px; font-size: 18px;">
+                            검사 시작하기
+                        </button>
+                    </div>
+                    
+                    <br>
+                    <button id="back-to-info-btn" class="secondary-button" style="width: 100%;">← 뒤로 가기</button>
+                </div>
+            </section>
             <section id="open-scan-screen" class="screen">
                 <h2>검사 열기</h2>
                 <p>이전에 저장된 검사 결과 파일을 선택하여 불러옵니다.</p>

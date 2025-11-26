@@ -31,6 +31,30 @@ app.whenReady().then(() => {
     createWindow();
 });
 
+ipcMain.handle('check-device-connection', async () => {
+    try {
+        const devices = await client.listDevices();
+        if (devices.length > 0) {
+            // 연결된 첫 번째 기기의 모델명 가져오기 시도 (선택사항)
+            const serial = devices[0].id;
+            let model = serial; // 기본값은 시리얼 번호
+            try {
+                // 모델명 가져오기: adb -s [serial] shell getprop ro.product.model
+                const output = await client.shell(serial, 'getprop ro.product.model');
+                const data = await adb.util.readAll(output);
+                model = data.toString().trim();
+            } catch (e) { /* 모델명 가져오기 실패 시 무시 */ }
+
+            return { connected: true, model: model };
+        } else {
+            return { connected: false };
+        }
+    } catch (err) {
+        console.error('기기 확인 중 오류:', err);
+        return { connected: false, error: err.message };
+    }
+});
+
 // (검사열기 기능 - File Open Dialog)
 ipcMain.handle('open-scan-file', async () => {
     console.log('--- main.js: open-scan-file 이벤트 수신 ---');

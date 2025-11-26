@@ -19,4 +19,12 @@ contextBridge.exposeInMainWorld(
     }
 );
 
+contextBridge.exposeInMainWorld('electronAPI', {
+    runScan: () => ipcRenderer.invoke('run-scan'),
+    openScanFile: () => ipcRenderer.invoke('open-scan-file'),
+    
+    // [추가] 연결 확인 함수 노출
+    checkDeviceConnection: () => ipcRenderer.invoke('check-device-connection') 
+});
+
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');

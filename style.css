@@ -1,21 +1,22 @@
-/* style.css */
+/* style.css (최종 완성본) */
+
 :root {
-  /* ... 이전과 동일한 색상 변수 ... */
-  --primary-color: #3A539B;
-  --secondary-bg-color: #F4F7F6;
+  --primary-color: #3A539B; /* 메인 파란색 */
+  --secondary-bg-color: #F4F7F6; /* 배경색 */
   --text-color: #333333;
   --card-bg-color: #ffffff;
   --border-color: #e0e0e0;
-  --danger-color: #D9534F;
-  --warning-color: #F0AD4E;
-  --success-color: #5CB85C;
+  --danger-color: #e74c3c; /* 빨간색 (로그아웃, 초기화) */
+  --warning-color: #F0AD4E; /* 주황색 */
+  --success-color: #5CB85C; /* 초록색 */
 }
 
 body {
     font-family: 'Noto Sans KR', sans-serif;
     margin: 0;
     background-color: var(--secondary-bg-color);
-    overflow: hidden;
+    overflow: hidden; /* 스크롤바 숨김 */
+    color: var(--text-color);
 }
 
 .app-view {
@@ -41,14 +42,15 @@ body {
     text-align: center;
     border-bottom: 1px solid #34495e;
 }
-.company-logo { width: 0px; height: 0px;}
-.app-title { font-size: 20px; font-weight: bold; margin-top: -20px; display: block; color: #4ECDC4; }
+.company-logo { width: 50px; }
+.app-title { font-size: 20px; font-weight: bold; margin-top: 10px; display: block; color: #4ECDC4; }
 .nav-menu { list-style: none; padding: 20px 0; margin: 0; flex-grow: 1; }
 .nav-item { padding: 15px 30px; cursor: pointer; transition: 0.2s; }
 .nav-item:hover { background-color: #34495e; }
 .nav-item.active { background-color: var(--primary-color); border-left: 5px solid #4ECDC4; padding-left: 25px; }
 .sidebar-footer { padding: 20px; }
-.sidebar-button { width: 100%; padding: 12px; background: #e74c3c; border: none; color: white; border-radius: 5px; cursor: pointer; }
+.sidebar-button { width: 100%; padding: 12px; background: var(--danger-color); border: none; color: white; border-radius: 5px; cursor: pointer; }
+.sidebar-button:hover { background-color: #c0392b; }
 
 /* --- 메인 컨텐츠 --- */
 .main-content {
@@ -75,14 +77,52 @@ body {
 h2 { font-size: 28px; color: #2c3e50; margin-top: 0; }
 p { color: #555; }
 
+/* --- 공통 버튼 스타일 --- */
+.primary-button { 
+    padding: 15px; 
+    background: var(--primary-color); 
+    color: white; 
+    border: none; 
+    border-radius: 5px; 
+    cursor: pointer; 
+    font-size: 16px; 
+    transition: background-color 0.3s;
+}
+.primary-button:hover { background-color: #2d427d; }
+.primary-button:disabled { background: #ccc; cursor: not-allowed; }
+
+.secondary-button {
+    padding: 15px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+.secondary-button:hover { background-color: #5a6268; }
+
+
+/* --- [수정] 위험(빨강) 버튼 스타일 (우선순위 높임) --- */
+.secondary-button.danger-button {
+    background-color: var(--danger-color);
+    color: #fff;
+}
+.secondary-button.danger-button:hover {
+    background-color: #c0392b;
+}
+
+
 /* --- 개별 화면 스타일 --- */
+
 /* 로그인 화면 */
 .login-card { text-align: center; max-width: 400px; margin: 50px auto; }
 .login-card input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; }
-.primary-button { width: 100%; padding: 15px; background: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-.primary-button:disabled { background: #ccc; }
+.login-card button { width: 100%; margin-top: 10px; }
+.error-message { color: var(--danger-color); font-size: 14px; margin-bottom: 10px; height: 20px;}
 
-/* 고객센터 화면 (고급스럽게) */
+/* 고객센터 화면 */
 .support-card {
     text-align: center;
     padding: 50px;
@@ -101,47 +141,17 @@ p { color: #555; }
 .support-contact p { margin: 0; font-weight: 500; }
 .support-contact span { font-size: 24px; color: var(--primary-color); font-weight: bold; }
 
-/* 검사 생성 화면 */
-
-/* --- 폼 버튼 그룹 --- */
-.form-button-group {
-    display: flex; /* Flexbox 사용 */
-    flex-direction: column-reverse; /* 시각적 순서를 역순으로 변경 (검사시작이 위로) */
-    gap: 10px; /* 버튼 사이 간격 */
-    margin-top: 20px;
-}
-
-#client-info-form button {
-    width: 100%; /* 버튼을 꽉 차게 */
-    padding: 15px;
-    font-size: 16px;
-    margin-top: 0; /* Flexbox의 gap으로 간격 관리 */
-}
-
-.form-button-group .primary-button {
-    flex-grow: 1; 
-    width: auto; 
-}
-
-.form-button-group .secondary-button {
-    flex-grow: 0; 
-    width: auto;
-}
-
-.secondary-button.danger-button {
-    background-color: #e74c3c; /* 기본 상태: 빨간색 */
-    color: #fff;
-}
-.secondary-button.danger-button:hover {
-    background-color: #c0392b; /* 마우스 올렸을 때: 더 어두운 빨간색 */
-}
-
-/* 폼 내부 요소 스타일 (변경 없음) */
+/* 검사 생성 화면 (폼 입력) */
 #client-info-form label { display: block; margin: 15px 0 5px 0; font-weight: 500; }
 #client-info-form input { width: 95%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-#client-info-form button { margin-top: 20px; } /* 이 버튼은 그룹 밖에 있는 경우를 위해 유지 */
 
-/* 검사 진행 화면 */
+/* [수정] 폼 내부 버튼들을 위아래로 꽉 차게 배치 */
+#client-info-form button {
+    width: 100%;       /* 가로 꽉 차게 */
+    margin-top: 15px;  /* 버튼 사이 간격 */
+}
+
+/* 검사 진행 화면 (애니메이션) */
 .scan-animation-card { text-align: center; }
 .scanner-animation {
     position: relative;
@@ -154,7 +164,7 @@ p { color: #555; }
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(58,83,155,0) 0%, rgba(58,83,155,0.1) 100%);
+    /* [수정] 배경색 제거 (애니메이션 오류 해결) */
     position: relative;
 }
 .radar::before, .radar::after {
@@ -177,15 +187,4 @@ p { color: #555; }
 #progress-bar { width: 0%; height: 100%; background: var(--success-color); border-radius: 5px; transition: width 0.5s ease; }
 .warning-box {
     display: flex; align-items: center; justify-content: center;
-    background: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin-top: 30px;
-}
-.warning-box img { width: 24px; margin-right: 10px; }
-
-/* 검사 결과 */
-.results-header { display: flex; justify-content: space-between; align-items: center; }
-.secondary-button { padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; }
-#results-content { /* 동적 생성 */ }
-
-/* 검사 열기 */
-.file-drop-zone { text-align: center; border: 2px dashed #ccc; padding: 50px; }
-.file-drop-zone img { width: 60px; margin-bottom: 20px; }
+    background: #fff
