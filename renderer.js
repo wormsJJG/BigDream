@@ -184,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function checkDevice() {
         // 현재 화면이 연결 화면이 아니면 폴링 중지
+        console.log("asdasdasdasdsad")
         if (!deviceConnectionScreen.classList.contains('active')) {
             stopDevicePolling();
             return;
