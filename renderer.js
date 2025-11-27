@@ -303,30 +303,181 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderResults(data) {
-        const container = document.getElementById('results-content');
-        if (!container) return;
+    function formatAppName(packageName) {
+        if (!packageName) return "Unknown";
+        const parts = packageName.split('.');
+        // 마지막 단어를 가져옴 (예: com.kakao.talk -> talk)
+        let name = parts[parts.length - 1];
+        
+        // "android"나 "app" 처럼 너무 일반적인 단어면 그 앞 단어 사용
+        if ((name === 'android' || name === 'app') && parts.length > 1) {
+            name = parts[parts.length - 2];
+        }
+        
+        // 첫 글자 대문자로 (talk -> Talk)
+        return name.charAt(0).toUpperCase() + name.slice(1);
+    }
 
-        container.innerHTML = `
-            <h3>검사 요약</h3>
-            <p><strong>의심스러운 앱:</strong> ${data.suspiciousApps ? data.suspiciousApps.length : '0'} 개</p>
-            <p><strong>발견된 APK 파일:</strong> ${data.apkFiles ? data.apkFiles.length : '0'} 개</p>
-            <br>
-            <h4>의심 앱 목록</h4>
-            <ul>
-                ${data.suspiciousApps && data.suspiciousApps.length > 0
-                    ? data.suspiciousApps.map(app => `<li>${app.packageName || app.name} (${app.reason || (app.isSideloaded ? '사이드로딩' : '기타')})</li>`).join('')
-                    : '<li>발견된 항목 없음</li>'
-                }
-            </ul>
-            <h4>발견된 APK 파일</h4>
-            <ul>
-                ${data.apkFiles && data.apkFiles.length > 0
-                    ? data.apkFiles.map(file => `<li>${file}</li>`).join('')
-                    : '<li>발견된 항목 없음</li>'
-                }
-            </ul>
-        `;
+    function renderResults(data) {
+        // 1. 기기 정보 바인딩
+        document.getElementById('res-model').textContent = data.deviceInfo.model;
+        document.getElementById('res-serial').textContent = data.deviceInfo.serial;
+        
+        const rootEl = document.getElementById('res-root');
+        rootEl.textContent = data.deviceInfo.isRooted ? '⚠️ 발견됨 (ROOTED)' : '✅ 안전함';
+        rootEl.style.color = data.deviceInfo.isRooted ? '#D9534F' : '#5CB85C';
+        
+        document.getElementById('res-phone').textContent = data.deviceInfo.phoneNumber;
+
+        // 2. 앱 그리드 (설치된 어플들) - 순서 변경됨 (2순위)
+        const gridContainer = document.getElementById('app-grid-container');
+        gridContainer.innerHTML = ''; 
+
+        data.allApps.forEach(app => {
+            const appDiv = document.createElement('div');
+            appDiv.className = `app-item ${app.isSideloaded || app.isRunningBg ? 'suspicious' : ''}`;
+            
+            // 앱 이름 가공 (패키지명 -> 이름)
+            const displayName = formatAppName(app.packageName);
+            const iconChar = displayName.charAt(0);
+            
+            appDiv.innerHTML = `
+                <div class="app-icon-placeholder">${iconChar}</div>
+                <div class="app-display-name">${displayName}</div>
+                <div class="app-package-sub">${app.packageName}</div>
+            `;
+
+            appDiv.addEventListener('click', () => {
+                showAppDetail(app, displayName); // displayName도 전달
+            });
+
+            gridContainer.appendChild(appDiv);
+        });
+
+        // 3. APK 파일 리스트
+        const apkList = document.getElementById('res-apk-list');
+        if (data.apkFiles.length === 0) {
+            apkList.innerHTML = '<li style="color:#aaa;">발견된 파일 없음</li>';
+        } else {
+            apkList.innerHTML = data.apkFiles.map(f => `<li>${f}</li>`).join('');
+        }
+
+        // 4. 위협 탐지 요약
+        const suspContainer = document.getElementById('suspicious-list-container');
+        if (data.suspiciousApps.length === 0) {
+            suspContainer.innerHTML = '<p style="color:#5CB85C; padding:10px;">✅ 탐지된 위협이 없습니다.</p>';
+        } else {
+            let html = '<ul style="list-style:none; padding:0;">';
+            data.suspiciousApps.forEach(app => {
+                const dName = formatAppName(app.packageName);
+                html += `
+                    <li style="padding:10px; border-bottom:1px solid #eee; color:#D9534F;">
+                        <strong>🚨 ${dName}</strong> (${app.packageName})
+                        <br>
+                        <span style="font-size:12px; color:#666;">
+                            이유: ${app.isSideloaded ? '사이드로딩' : ''} ${app.isRunningBg ? '백그라운드 실행' : ''} ${app.allPermissionsGranted ? '모든 권한 허용' : ''}
+                        </span>
+                    </li>`;
+            });
+            html += '</ul>';
+            suspContainer.innerHTML = html;
+        }
+    }
+        // 4. [핵심] 앱 그리드 생성 및 클릭 이벤트 연결
+        const gridContainer = document.getElementById('app-grid-container');
+        gridContainer.innerHTML = ''; // 초기화
+
+        // 모든 앱을 순회하며 아이콘 생성
+        data.allApps.forEach(app => {
+            const appDiv = document.createElement('div');
+            appDiv.className = `app-item ${app.isSideloaded || app.isRunningBg ? 'suspicious' : ''}`;
+            
+            // 아이콘 (실제 아이콘 추출은 느리므로, 글자로 대체하거나 기본 아이콘 사용)
+            // 'suspicious' 클래스가 있으면 빨간색, 아니면 기본색
+            const iconChar = app.packageName.charAt(0).toUpperCase();
+            
+            appDiv.innerHTML = `
+                <div class="app-icon-placeholder">${iconChar}</div>
+                <div class="app-name">${app.packageName}</div>
+            `;
+
+            // 클릭 시 상세 화면으로 이동
+            appDiv.addEventListener('click', () => {
+                showAppDetail(app);
+            });
+
+            gridContainer.appendChild(appDiv);
+        });
+    
+
+    // [New] 앱 상세 정보 보여주기 함수
+    function showAppDetail(app, displayName) {
+        const dashboard = document.getElementById('results-dashboard-view');
+        const detailView = document.getElementById('app-detail-view');
+        
+        // 헤더 정보
+        document.getElementById('detail-app-name').textContent = displayName;
+        document.getElementById('detail-package-name').textContent = app.packageName;
+        
+        // 상태 정보
+        const sideEl = document.getElementById('detail-sideload');
+        sideEl.textContent = app.isSideloaded ? '외부 설치 (위험)' : 'Play Store';
+        sideEl.className = `d-value ${app.isSideloaded ? 'status-danger' : 'status-safe'}`;
+
+        const bgEl = document.getElementById('detail-bg');
+        bgEl.textContent = app.isRunningBg ? '실행 중' : '중지됨';
+        bgEl.className = `d-value ${app.isRunningBg ? 'status-danger' : 'status-safe'}`;
+
+        const permEl = document.getElementById('detail-perm-status');
+        permEl.textContent = app.allPermissionsGranted ? '모두 허용됨 (주의)' : '제한적 허용';
+        permEl.className = `d-value ${app.allPermissionsGranted ? 'status-danger' : 'status-safe'}`;
+
+        document.getElementById('detail-req-count').textContent = app.requestedCount;
+        document.getElementById('detail-grant-count').textContent = app.grantedCount;
+
+        // ★★★ [핵심] 권한 상세 리스트 렌더링 ★★★
+        const permListContainer = document.getElementById('detail-permission-list');
+        permListContainer.innerHTML = ''; // 초기화
+
+        if (app.requestedList && app.requestedList.length > 0) {
+            // 요청된 모든 권한을 순회
+            app.requestedList.forEach(perm => {
+                // 해당 권한이 grantedList에 있는지 확인
+                const isGranted = app.grantedList.includes(perm);
+                
+                const span = document.createElement('span');
+                // android.permission.CAMERA -> CAMERA (보기 좋게 자름)
+                const shortName = perm.replace('android.permission.', '');
+                
+                span.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
+                span.textContent = `${isGranted ? '✅' : '🚫'} ${shortName}`;
+                
+                permListContainer.appendChild(span);
+            });
+        } else {
+            permListContainer.innerHTML = '<p style="color:#999;">요청된 권한이 없습니다.</p>';
+        }
+
+        // 화면 전환
+        dashboard.classList.add('hidden');
+        detailView.classList.remove('hidden');
+    }
+
+    // [New] 뒤로가기 버튼 로직
+    const backBtn = document.getElementById('back-to-dashboard-btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            document.getElementById('results-dashboard-view').classList.remove('hidden');
+            document.getElementById('app-detail-view').classList.add('hidden');
+        });
+    }
+
+    // [New] 새 검사 버튼 로직
+    const newScanBtn = document.getElementById('new-scan-btn');
+    if (newScanBtn) {
+        newScanBtn.addEventListener('click', () => {
+             showScreen(loggedInView, 'create-scan-screen');
+        });
     }
 
     // --- 초기화 ---

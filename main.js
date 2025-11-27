@@ -4,8 +4,11 @@ const path = require('path');
 const fs = require('fs');
 const adb = require('adbkit'); 
 
-// [핵심 1] 프로젝트 폴더 내의 platform-tools/adb.exe를 사용하도록 설정
-// (사용자 PC에 ADB가 없어도 작동하게 함)
+// ★★★ [개발 모드 스위치] ★★★
+// true = 가짜 데이터 사용 (폰 연결 불필요, 즉시 결과 나옴)
+// false = 실제 ADB 사용 (배포 시 또는 실제 테스트 시 false로 변경)
+const IS_DEV_MODE = true;
+//
 const adbPath = path.join(__dirname, 'platform-tools', 'adb.exe');
 const client = adb.createClient({ bin: adbPath });
 
@@ -29,13 +32,14 @@ app.whenReady().then(() => {
     createWindow();
 });
 
-
-function checkDeviceConnection() {
-
-    console.log("asdasdasdasdasdsad")
-}
 // [핵심 2] 기기 연결 상태 정밀 확인 (승인 대기 상태 처리)
-ipcMain.handle('checkDeviceConnection', async () => {
+ipcMain.handle('check-device-connection', async () => {
+
+    if (IS_DEV_MODE) {
+        console.log('[DEV] 가상 기기 연결 성공');
+        return { status: 'connected', model: 'Galaxy S24 (TEST)' };
+    }
+
     console.log("main.js check-device-connection func")
     try {
         const devices = await client.listDevices();
@@ -76,28 +80,58 @@ ipcMain.handle('checkDeviceConnection', async () => {
 
 // [핵심 3] 실제 ADB 검사 로직 (가짜 데이터 아님)
 ipcMain.handle('run-scan', async () => {
-    console.log('--- main.js: 실제 ADB 검사 시작 ---');
+
+    if (IS_DEV_MODE) {
+        console.log('[DEV] 가상 스캔 데이터 반환');
+        // 실제 스캔과 똑같은 시간 지연 효과를 주고 싶다면 아래 주석 해제 (예: 1초 대기)
+        // await new Promise(r => setTimeout(r, 1000)); 
+        return getMockData(); // 하단에 정의된 함수 호출
+    }
+    
+    console.log('--- 정밀 분석 시작 ---');
     try {
         const devices = await client.listDevices();
-        if (devices.length === 0) {
-            throw new Error('연결된 기기가 없습니다.');
-        }
+        if (devices.length === 0) throw new Error('연결된 기기가 없습니다.');
 
         const serial = devices[0].id;
-        console.log(`검사 대상 기기: ${serial}`);
+        
+        // [1] 기기 상세 정보 수집
+        const modelCmd = await client.shell(serial, 'getprop ro.product.model');
+        const model = (await adb.util.readAll(modelCmd)).toString().trim();
 
-        // 1. APK 파일 검색
+        // 루팅 여부 체크 (su 바이너리 확인)
+        let isRooted = false;
+        try {
+            const rootCmd = await client.shell(serial, 'which su');
+            const rootOutput = (await adb.util.readAll(rootCmd)).toString().trim();
+            if (rootOutput.length > 0) isRooted = true;
+        } catch (e) { isRooted = false; }
+
+        // 전화번호 (권한 문제로 가져오기 힘들 수 있음, 시도만 함)
+        let phoneNumber = '알 수 없음 (USIM 권한 필요)';
+        try {
+            // Android 10 이상에서는 보안 정책으로 인해 번호 가져오기가 차단됨
+            // 여기서는 셸 명령어로 시도만 해봅니다.
+            const phoneCmd = await client.shell(serial, 'service call iphonesubinfo 15 s16 "com.android.shell"');
+            const phoneOut = (await adb.util.readAll(phoneCmd)).toString().trim();
+            if (phoneOut.includes('Line 1 Number')) phoneNumber = phoneOut; // 파싱 필요하나 생략
+        } catch (e) {}
+
+        const deviceInfo = {
+            model: model,
+            serial: serial,
+            isRooted: isRooted,
+            phoneNumber: phoneNumber
+        };
+
+        // [2] 파일 및 앱 분석 (기존 로직 유지)
         const apkFiles = await findApkFiles(serial);
-        console.log(`APK 파일 검색 완료: ${apkFiles.length}개 발견`);
-
-        // 2. 설치된 앱 목록 가져오기
         const allApps = await getInstalledApps(serial);
-        console.log(`설치된 앱 목록 확보: ${allApps.length}개`);
 
-        // 3. 앱 상세 분석 (병렬 처리 - 5개씩 끊어서)
+        // [3] 앱 상세 분석 (병렬 처리)
         const processedApps = [];
-        for (let i = 0; i < allApps.length; i += 5) {
-            const chunk = allApps.slice(i, i + 5);
+        for (let i = 0; i < allApps.length; i += 10) { // 속도를 위해 10개씩
+            const chunk = allApps.slice(i, i + 10);
             const results = await Promise.all(
                 chunk.map(async (app) => {
                     const [isRunningBg, permissions] = await Promise.all([
@@ -110,23 +144,21 @@ ipcMain.handle('run-scan', async () => {
             processedApps.push(...results);
         }
 
-        console.log('--- main.js: 모든 분석 완료 ---');
-        
-        // 4. 의심스러운 앱 필터링 (MVP 기준)
+        // [4] 의심 앱 필터링
         const suspiciousApps = processedApps.filter(app => 
-            app.isSideloaded ||         // 사이드로딩 됨
-            app.isRunningBg ||          // 백그라운드 실행 중
-            app.allPermissionsGranted   // 모든 권한 허용됨
+            app.isSideloaded && app.isRunningBg && app.allPermissionsGranted
         );
 
         return {
+            deviceInfo: deviceInfo, // 추가된 기기 정보
+            allApps: processedApps, // 모든 앱 정보 (UI에 그리기 위해)
             suspiciousApps: suspiciousApps,
             apkFiles: apkFiles
         };
 
     } catch (err) {
         console.error('검사 중 오류:', err);
-        return { error: err.message, suspiciousApps: [], apkFiles: [] };
+        throw err;
     }
 });
 
@@ -201,20 +233,24 @@ async function getAppPermissions(serial, packageName) {
         const data = await adb.util.readAll(output);
         const dumpsys = data.toString();
 
-        // 요청한 권한
+        // 1. 요청된 모든 권한 (Requested)
         const reqMatch = dumpsys.match(/requested permissions:\s*([\s\S]*?)(?:install permissions:|runtime permissions:)/);
         const requestedPerms = new Set();
         if (reqMatch && reqMatch[1]) {
             reqMatch[1].match(/android\.permission\.[A-Z_]+/g)?.forEach(p => requestedPerms.add(p));
         }
 
-        // 부여된 권한 (install + runtime)
+        // 2. 실제 부여된 권한 (Granted)
         const grantedPerms = new Set();
+        
+        // Install permissions
         const installMatch = dumpsys.match(/install permissions:\s*([\s\S]*?)(?:runtime permissions:|\n\n)/);
         if (installMatch && installMatch[1]) {
             installMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)
                 ?.forEach(p => grantedPerms.add(p.split(':')[0]));
         }
+        
+        // Runtime permissions
         const runtimeMatch = dumpsys.match(/runtime permissions:\s*([\s\S]*?)(?:Dex opt state:|$)/);
         if (runtimeMatch && runtimeMatch[1]) {
             runtimeMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)
@@ -232,11 +268,18 @@ async function getAppPermissions(serial, packageName) {
 
         return {
             allPermissionsGranted,
+            // [수정] 개수뿐만 아니라 실제 리스트를 배열로 반환
+            requestedList: Array.from(requestedPerms),
+            grantedList: Array.from(grantedPerms),
             requestedCount: requestedPerms.size,
             grantedCount: grantedPerms.size,
         };
     } catch (err) {
-        return { allPermissionsGranted: false, requestedCount: 0, grantedCount: 0 };
+        return { 
+            allPermissionsGranted: false, 
+            requestedList: [], grantedList: [], 
+            requestedCount: 0, grantedCount: 0 
+        };
     }
 }
 
@@ -250,4 +293,67 @@ async function findApkFiles(serial) {
         console.error('APK 검색 실패:', err);
         return [];
     }
+}
+
+function getMockData() {
+    // 1. 가짜 앱 목록 생성
+    const mockApps = [
+        {
+            packageName: 'com.kakao.talk',
+            isSideloaded: false,
+            isRunningBg: true,
+            allPermissionsGranted: false,
+            requestedCount: 15,
+            grantedCount: 10,
+            requestedList: ['android.permission.INTERNET', 'android.permission.CAMERA'],
+            grantedList: ['android.permission.INTERNET']
+        },
+        {
+            packageName: 'com.google.android.youtube',
+            isSideloaded: false,
+            isRunningBg: false,
+            allPermissionsGranted: false,
+            requestedCount: 20,
+            grantedCount: 18,
+            requestedList: ['android.permission.INTERNET'],
+            grantedList: ['android.permission.INTERNET']
+        },
+        {
+            packageName: 'com.hacker.spyware', // 위험한 앱 예시
+            isSideloaded: true,
+            isRunningBg: true,
+            allPermissionsGranted: true,
+            requestedCount: 50,
+            grantedCount: 50,
+            requestedList: ['android.permission.READ_SMS', 'android.permission.CAMERA', 'android.permission.ACCESS_FINE_LOCATION'],
+            grantedList: ['android.permission.READ_SMS', 'android.permission.CAMERA', 'android.permission.ACCESS_FINE_LOCATION']
+        },
+        {
+            packageName: 'com.unknown.miner', // 채굴 앱 예시
+            isSideloaded: true,
+            isRunningBg: true,
+            allPermissionsGranted: false,
+            requestedCount: 5,
+            grantedCount: 2,
+            requestedList: ['android.permission.INTERNET'],
+            grantedList: ['android.permission.INTERNET']
+        }
+    ];
+
+    // 2. 의심 앱 필터링 (로직 동일하게)
+    const suspiciousApps = mockApps.filter(app => 
+        app.isSideloaded || app.isRunningBg || app.allPermissionsGranted
+    );
+
+    return {
+        deviceInfo: {
+            model: 'Galaxy S24 Ultra (TEST)',
+            serial: 'R3CT40K...',
+            isRooted: true, // 루팅된 것처럼 테스트
+            phoneNumber: '010-0000-0000'
+        },
+        allApps: mockApps,
+        suspiciousApps: suspiciousApps,
+        apkFiles: ['/sdcard/Download/spyware.apk', '/sdcard/Download/hack.apk']
+    };
 }
