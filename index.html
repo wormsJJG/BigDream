@@ -129,6 +129,7 @@
                 </div>
             </section>
             <section id="scan-results-screen" class="screen">
+    
     <div class="results-header">
         <h2>정밀 검사 결과 보고서</h2>
         <div class="header-buttons">
@@ -140,7 +141,6 @@
     <div id="results-dashboard-view">
         
         <div class="content-card info-summary-card">
-            <div class="content-card info-summary-card">
             <h3>📱 기기 정보 (Device Information)</h3>
             <div class="device-info-grid">
                 <div class="info-item">
@@ -183,7 +183,7 @@
     </div>
 
     <div id="app-detail-view" class="hidden">
-        <button id="back-to-dashboard-btn" class="secondary-button">← 목록으로 돌아가기</button>
+        <button id="back-to-dashboard-btn" class="secondary-button" style="margin-bottom: 15px;">← 목록으로 돌아가기</button>
         
         <div class="content-card detail-card">
             <div class="detail-header">
@@ -210,12 +210,14 @@
                     <span class="d-value" id="detail-perm-status">-</span>
                 </div>
             </div>
+
             <div class="permission-stats" style="text-align: right; margin-top: 10px; color: #666; font-size: 13px;">
                 <span>요청 권한: <strong id="detail-req-count">0</strong>개</span>
                 <span style="margin: 0 5px;">|</span>
                 <span>허용된 권한: <strong id="detail-grant-count" style="color: #2e7d32;">0</strong>개</span>
             </div>
-           <hr class="divider">
+
+            <hr class="divider">
 
             <h3>권한 상세 분석 (Permissions Detail)</h3>
             <div class="permission-legend">
@@ -224,7 +226,8 @@
             </div>
             
             <div id="detail-permission-list" class="permission-list-container">
-            </div>
+                </div>
+        </div>
     </div>
 </section>
         </main>
