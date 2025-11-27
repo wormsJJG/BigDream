@@ -38,8 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            
-            if (username === 'admin' && password === '1234') { 
+
+            if (username === 'admin' && password === '1234') {
                 showView('logged-in-view');
                 showScreen(loggedInView, 'create-scan-screen');
                 document.getElementById('nav-create').classList.add('active');
@@ -60,20 +60,62 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function activateMenu(targetId) {
+        // 모든 메뉴의 active 클래스 제거
+        document.querySelectorAll('#logged-in-view .nav-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // 클릭한 메뉴에만 active 추가
+        const target = document.getElementById(targetId);
+        if (target) {
+            target.classList.add('active');
+            console.log(`메뉴 활성화됨: ${targetId}`); // 확인용 로그
+        }
+    }
+
+    // 2. [검사생성] 클릭 이벤트
     const navCreate = document.getElementById('nav-create');
     if (navCreate) {
         navCreate.addEventListener('click', () => {
-            stopDevicePolling();
-            showScreen(loggedInView, 'create-scan-screen');
+            activateMenu('nav-create'); // 메뉴 색상 변경
+            showScreen(loggedInView, 'create-scan-screen'); // 화면 전환
+            stopDevicePolling(); // 폴링 중단
         });
     }
 
+    // 3. [검사열기] 클릭 이벤트 (이 부분이 안 되던 부분)
     const navOpen = document.getElementById('nav-open');
     if (navOpen) {
         navOpen.addEventListener('click', () => {
-            stopDevicePolling();
-            showScreen(loggedInView, 'open-scan-screen');
+            activateMenu('nav-open'); // 메뉴 색상 변경
+            showScreen(loggedInView, 'open-scan-screen'); // 화면 전환
+            stopDevicePolling(); // 폴링 중단
         });
+    }
+    const logoutNavItems = document.querySelectorAll('#logged-out-view .nav-item');
+
+    if (logoutNavItems.length > 0) {
+        logoutNavItems.forEach(item => {
+            item.addEventListener('click', () => {
+                console.log(`클릭됨: ${item.dataset.screen}`); // 클릭 확인용 로그
+
+                // 1. 모든 메뉴 활성화 끄기
+                logoutNavItems.forEach(i => i.classList.remove('active'));
+                // 2. 클릭한 메뉴 활성화
+                item.classList.add('active');
+
+                // 3. 화면 전환 (loggedOutView 변수가 위에서 정의되어 있어야 함)
+                const loggedOutView = document.getElementById('logged-out-view');
+                if (loggedOutView) {
+                    showScreen(loggedOutView, item.dataset.screen);
+                } else {
+                    console.error("오류: logged-out-view를 찾을 수 없습니다.");
+                }
+            });
+        });
+    } else {
+        console.error("오류: 로그인 화면의 네비게이션 메뉴(.nav-item)를 찾을 수 없습니다.");
     }
 
     // =========================================================
@@ -161,9 +203,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (realStartScanBtn) {
         realStartScanBtn.addEventListener('click', async () => {
-            stopDevicePolling();
-            showScreen(loggedInView, 'scan-progress-screen');
-            await startScan();
+            stopDevicePolling(); // 검사 중에는 폴링 중단
+
+            // [사이드바 변경 로직 추가]
+            // 1. '검사생성' 숨김
+            document.getElementById('nav-create').classList.add('hidden');
+            // 2. '검사열기' 숨김
+            document.getElementById('nav-open').classList.add('hidden');
+            // 3. '검사결과' 보이기 및 활성화
+            const navResult = document.getElementById('nav-result');
+            navResult.classList.remove('hidden');
+            navResult.classList.add('active');
+
+            showScreen(loggedInView, 'scan-progress-screen'); // 진행 화면으로 이동
+            await startScan(); // 검사 로직 실행
         });
     }
 
@@ -181,16 +234,16 @@ document.addEventListener('DOMContentLoaded', () => {
     async function startScan() {
         const statusBar = document.getElementById('progress-bar');
         const statusText = document.getElementById('scan-status-text');
-        
+
         statusBar.style.width = '10%';
         statusText.textContent = "분석 시작...";
 
         try {
             const data = await window.electronAPI.runScan();
-            
+
             statusBar.style.width = '100%';
             statusText.textContent = "분석 완료!";
-            
+
             setTimeout(() => {
                 renderResults(data);
                 showScreen(loggedInView, 'scan-results-screen');
@@ -229,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2. 설치된 애플리케이션 그리드 생성
         const grid = document.getElementById('app-grid-container');
         grid.innerHTML = '';
-        
+
         data.allApps.forEach(app => {
             createAppIcon(app, grid); // (하단 헬퍼 함수 사용)
         });
@@ -240,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 백그라운드 실행 중(isRunningBg === true)인 앱만 필터링
         const runningApps = data.allApps.filter(app => app.isRunningBg);
-        
+
         if (runningApps.length === 0) {
             bgGrid.innerHTML = '<p style="color:#888; padding:10px;">백그라운드 실행 앱 없음</p>';
         } else {
@@ -255,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 5. 의심 앱 리스트
         const suspList = document.getElementById('suspicious-list-container');
-        suspList.innerHTML = data.suspiciousApps.length 
+        suspList.innerHTML = data.suspiciousApps.length
             ? data.suspiciousApps.map(a => {
                 const dName = formatAppName(a.packageName);
                 const reason = a.reason || "알 수 없는 위협";
@@ -276,10 +329,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // 의심 앱이면 빨간 테두리, 아니면 일반
         const isSuspicious = app.reason ? true : false;
         div.className = `app-item ${isSuspicious ? 'suspicious' : ''}`;
-        
+
         const name = formatAppName(app.packageName);
         const iconChar = name.charAt(0);
-        
+
         div.innerHTML = `
             <div class="app-icon-placeholder">${iconChar}</div>
             <div class="app-display-name">${name}</div>
@@ -300,11 +353,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('detail-app-name').textContent = displayName;
         document.getElementById('detail-package-name').textContent = app.packageName;
-        
+
         document.getElementById('detail-sideload').textContent = app.isSideloaded ? '외부 설치 (위험)' : 'Play Store';
         document.getElementById('detail-bg').textContent = app.isRunningBg ? '실행 중' : '중지됨';
         document.getElementById('detail-perm-status').textContent = app.allPermissionsGranted ? '모두 허용됨' : '정상';
-        
+
         document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
         document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
 
@@ -333,11 +386,28 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("뒤로가기 버튼을 찾을 수 없음");
     }
 
-    // 새 검사 버튼
-    const newScanBtn = document.getElementById('new-scan-btn');
-    if (newScanBtn) {
-        newScanBtn.addEventListener('click', () => {
-            showScreen(loggedInView, 'create-scan-screen');
+    // 연결 끊기 버튼
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    if (disconnectBtn) {
+        disconnectBtn.addEventListener('click', () => {
+            if (confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+                // 1. 사이드바 원상복구
+                document.getElementById('nav-create').classList.remove('hidden');
+                document.getElementById('nav-open').classList.remove('hidden');
+
+                const navResult = document.getElementById('nav-result');
+                if (navResult) {
+                    navResult.classList.add('hidden');
+                    navResult.classList.remove('active');
+                }
+
+                // 2. 화면 이동 및 폼 초기화
+                showScreen(loggedInView, 'create-scan-screen');
+
+                // (선택사항) 입력 폼 내용 비우기
+                const resetBtn = document.getElementById('reset-client-info-btn');
+                if (resetBtn) resetBtn.click();
+            }
         });
     }
 
