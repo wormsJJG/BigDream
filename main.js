@@ -29,9 +29,14 @@ app.whenReady().then(() => {
     createWindow();
 });
 
+
+function checkDeviceConnection() {
+
+    console.log("asdasdasdasdasdsad")
+}
 // [핵심 2] 기기 연결 상태 정밀 확인 (승인 대기 상태 처리)
-ipcMain.handle('check-device-connection', async () => {
-    console.log("asdasdasdasdsad")
+ipcMain.handle('checkDeviceConnection', async () => {
+    console.log("main.js check-device-connection func")
     try {
         const devices = await client.listDevices();
         
