@@ -354,9 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-app-name').textContent = displayName;
         document.getElementById('detail-package-name').textContent = app.packageName;
 
-        document.getElementById('detail-sideload').textContent = app.isSideloaded ? '외부 설치 (위험)' : 'Play Store';
+        document.getElementById('detail-sideload').textContent = app.isSideloaded ? '외부 설치' : 'Play Store';
         document.getElementById('detail-bg').textContent = app.isRunningBg ? '실행 중' : '중지됨';
-        document.getElementById('detail-perm-status').textContent = app.allPermissionsGranted ? '모두 허용됨' : '정상';
 
         document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
         document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
