@@ -211,6 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return name.charAt(0).toUpperCase() + name.slice(1);
     }
 
+    // renderer.js - renderResults 함수 교체
+
     function renderResults(data) {
         // 화면 초기화 (대시보드 보이기)
         document.getElementById('results-dashboard-view').classList.remove('hidden');
@@ -220,38 +222,72 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('res-model').textContent = data.deviceInfo.model;
         document.getElementById('res-serial').textContent = data.deviceInfo.serial;
         const rootEl = document.getElementById('res-root');
-        rootEl.textContent = data.deviceInfo.isRooted ? '⚠️ 루팅됨' : '✅ 안전함';
+        rootEl.textContent = data.deviceInfo.isRooted ? '⚠️ 발견됨 (ROOTED)' : '✅ 안전함';
         rootEl.style.color = data.deviceInfo.isRooted ? '#D9534F' : '#5CB85C';
         document.getElementById('res-phone').textContent = data.deviceInfo.phoneNumber;
 
-        // 2. 앱 그리드 생성 (이 부분이 함수 안으로 잘 들어왔습니다)
+        // 2. 설치된 애플리케이션 그리드 생성
         const grid = document.getElementById('app-grid-container');
         grid.innerHTML = '';
         
         data.allApps.forEach(app => {
-            const div = document.createElement('div');
-            div.className = `app-item ${app.isSideloaded || app.isRunningBg ? 'suspicious' : ''}`;
-            const name = formatAppName(app.packageName);
-            
-            div.innerHTML = `
-                <div class="app-icon-placeholder">${name.charAt(0)}</div>
-                <div class="app-display-name">${name}</div>
-                <div class="app-package-sub">${app.packageName}</div>
-            `;
-            // [수정됨] 클릭 이벤트에 displayName 전달
-            div.addEventListener('click', () => showAppDetail(app, name));
-            grid.appendChild(div);
+            createAppIcon(app, grid); // (하단 헬퍼 함수 사용)
         });
 
-        // 3. 파일 리스트
+        // ★★★ [3. 신규 추가] 백그라운드 실행 앱 그리드 생성 ★★★
+        const bgGrid = document.getElementById('bg-app-grid-container');
+        bgGrid.innerHTML = '';
+
+        // 백그라운드 실행 중(isRunningBg === true)인 앱만 필터링
+        const runningApps = data.allApps.filter(app => app.isRunningBg);
+        
+        if (runningApps.length === 0) {
+            bgGrid.innerHTML = '<p style="color:#888; padding:10px;">백그라운드 실행 앱 없음</p>';
+        } else {
+            runningApps.forEach(app => {
+                createAppIcon(app, bgGrid); // (하단 헬퍼 함수 사용)
+            });
+        }
+
+        // 4. 파일 리스트
         const apkList = document.getElementById('res-apk-list');
         apkList.innerHTML = data.apkFiles.length ? data.apkFiles.map(f => `<li>${f}</li>`).join('') : '<li>없음</li>';
 
-        // 4. 의심 앱 리스트
+        // 5. 의심 앱 리스트
         const suspList = document.getElementById('suspicious-list-container');
         suspList.innerHTML = data.suspiciousApps.length 
-            ? data.suspiciousApps.map(a => `<p style="color:#d9534f; margin:5px 0;">🚨 ${a.packageName}</p>`).join('')
+            ? data.suspiciousApps.map(a => {
+                const dName = formatAppName(a.packageName);
+                const reason = a.reason || "알 수 없는 위협";
+                return `
+                <li style="padding:15px; border-bottom:1px solid #eee; border-left: 4px solid #D9534F; background-color: #fff5f5; margin-bottom: 10px; border-radius: 4px;">
+                    <div style="color:#D9534F; font-weight:bold; font-size: 15px; margin-bottom: 4px;">
+                        🚨 ${dName} <span style="font-size:12px; font-weight:normal; color:#888;">(${a.packageName})</span>
+                    </div>
+                    <div style="font-size:13px; color:#555;">${reason}</div>
+                </li>`;
+            }).join('')
             : '<p style="color:#5cb85c;">✅ 위협 없음</p>';
+    }
+
+    // [Helper] 아이콘 생성 중복 제거를 위한 내부 함수
+    function createAppIcon(app, container) {
+        const div = document.createElement('div');
+        // 의심 앱이면 빨간 테두리, 아니면 일반
+        const isSuspicious = app.reason ? true : false;
+        div.className = `app-item ${isSuspicious ? 'suspicious' : ''}`;
+        
+        const name = formatAppName(app.packageName);
+        const iconChar = name.charAt(0);
+        
+        div.innerHTML = `
+            <div class="app-icon-placeholder">${iconChar}</div>
+            <div class="app-display-name">${name}</div>
+            <div class="app-package-sub">${app.packageName}</div>
+        `;
+        // 클릭 시 상세화면 이동
+        div.addEventListener('click', () => showAppDetail(app, name));
+        container.appendChild(div);
     }
 
     // =========================================================
