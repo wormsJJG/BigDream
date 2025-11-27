@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com;">
+    <meta http-equiv="Content-Security-Policy"
+        content="script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com;">
     <title>BigDream Security Scanner</title>
     <link rel="stylesheet" href="style.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div id="logged-out-view" class="app-view active">
         <nav class="sidebar">
@@ -40,7 +44,7 @@
                 <div class="content-card support-card">
                     <img src="./assets/icon-headset.svg" alt="Support Icon" class="support-icon">
                     <h1>BigDream Security Solutions</h1>
-                    <p class.support-subtitle">
+                    <p class="support-subtitle">
                         BigDream에서 개발한 안드로이드 및 iOS 악성프로그램 검사 프로그램입니다.
                     </p>
                     <div class="support-contact">
@@ -55,7 +59,6 @@
     <div id="logged-in-view" class="app-view">
         <nav class="sidebar">
             <div class="logo-area">
-                 <!-- <img src="./assets/logo.png" alt="BigDream Logo" class="company-logo"> <-- 이 줄이 제거되었습니다. -->
                 <span class="app-title">BD SCANNER</span>
             </div>
             <ul class="nav-menu">
@@ -70,24 +73,31 @@
             <section id="create-scan-screen" class="screen active">
                 <h2>검사 생성</h2>
                 <p>검사를 진행할 대상자의 정보를 입력해주세요.</p>
-                <div class="content-card">
+
+                <div class="content-card input-card-relative">
+
+                    <button id="reset-client-info-btn" type="button" class="reset-icon-btn">↺ 정보 초기화</button>
+
                     <form id="client-info-form">
-                    <label>대상자 이름</label><input type="text" id="client-name">
-                    <label>생년월일</label><input type="date" id="client-dob">
-                    <label>휴대폰 번호</label><input type="tel" id="client-phone" placeholder="010-1234-5678">
-                <div class="form-button-group">
-                    <button id="reset-client-info-btn" type="button" class="secondary-button danger-button">정보 초기화</button>
-                
-                    <button id="to-connection-screen-btn" type="submit" class="primary-button" disabled>다음</button>
-            </div>
-        </form>
-     </div>
-</section>
-<section id="device-connection-screen" class="screen">
-                <h2>기기 연결 확인</h2>
+                        <label>대상자 이름</label>
+                        <input type="text" id="client-name">
+
+                        <label>생년월일</label>
+                        <input type="date" id="client-dob">
+
+                        <label>휴대폰 번호</label>
+                        <input type="tel" id="client-phone" placeholder="010-1234-5678">
+
+                        <button id="to-connection-screen-btn" type="submit" class="primary-button" disabled>다음 단계 (기기
+                            연결)</button>
+                    </form>
+                </div>
+            </section>
+            <section id="device-connection-screen" class="screen">
+                <h2>기기 연결</h2>
                 <div class="content-card" style="text-align: center;">
                     <div id="connection-status-icon" style="font-size: 80px; margin-bottom: 20px;">🔌</div>
-                    
+
                     <h3 id="connection-status-title">기기를 연결해주세요</h3>
                     <p id="connection-status-desc">
                         Android 기기를 USB 케이블로 연결하고<br>
@@ -95,11 +105,11 @@
                     </p>
 
                     <div id="start-scan-container" style="display: none; margin-top: 30px;">
-                        <button id="real-start-scan-btn" class="primary-button" style="width: 100%; padding: 20px; font-size: 18px;">
+                        <button id="real-start-scan-btn" class="primary-button">
                             검사 시작하기
                         </button>
                     </div>
-                    
+
                     <br>
                     <button id="back-to-info-btn" class="secondary-button" style="width: 100%;">← 뒤로 가기</button>
                 </div>
@@ -121,7 +131,9 @@
                         <div class="device-icon">📱</div>
                     </div>
                     <p id="scan-status-text">기기 연결을 확인하는 중...</p>
-                    <div class="progress-bar-container"><div id="progress-bar" style="width: 0%;"></div></div>
+                    <div class="progress-bar-container">
+                        <div id="progress-bar" style="width: 0%;"></div>
+                    </div>
                     <div class="warning-box">
                         <img src="./assets/icon-warning.svg" alt="Warning">
                         <span><strong>경고:</strong> 검사가 완료될 때까지 USB 케이블을 절대 분리하지 마십시오.</span>
@@ -129,112 +141,116 @@
                 </div>
             </section>
             <section id="scan-results-screen" class="screen">
-    
-    <div class="results-header">
-        <h2>정밀 검사 결과 보고서</h2>
-        <div class="header-buttons">
-            <button id="print-results-btn" type="button" class="secondary-button">PDF 출력</button>
-            <button id="new-scan-btn" type="button" class="primary-button">새 검사</button>
-        </div>
-    </div>
 
-    <div id="results-dashboard-view">
-        
-        <div class="content-card info-summary-card">
-            <h3>📱 기기 정보 (Device Information)</h3>
-            <div class="device-info-grid">
-                <div class="info-item">
-                    <span class="label">모델명</span>
-                    <span class="value" id="res-model">-</span>
+                <div class="results-header">
+                    <h2>정밀 검사 결과 보고서</h2>
+                    <div class="header-buttons">
+                        <button id="print-results-btn" type="button" class="secondary-button">PDF 출력</button>
+                        <button id="new-scan-btn" type="button" class="primary-button">새 검사</button>
+                    </div>
                 </div>
-                <div class="info-item">
-                    <span class="label">일련번호(S/N)</span>
-                    <span class="value" id="res-serial">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="label">루팅 여부</span>
-                    <span class="value" id="res-root">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="label">전화번호</span>
-                    <span class="value" id="res-phone">-</span>
-                </div>
-            </div>
-        </div>
 
-        <div class="content-card">
-            <h3>📲 설치된 애플리케이션 (Installed Apps)</h3>
-            <p class="sub-text">아이콘을 클릭하면 <strong>권한 상세 내역</strong> 및 <strong>백그라운드 실행 여부</strong>를 확인할 수 있습니다.</p>
-            <div id="app-grid-container" class="app-grid">
-                </div>
-        </div>
+                <div id="results-dashboard-view">
 
-        <div class="content-card">
-            <h3>📂 발견된 설치 파일 (.apk)</h3>
-            <ul id="res-apk-list" class="file-list">
-                </ul>
-        </div>
+                    <div class="content-card info-summary-card">
+                        <h3>📱 기기 정보 (Device Information)</h3>
+                        <div class="device-info-grid">
+                            <div class="info-item">
+                                <span class="label">모델명</span>
+                                <span class="value" id="res-model">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">일련번호(S/N)</span>
+                                <span class="value" id="res-serial">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">루팅 여부</span>
+                                <span class="value" id="res-root">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">전화번호</span>
+                                <span class="value" id="res-phone">-</span>
+                            </div>
+                        </div>
+                    </div>
 
-        <div class="content-card warning-card">
-            <h3>⚠️ 위협 탐지 (Threats Detected)</h3>
-            <div id="suspicious-list-container">
-                </div>
-        </div>
-    </div>
+                    <div class="content-card">
+                        <h3>📲 설치된 애플리케이션 (Installed Apps)</h3>
+                        <p class="sub-text">아이콘을 클릭하면 <strong>권한 상세 내역</strong> 및 <strong>백그라운드 실행 여부</strong>를 확인할 수
+                            있습니다.</p>
+                        <div id="app-grid-container" class="app-grid">
+                        </div>
+                    </div>
 
-    <div id="app-detail-view" class="hidden">
-        <button id="back-to-dashboard-btn" class="secondary-button" style="margin-bottom: 15px;">← 목록으로 돌아가기</button>
-        
-        <div class="content-card detail-card">
-            <div class="detail-header">
-                <div class="detail-icon-wrapper">
-                    <img src="./assets/icon-android.svg" class="detail-app-icon" alt="App Icon">
-                </div>
-                <div class="detail-title-area">
-                    <h2 id="detail-app-name">Application Name</h2>
-                    <p id="detail-package-name">com.package.name</p>
-                </div>
-            </div>
-            
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <span class="d-label">설치 경로 (Sideload)</span>
-                    <span class="d-value" id="detail-sideload">-</span>
-                </div>
-                <div class="detail-item">
-                    <span class="d-label">백그라운드 실행</span>
-                    <span class="d-value" id="detail-bg">-</span>
-                </div>
-                <div class="detail-item">
-                    <span class="d-label">위험 권한 보유</span>
-                    <span class="d-value" id="detail-perm-status">-</span>
-                </div>
-            </div>
+                    <div class="content-card">
+                        <h3>📂 발견된 설치 파일 (.apk)</h3>
+                        <ul id="res-apk-list" class="file-list">
+                        </ul>
+                    </div>
 
-            <div class="permission-stats" style="text-align: right; margin-top: 10px; color: #666; font-size: 13px;">
-                <span>요청 권한: <strong id="detail-req-count">0</strong>개</span>
-                <span style="margin: 0 5px;">|</span>
-                <span>허용된 권한: <strong id="detail-grant-count" style="color: #2e7d32;">0</strong>개</span>
-            </div>
-
-            <hr class="divider">
-
-            <h3>권한 상세 분석 (Permissions Detail)</h3>
-            <div class="permission-legend">
-                <span class="badge badge-grant">✅ 허용됨</span>
-                <span class="badge badge-deny">🚫 거부됨 / 미사용</span>
-            </div>
-            
-            <div id="detail-permission-list" class="permission-list-container">
+                    <div class="content-card warning-card">
+                        <h3>⚠️ 위협 탐지 (Threats Detected)</h3>
+                        <div id="suspicious-list-container">
+                        </div>
+                    </div>
                 </div>
-        </div>
-    </div>
-</section>
+
+                <div id="app-detail-view" class="hidden">
+                    <button id="back-to-dashboard-btn" class="secondary-button" style="margin-bottom: 15px;">← 목록으로
+                        돌아가기</button>
+
+                    <div class="content-card detail-card">
+                        <div class="detail-header">
+                            <div class="detail-icon-wrapper">
+                                <img src="./assets/icon-android.svg" class="detail-app-icon" alt="App Icon">
+                            </div>
+                            <div class="detail-title-area">
+                                <h2 id="detail-app-name">Application Name</h2>
+                                <p id="detail-package-name">com.package.name</p>
+                            </div>
+                        </div>
+
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <span class="d-label">설치 경로 (Sideload)</span>
+                                <span class="d-value" id="detail-sideload">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="d-label">백그라운드 실행</span>
+                                <span class="d-value" id="detail-bg">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="d-label">위험 권한 보유</span>
+                                <span class="d-value" id="detail-perm-status">-</span>
+                            </div>
+                        </div>
+
+                        <div class="permission-stats"
+                            style="text-align: right; margin-top: 10px; color: #666; font-size: 13px;">
+                            <span>요청 권한: <strong id="detail-req-count">0</strong>개</span>
+                            <span style="margin: 0 5px;">|</span>
+                            <span>허용된 권한: <strong id="detail-grant-count" style="color: #2e7d32;">0</strong>개</span>
+                        </div>
+
+                        <hr class="divider">
+
+                        <h3>권한 상세 분석 (Permissions Detail)</h3>
+                        <div class="permission-legend">
+                            <span class="badge badge-grant">✅ 허용됨</span>
+                            <span class="badge badge-deny">🚫 거부됨 / 미사용</span>
+                        </div>
+
+                        <div id="detail-permission-list" class="permission-list-container">
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
     <link rel="stylesheet" href="print.css" media="print">
-    
+
     <script src="./renderer.js"></script>
 </body>
+
 </html>

@@ -1,24 +1,34 @@
-/* style.css (최종 완성본) */
+/* style.css (최종 통합 완성본) */
 
 :root {
-  --primary-color: #3A539B; /* 메인 파란색 */
-  --secondary-bg-color: #F4F7F6; /* 배경색 */
-  --text-color: #333333;
-  --card-bg-color: #ffffff;
-  --border-color: #e0e0e0;
-  --danger-color: #e74c3c; /* 빨간색 (로그아웃, 초기화) */
-  --warning-color: #F0AD4E; /* 주황색 */
-  --success-color: #5CB85C; /* 초록색 */
+    --primary-color: #3A539B;
+    /* 신뢰감을 주는 딥 블루 */
+    --primary-hover: #2d427d;
+    --secondary-bg-color: #F4F7F6;
+    /* 전체 배경색 */
+    --card-bg-color: #ffffff;
+    --text-color: #333333;
+    --border-color: #e0e0e0;
+    --danger-color: #e74c3c;
+    /* 위험/로그아웃/초기화 (빨강) */
+    --danger-hover: #c0392b;
+    --warning-color: #F0AD4E;
+    /* 주의 (주황) */
+    --success-color: #5CB85C;
+    /* 성공 (초록) */
 }
 
+/* --- 기본 설정 --- */
 body {
     font-family: 'Noto Sans KR', sans-serif;
     margin: 0;
     background-color: var(--secondary-bg-color);
-    overflow: hidden; /* 스크롤바 숨김 */
     color: var(--text-color);
+    overflow: hidden;
+    /* 스크롤바 숨김 (앱 느낌) */
 }
 
+/* 뷰 관리 (로그인 전/후) */
 .app-view {
     display: none;
     height: 100vh;
@@ -28,7 +38,7 @@ body {
     display: flex;
 }
 
-/* --- 사이드바 --- */
+/* --- 사이드바 (네비게이션) --- */
 .sidebar {
     width: 240px;
     background-color: #2c3e50;
@@ -36,203 +46,450 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
 }
+
 .logo-area {
     padding: 30px;
     text-align: center;
     border-bottom: 1px solid #34495e;
 }
-.company-logo { width: 50px; }
-.app-title { font-size: 20px; font-weight: bold; margin-top: 10px; display: block; color: #4ECDC4; }
-.nav-menu { list-style: none; padding: 20px 0; margin: 0; flex-grow: 1; }
-.nav-item { padding: 15px 30px; cursor: pointer; transition: 0.2s; }
-.nav-item:hover { background-color: #34495e; }
-.nav-item.active { background-color: var(--primary-color); border-left: 5px solid #4ECDC4; padding-left: 25px; }
-.sidebar-footer { padding: 20px; }
-.sidebar-button { width: 100%; padding: 12px; background: var(--danger-color); border: none; color: white; border-radius: 5px; cursor: pointer; }
-.sidebar-button:hover { background-color: #c0392b; }
 
-/* --- 메인 컨텐츠 --- */
+.company-logo {
+    width: 50px;
+    margin-bottom: 10px;
+}
+
+.app-title {
+    font-size: 20px;
+    font-weight: 700;
+    display: block;
+    color: #4ECDC4;
+}
+
+.nav-menu {
+    list-style: none;
+    padding: 20px 0;
+    margin: 0;
+    flex-grow: 1;
+}
+
+.nav-item {
+    padding: 15px 30px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.nav-item:hover {
+    background-color: #34495e;
+}
+
+.nav-item.active {
+    background-color: var(--primary-color);
+    border-left: 5px solid #4ECDC4;
+    padding-left: 25px;
+}
+
+.sidebar-footer {
+    padding: 20px;
+}
+
+.sidebar-button {
+    width: 100%;
+    padding: 12px;
+    background: var(--danger-color);
+    border: none;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.3s;
+}
+
+.sidebar-button:hover {
+    background-color: var(--danger-hover);
+}
+
+/* --- 메인 컨텐츠 영역 --- */
 .main-content {
     flex-grow: 1;
     padding: 40px;
     overflow-y: auto;
+    /* 내부 스크롤 */
 }
 
-.screen { display: none; }
-.screen.active { display: block; animation: fadeIn 0.5s ease-in-out; }
+/* 화면 전환 애니메이션 */
+.screen {
+    display: none;
+}
+
+.screen.active {
+    display: block;
+    animation: fadeIn 0.4s ease-out;
+}
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
+/* 카드 UI 공통 */
 .content-card {
     background: var(--card-bg-color);
-    border-radius: 8px;
-    padding: 30px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border-radius: 10px;
+    padding: 35px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     margin-top: 20px;
 }
-h2 { font-size: 28px; color: #2c3e50; margin-top: 0; }
-p { color: #555; }
 
-/* --- 공통 버튼 스타일 --- */
-.primary-button { 
-    padding: 15px; 
-    background: var(--primary-color); 
-    color: white; 
-    border: none; 
-    border-radius: 5px; 
-    cursor: pointer; 
-    font-size: 16px; 
-    transition: background-color 0.3s;
+h2 {
+    font-size: 26px;
+    color: #2c3e50;
+    margin-top: 0;
+    margin-bottom: 10px;
 }
-.primary-button:hover { background-color: #2d427d; }
-.primary-button:disabled { background: #ccc; cursor: not-allowed; }
+
+p {
+    color: #666;
+    line-height: 1.5;
+}
+
+/* --- 버튼 스타일 공통 --- */
+.primary-button {
+    padding: 14px 20px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.primary-button:hover {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+}
+
+.primary-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
 
 .secondary-button {
-    padding: 15px;
+    padding: 10px 20px;
     background: #6c757d;
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 16px;
-    transition: background-color 0.3s;
+    font-size: 14px;
+    transition: all 0.2s;
 }
-.secondary-button:hover { background-color: #5a6268; }
 
+.secondary-button:hover {
+    background-color: #5a6268;
+}
 
-/* --- [수정] 위험(빨강) 버튼 스타일 (우선순위 높임) --- */
+/* 빨간색 버튼 (우선순위 높임) */
 .secondary-button.danger-button {
     background-color: var(--danger-color);
-    color: #fff;
 }
+
 .secondary-button.danger-button:hover {
-    background-color: #c0392b;
+    background-color: var(--danger-hover);
 }
 
-
-/* --- 개별 화면 스타일 --- */
-
-/* 로그인 화면 */
+/* --- [화면 1] 로그인 화면 (모던 디자인 적용) --- */
 .login-card {
-    text-align: center; max-width: 400px; margin: 50px auto;
-}
-.login-card input {
-    width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; transition: border-color 0.3s ease;
-}
-.login-card input:focus {
-    border-color: var(--primary-color); /* 클릭 시 메인 파란색으로 변경 */
-    outline: none; /* 브라우저 기본 아웃라인 제거 */
-}
-.login-card button { 
-    width: 90%; margin-top: 5px; box-sizing: border-box;
-}
-.error-message { 
-    color: var(--danger-color); font-size: 14px; margin-bottom: 0; height: 20px;
-}
-#login-form #password {
-    margin-bottom: 5px; 
+    text-align: center;
+    max-width: 380px;
+    margin: 80px auto;
+    padding: 40px 35px;
 }
 
-/* 고객센터 화면 */
+.login-card input {
+    width: 100%;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fafafa;
+    font-size: 15px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.login-card input:focus {
+    background-color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(58, 83, 155, 0.15);
+    outline: none;
+}
+
+.login-card button {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.error-message {
+    color: var(--danger-color);
+    font-size: 13px;
+    margin-bottom: 15px;
+    min-height: 18px;
+    text-align: left;
+    padding-left: 5px;
+}
+
+/* --- [화면 2] 고객센터 --- */
 .support-card {
     text-align: center;
-    padding: 50px;
+    padding: 60px;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
-.support-icon { width: 80px; margin-bottom: 20px; }
-.support-card h1 { font-size: 32px; color: #2c3e50; margin-bottom: 10px; }
-.support-subtitle { font-size: 18px; color: #555; max-width: 500px; margin: 0 auto 30px auto; }
+
+.support-icon {
+    width: 80px;
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
 .support-contact {
     display: inline-block;
     background: white;
-    padding: 20px 40px;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-.support-contact p { margin: 0; font-weight: 500; }
-.support-contact span { font-size: 24px; color: var(--primary-color); font-weight: bold; }
-
-/* 검사 생성 화면 (폼 입력) */
-#client-info-form label { display: block; margin: 15px 0 5px 0; font-weight: 500; }
-#client-info-form input { width: 95%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-
-/* [수정] 폼 내부 버튼들을 위아래로 꽉 차게 배치 */
-#client-info-form button {
-    width: 100%;       /* 가로 꽉 차게 */
-    margin-top: 15px;  /* 버튼 사이 간격 */
+    padding: 20px 50px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    margin-top: 20px;
 }
 
-/* 검사 진행 화면 (애니메이션) */
-.scan-animation-card { text-align: center; }
+.support-contact span {
+    font-size: 28px;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+/* --- [화면 3] 검사 생성 (모던 디자인 + 초기화 버튼 우측 상단) --- */
+.input-card-relative {
+    position: relative;
+}
+
+/* 기준점 */
+
+/* 초기화 버튼 (우측 상단 배치) */
+.reset-icon-btn {
+    position: absolute;
+    top: 25px;
+    right: 25px;
+    padding: 6px 12px;
+    font-size: 13px;
+    background-color: #fff;
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.reset-icon-btn:hover {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+#client-info-form {
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+#client-info-form label {
+    display: block;
+    margin: 20px 0 8px 2px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #444;
+}
+
+#client-info-form input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fafafa;
+    font-size: 15px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+#client-info-form input:focus {
+    background-color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(58, 83, 155, 0.15);
+    outline: none;
+}
+
+#client-info-form button[type="submit"] {
+    width: 100%;
+    margin-top: 30px;
+}
+
+/* --- [화면 4] 기기 연결 & 검사 진행 --- */
+.scan-animation-card {
+    text-align: center;
+    padding: 50px;
+}
+
 .scanner-animation {
     position: relative;
-    width: 200px;
-    height: 200px;
-    margin: 20px auto;
+    width: 150px;
+    height: 150px;
+    margin: 0 auto 30px;
 }
-.device-icon { font-size: 60px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; }
+
+.device-icon {
+    font-size: 50px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+}
+
+/* 레이더 애니메이션 (배경색 제거됨) */
 .radar {
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    /* [수정] 배경색 제거 (애니메이션 오류 해결) */
     position: relative;
 }
-.radar::before, .radar::after {
+
+.radar::before,
+.radar::after {
     content: '';
     position: absolute;
-    top: 50%; left: 50%;
-    width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     border-radius: 50%;
-    border: 2px solid rgba(58,83,155,0.2);
+    border: 2px solid rgba(58, 83, 155, 0.3);
     animation: radar-pulse 2s infinite linear;
 }
-.radar::after { animation-delay: 1s; }
+
+.radar::after {
+    animation-delay: 1s;
+}
+
 @keyframes radar-pulse {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    50% { opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
 }
-#scan-status-text { font-size: 18px; font-weight: 500; color: var(--primary-color); }
-.progress-bar-container { width: 80%; margin: 20px auto; height: 10px; background: #e0e0e0; border-radius: 5px; }
-#progress-bar { width: 0%; height: 100%; background: var(--success-color); border-radius: 5px; transition: width 0.5s ease; }
+
+#scan-status-text {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 15px;
+}
+
+.progress-bar-container {
+    width: 80%;
+    margin: 0 auto;
+    height: 8px;
+    background: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+#progress-bar {
+    width: 0%;
+    height: 100%;
+    background: var(--success-color);
+    transition: width 0.3s ease;
+}
+
 .warning-box {
-    display: flex; align-items: center; justify-content: center;
-    background: #fff
+    background: #fff3cd;
+    color: #856404;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 30px;
+    display: inline-flex;
+    align-items: center;
 }
 
-/* style.css - 결과 화면 스타일 추가 */
+.warning-box img {
+    width: 20px;
+    margin-right: 10px;
+}
 
-/* 헤더 버튼 정렬 */
-.header-buttons { display: flex; gap: 10px; }
+/* --- [화면 5] 결과 대시보드 (전문가 스타일) --- */
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
 
 /* 1. 기기 정보 그리드 */
 .device-info-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr); /* 2열 배치 */
+    grid-template-columns: repeat(2, 1fr);
     gap: 15px;
     margin-top: 15px;
 }
+
 .info-item {
     background: #f8f9fa;
     padding: 15px;
-    border-radius: 6px;
+    border-radius: 8px;
     border-left: 4px solid var(--primary-color);
 }
-.info-item .label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; }
-.info-item .value { display: block; font-size: 16px; font-weight: bold; color: #333; }
 
-/* 2. 앱 그리드 (설치된 어플들) */
+.info-item .label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+}
+
+.info-item .value {
+    display: block;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* 2. 앱 아이콘 그리드 */
 .app-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* 반응형 그리드 */
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
     gap: 15px;
-    margin-top: 20px;
-    max-height: 400px;
+    margin-top: 15px;
+    max-height: 300px;
     overflow-y: auto;
     padding: 5px;
 }
@@ -240,157 +497,249 @@ p { color: #555; }
 .app-item {
     background: white;
     border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 15px 10px;
+    border-radius: 10px;
+    padding: 15px 5px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s;
 }
+
 .app-item:hover {
     transform: translateY(-3px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
     border-color: var(--primary-color);
 }
+
 .app-item.suspicious {
     border-color: var(--danger-color);
     background-color: #fff5f5;
 }
 
 .app-icon-placeholder {
-    width: 40px;
-    height: 40px;
+    width: 45px;
+    height: 45px;
     background-color: #eee;
-    border-radius: 8px;
-    margin: 0 auto 10px;
+    border-radius: 10px;
+    margin: 0 auto 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 20px;
+    font-weight: bold;
+    color: #666;
 }
-.app-item.suspicious .app-icon-placeholder { background-color: #ffe0e0; color: var(--danger-color); }
 
-.app-name {
-    font-size: 12px;
-    font-weight: 500;
+.app-item.suspicious .app-icon-placeholder {
+    background-color: #ffe0e0;
+    color: var(--danger-color);
+}
+
+.app-display-name {
+    font-size: 13px;
+    font-weight: bold;
     color: #333;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
-/* 3. 상세 보기 (Deep Dive) 화면 */
-#app-detail-view {
-    position: absolute; /* 대시보드 위에 덮어씌움 */
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: var(--secondary-bg-color);
-    padding: 20px;
-    z-index: 100;
-    overflow-y: auto;
+.app-package-sub {
+    font-size: 10px;
+    color: #999;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+
+/* 3. 파일 리스트 */
+.file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-family: monospace;
+    font-size: 13px;
+    color: #555;
+}
+
+.file-list li {
+    padding: 5px 0;
+    border-bottom: 1px dashed #eee;
+}
+
+/* --- [화면 6] 앱 상세 보기 (Deep Dive) --- */
 .detail-header {
     display: flex;
     align-items: center;
     margin-bottom: 30px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 20px;
 }
+
 .detail-icon-wrapper {
-    width: 80px; height: 80px;
+    width: 70px;
+    height: 70px;
     background: #eee;
     border-radius: 15px;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-right: 20px;
 }
-.detail-app-icon { width: 50px; height: 50px; }
-#detail-package-name { color: #666; font-family: monospace; }
+
+.detail-app-icon {
+    width: 40px;
+}
+
+.detail-title-area h2 {
+    margin: 0 0 5px 0;
+    font-size: 22px;
+}
+
+#detail-package-name {
+    color: #888;
+    font-family: monospace;
+    margin: 0;
+}
 
 .detail-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    margin-bottom: 30px;
+    gap: 15px;
+    margin-bottom: 20px;
 }
+
 .detail-item {
     background: #f8f9fa;
     padding: 20px;
-    border-radius: 8px;
+    border-radius: 10px;
     text-align: center;
 }
-.d-label { display: block; font-size: 13px; color: #666; margin-bottom: 8px; }
-.d-value { font-size: 18px; font-weight: bold; }
 
-.status-safe { color: var(--success-color); }
-.status-danger { color: var(--danger-color); }
+.d-label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 8px;
+}
 
-.divider { border: 0; border-top: 1px solid #eee; margin: 30px 0; }
+.d-value {
+    font-size: 16px;
+    font-weight: bold;
+}
 
+.status-safe {
+    color: var(--success-color);
+}
 
+.status-danger {
+    color: var(--danger-color);
+}
 
-/* 권한 상세 리스트 스타일 */
+.divider {
+    border: 0;
+    border-top: 1px solid #eee;
+    margin: 20px 0;
+}
+
+/* 권한 리스트 */
+.permission-stats {
+    font-size: 13px;
+    color: #666;
+    text-align: right;
+    margin-bottom: 10px;
+}
+
 .permission-list-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 15px;
-    max-height: 300px;
+    gap: 8px;
+    max-height: 250px;
     overflow-y: auto;
-    padding: 10px;
-    background: #f9f9f9;
+    padding: 15px;
+    background: #fbfbfb;
     border-radius: 8px;
     border: 1px solid #eee;
 }
 
 .perm-item {
-    font-size: 12px;
-    padding: 6px 12px;
+    font-size: 11px;
+    padding: 5px 10px;
     border-radius: 20px;
     border: 1px solid #ddd;
-    display: flex;
-    align-items: center;
     font-family: monospace;
 }
 
-/* 허용된 권한 스타일 */
 .perm-granted {
     background-color: #e8f5e9;
     border-color: #c8e6c9;
     color: #2e7d32;
 }
 
-/* 거부/미허용 권한 스타일 */
 .perm-denied {
     background-color: #f5f5f5;
-    border-color: #ddd;
-    color: #757575;
-    text-decoration: line-through; /* 취소선 효과 */
+    border-color: #eee;
+    color: #aaa;
+    text-decoration: line-through;
 }
 
 .badge {
-    font-size: 12px;
-    padding: 4px 8px;
+    padding: 3px 6px;
     border-radius: 4px;
+    font-size: 11px;
     margin-right: 5px;
 }
-.badge-grant { background: #e8f5e9; color: #2e7d32; }
-.badge-deny { background: #f5f5f5; color: #757575; }
 
-/* 앱 이름 스타일 강화 */
-.app-display-name {
-    font-size: 14px;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.app-package-sub {
-    font-size: 11px;
-    color: #888;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.badge-grant {
+    background: #e8f5e9;
+    color: #2e7d32;
 }
 
-/* 무조건 이자리 수정 금지 */
+.badge-deny {
+    background: #f5f5f5;
+    color: #aaa;
+}
 
-.hidden { display: none !important; }
-/* style.css 하단에 추가 */
+#create-scan-screen .content-card {
+    max-width: 380px;  /* 로그인 카드와 동일한 폭 */
+    margin: 60px auto; /* 중앙 배치 */
+    padding: 40px 35px;
+    position: relative; /* 초기화 버튼 배치를 위해 필수 */
+}
+
+/* 초기화 버튼 위치 미세 조정 (카드가 작아졌으므로) */
+.reset-icon-btn { top: 15px; right: 15px; }
+
+
+/* --- [화면 4 수정] 기기 연결 화면 (버튼 크기 정상화) --- */
+#device-connection-screen .content-card {
+    max-width: 500px; /* 카드 너비 제한 */
+    margin: 60px auto;
+    text-align: center;
+}
+
+#device-connection-screen .content-card {
+    max-width: 380px; /* 검사 생성 화면과 똑같은 폭 */
+    margin: 60px auto;
+    text-align: center;
+}
+
+/* 검사 시작하기 & 뒤로가기 버튼 공통 스타일 */
+#real-start-scan-btn, 
+#back-to-info-btn {
+    width: 100% !important;      /* 가로: 꽉 차게 (뒤로가기 버튼 기준) */
+    padding: 15px 0 !important;  /* 세로: 두툼하게 (검사시작 버튼 기준) */
+    font-size: 16px !important;  /* 글자 크기 통일 */
+    margin-top: -5px;            /* 버튼 사이 간격 */
+    box-sizing: border-box;      /* 테두리 포함 크기 계산 */
+    border-radius: 8px;          /* 둥근 모서리 */
+}
+
+/* 검사 시작 버튼만 강조 (그림자) */
+#real-start-scan-btn {
+    box-shadow: 0 4px 6px rgba(58, 83, 155, 0.3);
+}
+
+/* 유틸리티 클래스 (필수) */
+.hidden {
+    display: none !important;
+}
