@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os'); // [추가] os 모듈 로드
 const adb = require('adbkit');
 
-const IS_DEV_MODE = false;
+const IS_DEV_MODE = true;
 
 // ★★★ [수정] 현재 OS에 따라 ADB 실행 파일 이름 동적 결정 ★★★
 const adbExecutable = os.platform() === 'win32' ? 'adb.exe' : 'adb';
