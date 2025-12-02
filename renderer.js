@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
+    
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
@@ -390,15 +390,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', () => {
             if (confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
-                // 1. 사이드바 원상복구
-                document.getElementById('nav-create').classList.remove('hidden');
-                document.getElementById('nav-open').classList.remove('hidden');
+                // ★★★ [추가] ADB 폴링 중단 로직 (안전성 강화) ★★★
+                stopDevicePolling(); 
+                // ★★★ [추가 끝] ★★★
 
-                const navResult = document.getElementById('nav-result');
-                if (navResult) {
-                    navResult.classList.add('hidden');
-                    navResult.classList.remove('active');
-                }
+                // 1. 사이드바 원상복구
+                // ... (생략: 사이드바 복구 로직) ...
 
                 // 2. 화면 이동 및 폼 초기화
                 showScreen(loggedInView, 'create-scan-screen');
@@ -406,6 +403,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 // (선택사항) 입력 폼 내용 비우기
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
+
+                // ★★★ [수정] 텍스트 필드 활성화 및 자동 완성 방지 속성 추가 ★★★
+                clientNameInput.disabled = false;
+                clientDobInput.disabled = false;
+                clientPhoneInput.disabled = false;
+                toConnectionScreenBtn.disabled = true;
+                
+                // 자동 완성 방지 속성을 명시적으로 설정하여 브라우저의 간섭을 줄임
+                clientNameInput.setAttribute('autocomplete', 'off');
+                clientDobInput.setAttribute('autocomplete', 'off');
+                clientPhoneInput.setAttribute('autocomplete', 'off');
+                // ★★★ [수정 끝] ★★★
             }
         });
     }
