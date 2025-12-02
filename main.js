@@ -1,12 +1,20 @@
+// main.js (변경 후 - macOS 및 Windows 지원)
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os'); // [추가] os 모듈 로드
 const adb = require('adbkit');
 
 const IS_DEV_MODE = false;
 
-const adbPath = path.join(__dirname, 'platform-tools', 'adb.exe');
+// ★★★ [수정] 현재 OS에 따라 ADB 실행 파일 이름 동적 결정 ★★★
+const adbExecutable = os.platform() === 'win32' ? 'adb.exe' : 'adb';
+const adbPath = path.join(__dirname, 'platform-tools', adbExecutable);
+// ★★★ [수정 끝] ★★★
+
 const client = adb.createClient({ bin: adbPath });
+
+// ... (나머지 코드 유지) ...
 
 function createWindow() {
     const mainWindow = new BrowserWindow({
