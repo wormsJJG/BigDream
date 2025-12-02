@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld(
         openScanFile: () => {
             console.log('--- preload.js: openScanFile 호출됨 ---');
             return ipcRenderer.invoke('open-scan-file');
+        },
+
+        forceWindowReset: () => {
+            return ipcRenderer.invoke('force-window-reset');
         }
     }
 );
@@ -29,7 +33,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     runScan: () => ipcRenderer.invoke('run-scan'),
     openScanFile: () => ipcRenderer.invoke('open-scan-file'),
-    checkDeviceConnection: () => ipcRenderer.invoke('check-device-connection') 
+    checkDeviceConnection: () => ipcRenderer.invoke('check-device-connection'),
+    forceWindowReset: () => ipcRenderer.invoke('force-window-reset')
 });
 
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');

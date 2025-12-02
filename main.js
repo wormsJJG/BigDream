@@ -31,6 +31,24 @@ function createWindow() {
 
 app.whenReady().then(() => { createWindow(); });
 
+// ★★★ [추가] 창 포커스 강제 재설정 핸들러 ★★★
+ipcMain.handle('force-window-reset', () => { // 이름은 force-window-reset으로 하겠습니다.
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (mainWindow) {
+        // Windows의 고질적인 렌더링 버그 해결을 위해 최소화 -> 복원 트릭 사용
+        
+        // 1. 창을 최소화 (Windows OS에 의한 강제 리셋 유발)
+        mainWindow.minimize(); 
+        
+        // 2. 짧은 지연(100ms) 후 창을 복원 및 포커스 재확보
+        setTimeout(() => {
+            mainWindow.restore(); 
+            mainWindow.focus();
+        }, 100); 
+        console.log('--- Main Process: Window Reset (Minimize/Restore) Triggered ---');
+    }
+});
+
 // 1. 기기 연결 확인
 ipcMain.handle('check-device-connection', async () => {
     if (IS_DEV_MODE) return { status: 'connected', model: 'Galaxy S24 (TEST)' };

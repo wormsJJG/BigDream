@@ -411,6 +411,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // (선택사항) 입력 폼 내용 비우기
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
+
+
+                window.electronAPI.forceWindowReset(); // 메인 프로세스에 최소화/복원 요청
+
+                // 최소화/복원 트릭이 완료될 시간을 충분히 확보 (100ms 트릭 + 200ms 안정 마진)
             }
         });
     }
