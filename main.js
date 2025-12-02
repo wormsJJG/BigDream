@@ -46,18 +46,20 @@ ipcMain.handle('check-device-connection', async () => {
 
 // 2. 스파이앱 탐지 로직 (수정됨)
 ipcMain.handle('run-scan', async () => {
-    console.log('--- 스캔 시작 ---');
+    console.log('--- 스파이앱 정밀 분석 시작 ---');
+    
     if (IS_DEV_MODE) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1500));
         return getMockData();
     }
 
     try {
         const devices = await client.listDevices();
-        if (devices.length === 0) throw new Error('기기 연결 끊김');
-        const serial = devices[0].id;
+        if (devices.length === 0) throw new Error('연결된 기기가 없습니다.');
 
-        // 기기 정보
+        const serial = devices[0].id;
+        
+        // 1. 기기 정보 수집
         const modelCmd = await client.shell(serial, 'getprop ro.product.model');
         const model = (await adb.util.readAll(modelCmd)).toString().trim();
 
@@ -65,22 +67,22 @@ ipcMain.handle('run-scan', async () => {
         try {
             const rootCmd = await client.shell(serial, 'which su');
             if ((await adb.util.readAll(rootCmd)).toString().trim().length > 0) isRooted = true;
-        } catch (e) { }
+        } catch (e) {}
 
         let phoneNumber = '알 수 없음';
         try {
             const phoneCmd = await client.shell(serial, 'service call iphonesubinfo 15 s16 "com.android.shell"');
             const phoneOut = (await adb.util.readAll(phoneCmd)).toString().trim();
             if (phoneOut.includes('Line 1 Number')) phoneNumber = phoneOut;
-        } catch (e) { }
+        } catch (e) {}
 
         const deviceInfo = { model, serial, isRooted, phoneNumber };
 
-        // 앱 및 파일 목록
+        // 2. 파일 및 앱 목록 수집
         const apkFiles = await findApkFiles(serial);
         const allApps = await getInstalledApps(serial);
 
-        // 상세 분석
+        // 3. 앱 상세 분석 (병렬 처리)
         const processedApps = [];
         for (let i = 0; i < allApps.length; i += 10) {
             const chunk = allApps.slice(i, i + 10);
@@ -97,63 +99,64 @@ ipcMain.handle('run-scan', async () => {
         }
 
         // ============================================================
-        // ★★★ [최종 수정] 필터링 로직 ★★★
+        // ★★★ [최종 수정] 스파이앱 탐지 로직 (조건 강화) ★★★
         // ============================================================
 
         const SENSITIVE_PERMISSIONS = [
-            'android.permission.RECORD_AUDIO',      // 도청
-            'android.permission.READ_CONTACTS',     // 연락처
-            'android.permission.ACCESS_FINE_LOCATION', // 위치
-            'android.permission.READ_PHONE_STATE',  // 전화번호
-            'android.permission.CALL_PHONE',        // 발신
-            'android.permission.CAMERA',            // 도촬
-            'android.permission.READ_CALL_LOG',     // 통화기록
-            'android.permission.READ_SMS',          // 문자
+            'android.permission.RECORD_AUDIO',
+            'android.permission.READ_CONTACTS',
+            'android.permission.ACCESS_FINE_LOCATION',
+            'android.permission.READ_PHONE_STATE',
+            'android.permission.CALL_PHONE',
+            'android.permission.CAMERA',
+            'android.permission.READ_CALL_LOG',
+            'android.permission.READ_SMS',
             'android.permission.RECEIVE_SMS',
             'android.permission.SEND_SMS',
-            'android.permission.RECEIVE_BOOT_COMPLETED', // 자동실행
-            'android.permission.BIND_DEVICE_ADMIN',       // 삭제방지
-            // ★★★ [신규 추가] 배터리 최적화 무시 (좀비 앱) ★★★
-            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
+            'android.permission.RECEIVE_BOOT_COMPLETED',
+            'android.permission.BIND_DEVICE_ADMIN',
+            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' // 좀비앱 권한
         ];
 
-        // [화이트리스트] 안전하다고 판단할 패키지명 키워드
+        const ALARM_PERMISSIONS = [
+            'android.permission.SCHEDULE_EXACT_ALARM',
+            'android.permission.USE_EXACT_ALARM',
+            'com.android.alarm.permission.SET_ALARM'
+        ];
+
+        // 안전한 패키지명 (화이트리스트)
         const SAFE_PREFIXES = [
-            'com.android.',
-            'com.google.android.',
-            'com.samsung.',
-            'com.sec.',
-            'com.qualcomm.',
-            'com.sktelecom.',
-            'com.kt.',
-            'com.lgu.',
-            'com.lguplus.',
-            'uplus.',
-            'lgt.'
+            'com.android.', 'com.google.android.', 'com.samsung.', 'com.sec.',
+            'com.qualcomm.', 'com.sktelecom.', 'com.kt.', 'com.lgu.',
+            'com.lguplus.', 'uplus.', 'lgt.', 'com.facebook'
         ];
 
         const suspiciousApps = processedApps.filter(app => {
-
-            // 1. 화이트리스트 패스 (삼성, 통신사, 구글 앱 등)
-            // 패키지 이름이 안전한 키워드로 시작하면 무조건 통과시킵니다.
+            
+            // 1. 화이트리스트 패스
             const isSafeVendor = SAFE_PREFIXES.some(prefix => app.packageName.startsWith(prefix));
             if (isSafeVendor) return false;
 
-            // 2. Play 스토어 등 정식 스토어 설치 앱 패스
+            // 2. Play 스토어 앱 패스
             if (!app.isSideloaded) return false;
 
-            // 3. 민감 권한 체크
+            // ★★★ [추가된 조건] 백그라운드 실행 중이 아니라면 패스 ★★★
+            // "지금 당장 활동하고 있는 위협"만 잡습니다.
+            if (!app.isRunningBg) return false;
+
+            // 3. 권한 분석
             const perms = app.requestedList || [];
             const hasSensitivePerm = perms.some(p => SENSITIVE_PERMISSIONS.includes(p));
+            const hasAlarmPerm = perms.some(p => ALARM_PERMISSIONS.includes(p));
 
-            // [최종 판단]
-            // 대기업 앱 아님 + 스토어 앱 아님(외부설치) + 민감 권한 있음 -> 잡았다 요놈!
-            if (hasSensitivePerm) {
+            // [최종 판단] 
+            // 사이드로딩(O) + 백그라운드실행(O) + 민감권한(O) + 알람권한(X) -> 검거
+            if (hasSensitivePerm && !hasAlarmPerm) {
                 const caught = perms.filter(p => SENSITIVE_PERMISSIONS.includes(p));
                 const shortNames = caught.map(p => p.split('.').pop()).slice(0, 3);
-
-                app.reason = `탐지: 외부 설치됨 + [${shortNames.join(', ')}...] 보유`;
-                return true;
+                
+                app.reason = `탐지: 백그라운드 실행 + [${shortNames.join(', ')}...]`;
+                return true; 
             }
             return false;
         });
