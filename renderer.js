@@ -616,11 +616,22 @@ document.addEventListener('DOMContentLoaded', () => {
             
             sortedApps.forEach(app => {
                 const div = document.createElement('div');
-                div.className = app.isSideloaded ? 'compact-item compact-sideload' : 'compact-item';
                 
-                // 앱 이름 (패키지명) - Sideload면 * 표시
-                const mark = app.isSideloaded ? '[외부] ' : '';
-                div.textContent = `${mark}${formatAppName(app.packageName)} (${app.packageName})`;
+                // [수정됨] 클래스 결정 로직
+                if (app.reason) {
+                    // 1순위: 위협 앱 (빨간색)
+                    div.className = 'compact-item compact-threat';
+                } else if (app.isSideloaded) {
+                    // 2순위: 사이드로딩 앱 (회색)
+                    div.className = 'compact-item compact-sideload';
+                } else {
+                    // 3순위: 일반 앱 (흰색)
+                    div.className = 'compact-item';
+                }
+                
+                // 앱 이름 표시 (위협이면 앞에 [위협] 표시)
+                const prefix = app.reason ? '[위협] ' : (app.isSideloaded ? '[외부] ' : '');
+                div.textContent = `${prefix}${formatAppName(app.packageName)} (${app.packageName})`;
                 
                 appGrid.appendChild(div);
             });

@@ -1,19 +1,38 @@
-/* style.css 하단부 교체 */
+/* style.css 맨 아래 - 인쇄 스타일 전체 교체 */
 
 @media print {
-    @page { size: A4; margin: 10mm; }
+    @page { 
+        size: A4; 
+        margin: 10mm; /* 여백을 10mm로 고정 */
+    }
     
+    /* 1. 기본 설정 및 초기화 (빈 페이지 방지 핵심) */
+    html, body {
+        width: 100%;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: #fff !important;
+        overflow: visible !important;
+    }
+
     /* 화면 UI 숨기기 */
     body > *:not(#printable-report) { display: none !important; }
     #printable-report { display: block !important; width: 100%; font-family: 'Malgun Gothic', serif; color: #000; }
 
     /* --- 레이아웃 --- */
     .print-page {
-        page-break-after: always; /* 페이지 강제 넘김 */
-        min-height: 280mm;
+        /* min-height 제거 (빈 페이지 원인) */
         position: relative;
+        page-break-after: always; /* 페이지 강제 넘김 */
+        padding-bottom: 20px;
     }
-    .print-page:last-child { page-break-after: auto; }
+    .print-page:last-child { page-break-after: auto; } /* 마지막 페이지는 넘기지 않음 */
+
+    /* 섹션 끊김 방지 */
+    .report-section, tr, .info-table, .detail-table {
+        page-break-inside: avoid;
+    }
 
     /* --- 헤더 & 타이틀 --- */
     .report-header {
@@ -22,49 +41,63 @@
     .bd-logo { font-size: 20px; font-weight: 900; color: #3A539B; }
     .header-confidential { font-size: 10px; color: #D9534F; font-weight: bold; border: 1px solid #D9534F; padding: 2px 5px; }
     
-    .report-title-box { text-align: center; margin: 50px 0; border: 1px solid #ddd; padding: 30px; background: #f9f9f9; -webkit-print-color-adjust: exact; }
-    .report-title-box h1 { font-size: 28px; margin: 0 0 10px 0; }
+    .report-title-box { text-align: center; margin: 30px 0; border: 1px solid #ddd; padding: 20px; background: #f9f9f9; -webkit-print-color-adjust: exact; }
+    .report-title-box h1 { font-size: 24px; margin: 0 0 10px 0; }
     
     /* --- 섹션 & 테이블 --- */
-    .section-heading { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-top: 30px; margin-bottom: 10px; }
+    .section-heading { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
     .text-danger { color: #D9534F !important; }
     .section-desc { font-size: 10px; color: #666; margin-bottom: 10px; }
 
-    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; }
-    th { background: #eee !important; font-weight: bold; text-align: center; padding: 6px; border: 1px solid #000; -webkit-print-color-adjust: exact; }
-    td { padding: 6px; border: 1px solid #000; vertical-align: top; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 10px; }
+    th { background: #eee !important; font-weight: bold; text-align: center; padding: 5px; border: 1px solid #000; -webkit-print-color-adjust: exact; }
+    td { padding: 5px; border: 1px solid #000; vertical-align: top; }
     
     .info-table th { width: 18%; text-align: right; padding-right: 15px; }
 
-    /* --- 요약 박스 (종합 판정) --- */
-    .summary-box { padding: 15px; text-align: center; border: 2px solid #000; font-weight: bold; margin-bottom: 20px; font-size: 16px; }
+    /* --- 요약 박스 --- */
+    .summary-box { padding: 10px; text-align: center; border: 2px solid #000; font-weight: bold; margin-bottom: 15px; font-size: 14px; }
     .status-safe { background: #e8f5e9 !important; color: #2e7d32; border-color: #2e7d32; -webkit-print-color-adjust: exact; }
     .status-danger { background: #ffebee !important; color: #c62828; border-color: #c62828; -webkit-print-color-adjust: exact; }
 
-    .summary-stats { display: flex; justify-content: space-around; margin-top: 20px; border: 1px solid #ddd; padding: 15px; }
+    .summary-stats { display: flex; justify-content: space-around; margin-top: 15px; border: 1px solid #ddd; padding: 10px; }
     .stat-item { text-align: center; }
-    .stat-label { display: block; font-size: 10px; color: #666; }
-    .stat-value { display: block; font-size: 20px; font-weight: bold; margin-top: 5px; }
+    .stat-label { display: block; font-size: 9px; color: #666; }
+    .stat-value { display: block; font-size: 16px; font-weight: bold; margin-top: 3px; }
 
-    /* --- 부록: 앱 리스트 (3단 편집으로 압축) --- */
+    /* --- 부록: 앱 리스트 (3단 편집) --- */
     .compact-app-grid {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr; /* 3단 */
         gap: 0;
         border-top: 1px solid #ccc;
         border-left: 1px solid #ccc;
-        font-size: 9px; /* 글자 작게 */
+        font-size: 8px; /* 글자 크기 축소 */
     }
     .compact-item {
         border-right: 1px solid #ccc;
         border-bottom: 1px solid #ccc;
-        padding: 4px;
+        padding: 3px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .compact-sideload { font-weight: bold; background: #eee !important; -webkit-print-color-adjust: exact; }
+    
+    /* [신규] 위협 앱 강조 스타일 (빨간색) */
+    .compact-threat { 
+        font-weight: bold; 
+        color: #fff !important; 
+        background-color: #D9534F !important; 
+        -webkit-print-color-adjust: exact; 
+    }
+    
+    /* 외부 앱 강조 스타일 (회색) */
+    .compact-sideload { 
+        font-weight: bold; 
+        background: #eee !important; 
+        -webkit-print-color-adjust: exact; 
+    }
 
     /* 푸터 */
-    .disclaimer { font-size: 9px; color: #888; text-align: center; margin-top: 100px; line-height: 1.6; }
+    .disclaimer { font-size: 8px; color: #888; text-align: center; margin-top: 50px; line-height: 1.4; }
 }

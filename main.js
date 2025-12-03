@@ -195,8 +195,6 @@ ipcMain.handle('uninstall-app', async (event, packageName) => {
         const devices = await client.listDevices();
         if (devices.length === 0) throw new Error('기기 연결 끊김');
         const serial = devices[0].id;
-
-        // [1단계] 일반 삭제 시도 (adb uninstall)
         try {
             const disableCmd = await client.shell(serial, `pm disable-user --user 0 ${packageName}`);
             const disableOutput = await adb.util.readAll(disableCmd);
@@ -204,10 +202,14 @@ ipcMain.handle('uninstall-app', async (event, packageName) => {
 
             // 성공 메시지가 나오면 성공 처리
             if (outputStr.includes('new state: disabled') || outputStr.includes('new state: default')) {
-                return {
-                    success: true,
-                    message: "경고: 삭제가 차단되어 '강제 중지(무력화)' 시켰습니다.\n앱이 비활성화되어 더 이상 동작하지 않습니다."
-                };
+                try {
+
+                    await client.uninstall(serial, packageName);
+                    console.log("삭제성공");
+                    return { success: true, message: "앱이 완전히 삭제되었습니다." };
+                } catch (uninstallError) {
+                    console.warn(`삭제 실패`);
+                }
             } else {
                 // 이것조차 실패하면 사용자가 직접 풀어야 함
                 throw new Error("기기 관리자 권한 때문에 삭제 및 중지가 차단되었습니다.");
