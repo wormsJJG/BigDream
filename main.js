@@ -105,8 +105,11 @@ ipcMain.handle('run-scan', async () => {
         const deviceInfo = { model, serial, isRooted, phoneNumber };
 
         // 2. 파일 및 앱 목록 수집
-        const apkFiles = await findApkFiles(serial);
-        const allApps = await getInstalledApps(serial);
+       const apkFiles = await findApkFiles(serial);
+        const allApps = await getInstalledApps(serial); // 여기서 UID도 가져옴
+        
+        // ★★★ [추가] 네트워크 사용량 전체 맵 가져오기
+        const networkMap = await getNetworkUsageMap(serial);
 
         // 3. 앱 상세 분석 (병렬 처리)
         const processedApps = [];
@@ -212,48 +215,58 @@ async function getInstalledApps(serial) {
     const sysData = await adb.util.readAll(sysOutput);
     const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
 
-    // 2. 전체 앱 가져오기
-    const output = await client.shell(serial, 'pm list packages -i -f');
+    // 2. 전체 앱 가져오기 (-U 옵션 추가: UID 가져오기 위함)
+    const output = await client.shell(serial, 'pm list packages -i -f -U');
     const data = await adb.util.readAll(output);
     const lines = data.toString().trim().split('\n');
 
     const TRUSTED_INSTALLERS = [
-        'com.android.vending',
-        'com.sec.android.app.samsungapps',
-        'com.skt.skaf.A000Z00040',
-        'com.kt.olleh.storefront',
-        'com.lguplus.appstore',
-        'com.google.android.feedback'
+        'com.android.vending', 'com.sec.android.app.samsungapps',
+        'com.skt.skaf.A000Z00040', 'com.kt.olleh.storefront',
+        'com.lguplus.appstore', 'com.google.android.feedback'
     ];
 
     return lines.map((line) => {
         if (!line) return null;
+        // 포맷: package:/data/.../base.apk=com.package uid:10123 installer=com.android.vending
         const parts = line.split(/\s+/);
-        const pathAndPackage = (parts[0] || '').replace('package:', '');
-        const splitIndex = pathAndPackage.lastIndexOf('=');
-        if (splitIndex === -1) return null;
-
-        const apkPath = pathAndPackage.substring(0, splitIndex);
-        const packageName = pathAndPackage.substring(splitIndex + 1);
-
+        
+        let packageName = '';
+        let apkPath = 'N/A';
         let installer = null;
-        const installerPart = parts.find(p => p.startsWith('installer='));
-        if (installerPart) installer = installerPart.replace('installer=', '');
+        let uid = null;
 
-        // [Sideload 판별 로직]
+        parts.forEach(part => {
+            if (part.includes('=')) {
+                // package:/path=com.name 처리
+                if (part.startsWith('package:')) {
+                    const cleanPart = part.replace('package:', '');
+                    const splitIdx = cleanPart.lastIndexOf('=');
+                    if (splitIdx !== -1) {
+                        apkPath = cleanPart.substring(0, splitIdx);
+                        packageName = cleanPart.substring(splitIdx + 1);
+                    }
+                } else if (part.startsWith('installer=')) {
+                    installer = part.replace('installer=', '');
+                }
+            } else if (part.startsWith('uid:')) {
+                // [중요] UID 추출
+                uid = part.replace('uid:', '');
+            }
+        });
+
+        if (!packageName) return null;
+
+        // Sideload 판별
         let isSideloaded = true;
-
         if (systemPackages.has(packageName)) {
-            isSideloaded = false; // 시스템 앱
+            isSideloaded = false;
         } else if (installer && TRUSTED_INSTALLERS.includes(installer)) {
-            isSideloaded = false; // 스토어 앱
+            isSideloaded = false;
         }
 
         return {
-            packageName,
-            apkPath,
-            installer,
-            isSideloaded
+            packageName, apkPath, installer, isSideloaded, uid // uid 추가됨
         };
     }).filter(item => item !== null);
 }
@@ -315,65 +328,158 @@ async function findApkFiles(serial) {
         return data.toString().trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
     } catch (e) { return []; }
 }
+
+// [main.js] 맨 아래에 추가
+
+// 전체 네트워크 사용량 맵 가져오기 (UID 기준)
+async function getNetworkUsageMap(serial) {
+    const usageMap = {}; // { uid: { rx: 0, tx: 0 } }
+    try {
+        // dumpsys netstats detail 명령어로 상세 내역 조회
+        const output = await client.shell(serial, 'dumpsys netstats detail');
+        const data = await adb.util.readAll(output);
+        const lines = data.toString().split('\n');
+
+        lines.forEach(line => {
+            // 라인 예시: ident=[...] uid=10123 set=DEFAULT tag=0x0 ... rxBytes=1024 txBytes=512
+            if (line.includes('uid=') && line.includes('rxBytes=')) {
+                const parts = line.trim().split(/\s+/);
+                let uid = null;
+                let rx = 0;
+                let tx = 0;
+
+                parts.forEach(p => {
+                    if (p.startsWith('uid=')) uid = p.split('=')[1];
+                    if (p.startsWith('rxBytes=')) rx = parseInt(p.split('=')[1]) || 0;
+                    if (p.startsWith('txBytes=')) tx = parseInt(p.split('=')[1]) || 0;
+                });
+
+                if (uid) {
+                    if (!usageMap[uid]) usageMap[uid] = { rx: 0, tx: 0 };
+                    usageMap[uid].rx += rx;
+                    usageMap[uid].tx += tx;
+                }
+            }
+        });
+    } catch (e) {
+        console.error('네트워크 통계 수집 실패:', e);
+    }
+    return usageMap;
+}
+
+// [main.js] 맨 아래 getMockData 함수 교체
+
 function getMockData() {
-    // 1. 가짜 앱 목록 생성
+    // 1. 민감 권한 및 알람 권한 정의 (실제 로직과 동일하게 맞춤)
+    const SENSITIVE_PERMISSIONS = [
+        'android.permission.RECORD_AUDIO',
+        'android.permission.READ_CONTACTS',
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.READ_SMS',
+        'android.permission.SEND_SMS',
+        'android.permission.CAMERA',
+        'android.permission.BIND_DEVICE_ADMIN',
+        'android.permission.RECEIVE_BOOT_COMPLETED',
+        'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
+    ];
+
+    const ALARM_PERMISSIONS = [
+        'android.permission.SCHEDULE_EXACT_ALARM',
+        'android.permission.USE_EXACT_ALARM'
+    ];
+
+    // 2. 가짜 앱 목록 생성 (데이터 사용량 dataUsage 추가됨)
     const mockApps = [
         {
+            // [정상 앱] 카카오톡: 플레이 스토어 설치, 권한 많지만 안전
             packageName: 'com.kakao.talk',
-            isSideloaded: false,
+            isSideloaded: false, // Play Store 설치
             isRunningBg: true,
-            allPermissionsGranted: false,
-            requestedCount: 15,
-            grantedCount: 10,
-            requestedList: ['android.permission.INTERNET', 'android.permission.CAMERA'],
-            grantedList: ['android.permission.INTERNET']
+            dataUsage: { rx: 1024 * 1024 * 150, tx: 1024 * 1024 * 50 }, // 수신 150MB, 송신 50MB
+            allPermissionsGranted: true,
+            requestedCount: 25,
+            grantedCount: 25,
+            requestedList: ['android.permission.INTERNET', 'android.permission.READ_CONTACTS', 'android.permission.CAMERA'],
+            grantedList: ['android.permission.INTERNET', 'android.permission.READ_CONTACTS', 'android.permission.CAMERA']
         },
         {
+            // [정상 앱] 유튜브: 데이터 많이 씀
             packageName: 'com.google.android.youtube',
             isSideloaded: false,
             isRunningBg: false,
-            allPermissionsGranted: false,
-            requestedCount: 20,
-            grantedCount: 18,
+            dataUsage: { rx: 1024 * 1024 * 1024 * 1.2, tx: 1024 * 1024 * 10 }, // 수신 1.2GB
+            allPermissionsGranted: true,
+            requestedCount: 10,
+            grantedCount: 8,
             requestedList: ['android.permission.INTERNET'],
             grantedList: ['android.permission.INTERNET']
         },
         {
-            packageName: 'com.hacker.spyware', // 위험한 앱 예시
-            isSideloaded: true,
-            isRunningBg: true,
+            // [악성 앱] 스파이웨어: 외부 설치 + 민감권한 + 알람없음 + 데이터 송신 많음
+            packageName: 'com.android.system.service.update', // 시스템 앱인 척 위장
+            isSideloaded: true, // ★ 외부 설치 (핵심)
+            isRunningBg: true,  // ★ 백그라운드 실행 (핵심)
+            dataUsage: { rx: 1024 * 100, tx: 1024 * 1024 * 500 }, // ★ 송신(TX)이 비정상적으로 많음 (500MB)
             allPermissionsGranted: true,
             requestedCount: 50,
             grantedCount: 50,
-            requestedList: ['android.permission.READ_SMS', 'android.permission.CAMERA', 'android.permission.ACCESS_FINE_LOCATION'],
-            grantedList: ['android.permission.READ_SMS', 'android.permission.CAMERA', 'android.permission.ACCESS_FINE_LOCATION']
+            requestedList: [
+                'android.permission.RECORD_AUDIO', // 도청
+                'android.permission.ACCESS_FINE_LOCATION', // 위치 추적
+                'android.permission.READ_SMS', // 문자 탈취
+                'android.permission.BIND_DEVICE_ADMIN', // 삭제 방지
+                'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' // 좀비 모드
+            ],
+            grantedList: [
+                'android.permission.RECORD_AUDIO',
+                'android.permission.ACCESS_FINE_LOCATION',
+                'android.permission.READ_SMS',
+                'android.permission.BIND_DEVICE_ADMIN',
+                'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
+            ]
+            // ★ 알람 권한 없음!
         },
         {
-            packageName: 'com.unknown.miner', // 채굴 앱 예시
-            isSideloaded: true,
-            isRunningBg: true,
-            allPermissionsGranted: false,
+            // [애매한 앱] 게임: 외부 설치지만 민감 권한 없음 -> 안전으로 분류되어야 함
+            packageName: 'com.epicgames.fortnite',
+            isSideloaded: true, 
+            isRunningBg: false,
+            dataUsage: { rx: 1024 * 1024 * 50, tx: 1024 * 1024 * 1 },
+            allPermissionsGranted: true,
             requestedCount: 5,
-            grantedCount: 2,
+            grantedCount: 5,
             requestedList: ['android.permission.INTERNET'],
             grantedList: ['android.permission.INTERNET']
         }
     ];
 
-    // 2. 의심 앱 필터링 (로직 동일하게)
-    const suspiciousApps = mockApps.filter(app =>
-        app.isSideloaded || app.isRunningBg || app.allPermissionsGranted
-    );
+    // 3. 필터링 로직 (run-scan과 동일하게 적용하여 가짜 데이터에서도 빨간불 뜨게 함)
+    const suspiciousApps = mockApps.filter(app => {
+        if (!app.isSideloaded) return false; // 1. 스토어 앱 제외
+        if (!app.isRunningBg) return false;  // 2. 실행 중 아니면 제외
+
+        const perms = app.requestedList || [];
+        const hasSensitive = perms.some(p => SENSITIVE_PERMISSIONS.includes(p));
+        const hasAlarm = perms.some(p => ALARM_PERMISSIONS.includes(p));
+
+        if (hasSensitive && !hasAlarm) {
+            const caught = perms.filter(p => SENSITIVE_PERMISSIONS.includes(p));
+            const shortNames = caught.map(p => p.split('.').pop()).slice(0, 3);
+            app.reason = `탐지: 외부 설치됨 + [${shortNames.join(', ')}...]`; // 이유 생성
+            return true;
+        }
+        return false;
+    });
 
     return {
         deviceInfo: {
-            model: 'Galaxy S24 Ultra (TEST)',
-            serial: 'R3CT40K...',
-            isRooted: true, // 루팅된 것처럼 테스트
-            phoneNumber: '010-0000-0000'
+            model: 'Galaxy S24 Ultra (MOCK)',
+            serial: 'TEST-1234-ABCD',
+            isRooted: true, // 루팅된 기기 시뮬레이션
+            phoneNumber: '010-1234-5678'
         },
         allApps: mockApps,
         suspiciousApps: suspiciousApps,
-        apkFiles: ['/sdcard/Download/spyware.apk', '/sdcard/Download/hack.apk']
+        apkFiles: ['/sdcard/Download/system_update.apk', '/sdcard/Download/spyware.apk']
     };
 }

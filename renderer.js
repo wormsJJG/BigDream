@@ -360,6 +360,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
         document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
+        
+        // ★★★ [추가] 데이터 사용량 표시
+        const usage = app.dataUsage || { rx: 0, tx: 0 };
+        const total = usage.rx + usage.tx;
+        
+        const usageText = `총 ${formatBytes(total)}`;
+        const usageDetail = `(수신: ${formatBytes(usage.rx)} / 송신: ${formatBytes(usage.tx)})`;
+        
+        const netEl = document.getElementById('detail-network');
+        netEl.innerHTML = `${usageText}<br><span style="font-size:12px; color:#888; font-weight:normal;">${usageDetail}</span>`;
+        
+        // 데이터 사용량이 비정상적으로 많으면(예: 100MB 이상) 빨간색 강조
+        if (total > 100 * 1024 * 1024) { 
+            netEl.style.color = '#333'; // 
+        } else {
+            netEl.style.color = '#333';
+        }
 
         const list = document.getElementById('detail-permission-list');
         list.innerHTML = '';
@@ -418,5 +435,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 최소화/복원 트릭이 완료될 시간을 충분히 확보 (100ms 트릭 + 200ms 안정 마진)
             }
         });
+    }
+
+    function formatBytes(bytes, decimals = 2) {
+        if (!+bytes) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
 });
