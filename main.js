@@ -1,22 +1,22 @@
-// main.js (변경 후 - macOS 및 Windows 지원)
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os'); // [추가] os 모듈 로드
+const os = require('os');
+const crypto = require('crypto'); // 해시 계산용
 const adb = require('adbkit');
+const axios = require('axios'); // VT API 통신용
 
-const IS_DEV_MODE = true;
+// ★★★ [설정] ★★★
+const IS_DEV_MODE = false;
+// 여기에 VirusTotal API 키를 입력하세요.
+const VIRUSTOTAL_API_KEY = '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96'; 
 
-// ★★★ [수정] 현재 OS에 따라 ADB 실행 파일 이름 동적 결정 ★★★
 const adbExecutable = os.platform() === 'win32' ? 'adb.exe' : 'adb';
 const adbPath = path.join(__dirname, 'platform-tools', adbExecutable);
-// ★★★ [수정 끝] ★★★
-
 const client = adb.createClient({ bin: adbPath });
 
-// ... (나머지 코드 유지) ...
-
 function createWindow() {
+    console.log('--- main.js: createWindow() 호출됨 ---');
     const mainWindow = new BrowserWindow({
         width: 1280,
         height: 850,
@@ -31,21 +31,15 @@ function createWindow() {
 
 app.whenReady().then(() => { createWindow(); });
 
-// ★★★ [추가] 창 포커스 강제 재설정 핸들러 ★★★
-ipcMain.handle('force-window-reset', () => { // 이름은 force-window-reset으로 하겠습니다.
+// 창 리셋 핸들러
+ipcMain.handle('force-window-reset', () => {
     const mainWindow = BrowserWindow.getAllWindows()[0];
     if (mainWindow) {
-        // Windows의 고질적인 렌더링 버그 해결을 위해 최소화 -> 복원 트릭 사용
-        
-        // 1. 창을 최소화 (Windows OS에 의한 강제 리셋 유발)
-        mainWindow.minimize(); 
-        
-        // 2. 짧은 지연(100ms) 후 창을 복원 및 포커스 재확보
+        mainWindow.minimize();
         setTimeout(() => {
-            mainWindow.restore(); 
+            mainWindow.restore();
             mainWindow.focus();
-        }, 100); 
-        console.log('--- Main Process: Window Reset (Minimize/Restore) Triggered ---');
+        }, 100);
     }
 });
 
@@ -63,17 +57,16 @@ ipcMain.handle('check-device-connection', async () => {
             const output = await client.shell(device.id, 'getprop ro.product.model');
             const data = await adb.util.readAll(output);
             model = data.toString().trim();
-        } catch (e) { }
+        } catch (e) {}
         return { status: 'connected', model: model };
     } catch (err) {
         return { status: 'error', error: err.message };
     }
 });
 
-// 2. 스파이앱 탐지 로직 (수정됨)
+// 2. 스파이앱 정밀 탐지 + VT 검사
 ipcMain.handle('run-scan', async () => {
     console.log('--- 스파이앱 정밀 분석 시작 ---');
-    
     if (IS_DEV_MODE) {
         await new Promise(r => setTimeout(r, 1500));
         return getMockData();
@@ -82,120 +75,104 @@ ipcMain.handle('run-scan', async () => {
     try {
         const devices = await client.listDevices();
         if (devices.length === 0) throw new Error('연결된 기기가 없습니다.');
-
         const serial = devices[0].id;
-        
-        // 1. 기기 정보 수집
+
+        // [A] 기기 정보 수집
         const modelCmd = await client.shell(serial, 'getprop ro.product.model');
         const model = (await adb.util.readAll(modelCmd)).toString().trim();
-
         let isRooted = false;
         try {
             const rootCmd = await client.shell(serial, 'which su');
             if ((await adb.util.readAll(rootCmd)).toString().trim().length > 0) isRooted = true;
         } catch (e) {}
-
         let phoneNumber = '알 수 없음';
         try {
             const phoneCmd = await client.shell(serial, 'service call iphonesubinfo 15 s16 "com.android.shell"');
             const phoneOut = (await adb.util.readAll(phoneCmd)).toString().trim();
             if (phoneOut.includes('Line 1 Number')) phoneNumber = phoneOut;
         } catch (e) {}
-
         const deviceInfo = { model, serial, isRooted, phoneNumber };
 
-        // 2. 파일 및 앱 목록 수집
-       const apkFiles = await findApkFiles(serial);
-        const allApps = await getInstalledApps(serial); // 여기서 UID도 가져옴
-        
-        // ★★★ [추가] 네트워크 사용량 전체 맵 가져오기
+        // [B] 데이터 수집
+        const apkFiles = await findApkFiles(serial);
+        const allApps = await getInstalledApps(serial);
         const networkMap = await getNetworkUsageMap(serial);
 
-        // 3. 앱 상세 분석 (병렬 처리)
+        // [C] 앱 상세 분석 (아이콘 추출 제거됨)
         const processedApps = [];
-        for (let i = 0; i < allApps.length; i += 10) {
-            const chunk = allApps.slice(i, i + 10);
+        for (let i = 0; i < allApps.length; i += 20) { // 속도 향상
+            const chunk = allApps.slice(i, i + 20);
             const results = await Promise.all(
                 chunk.map(async (app) => {
                     const [isRunningBg, permissions] = await Promise.all([
                         checkIsRunningBackground(serial, app.packageName),
                         getAppPermissions(serial, app.packageName)
+                        // ★ 아이콘 추출 로직 제거됨 ★
                     ]);
-                    return { ...app, isRunningBg, ...permissions };
+                    const netStats = networkMap[app.uid] || { rx: 0, tx: 0 };
+                    
+                    return { 
+                        ...app, 
+                        isRunningBg, 
+                        ...permissions, 
+                        dataUsage: netStats 
+                        // icon 필드 제거됨
+                    };
                 })
             );
             processedApps.push(...results);
         }
 
-        // ============================================================
-        // ★★★ [최종 수정] 스파이앱 탐지 로직 (조건 강화) ★★★
-        // ============================================================
+        // [D] 1차 필터링
+        const suspiciousApps = filterSuspiciousApps(processedApps);
 
-        const SENSITIVE_PERMISSIONS = [
-            'android.permission.RECORD_AUDIO',
-            'android.permission.READ_CONTACTS',
-            'android.permission.ACCESS_FINE_LOCATION',
-            'android.permission.READ_PHONE_STATE',
-            'android.permission.CALL_PHONE',
-            'android.permission.CAMERA',
-            'android.permission.READ_CALL_LOG',
-            'android.permission.READ_SMS',
-            'android.permission.RECEIVE_SMS',
-            'android.permission.SEND_SMS',
-            'android.permission.RECEIVE_BOOT_COMPLETED',
-            'android.permission.BIND_DEVICE_ADMIN',
-            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' // 좀비앱 권한
-        ];
-
-        const ALARM_PERMISSIONS = [
-            'android.permission.SCHEDULE_EXACT_ALARM',
-            'android.permission.USE_EXACT_ALARM',
-            'com.android.alarm.permission.SET_ALARM'
-        ];
-
-        // 안전한 패키지명 (화이트리스트)
-        const SAFE_PREFIXES = [
-            'com.android.', 'com.google.android.', 'com.samsung.', 'com.sec.',
-            'com.qualcomm.', 'com.sktelecom.', 'com.kt.', 'com.lgu.',
-            'com.lguplus.', 'uplus.', 'lgt.', 'com.facebook'
-        ];
-
-        const suspiciousApps = processedApps.filter(app => {
+        // [E] 2차 확진 (VirusTotal 검사)
+        if (suspiciousApps.length > 0 && VIRUSTOTAL_API_KEY !== 'YOUR_VIRUSTOTAL_API_KEY_HERE') {
+            console.log(`🔍 VT 정밀 검사 대상: ${suspiciousApps.length}개`);
             
-            // 1. 화이트리스트 패스
-            const isSafeVendor = SAFE_PREFIXES.some(prefix => app.packageName.startsWith(prefix));
-            if (isSafeVendor) return false;
+            for (const app of suspiciousApps) {
+                try {
+                    // APK 경로 확인 및 다운로드
+                    if (!app.apkPath || app.apkPath === 'N/A') continue;
+                    const tempPath = path.join(os.tmpdir(), `${app.packageName}.apk`);
+                    
+                    const transfer = await client.pull(serial, app.apkPath);
+                    await new Promise((resolve, reject) => {
+                        const fn = fs.createWriteStream(tempPath);
+                        transfer.on('end', () => fn.end());
+                        transfer.on('error', reject);
+                        fn.on('finish', resolve);
+                        transfer.pipe(fn);
+                    });
 
-            // 2. Play 스토어 앱 패스
-            if (!app.isSideloaded) return false;
+                    // 해시 계산
+                    const fileBuffer = fs.readFileSync(tempPath);
+                    const hashSum = crypto.createHash('sha256');
+                    hashSum.update(fileBuffer);
+                    const sha256 = hashSum.digest('hex');
+                    console.log(`[VT] 해시 계산 완료 (${app.packageName}): ${sha256}`);
 
-            // ★★★ [추가된 조건] 백그라운드 실행 중이 아니라면 패스 ★★★
-            // "지금 당장 활동하고 있는 위협"만 잡습니다.
-            if (!app.isRunningBg) return false;
+                    // API 조회
+                    const vtResult = await checkVirusTotal(sha256);
+                    app.vtResult = vtResult; 
 
-            // 3. 권한 분석
-            const perms = app.requestedList || [];
-            const hasSensitivePerm = perms.some(p => SENSITIVE_PERMISSIONS.includes(p));
-            const hasAlarmPerm = perms.some(p => ALARM_PERMISSIONS.includes(p));
+                    // 결과 반영
+                    if (vtResult && vtResult.malicious > 0) {
+                        app.reason = `[VT 확진] 악성 탐지(${vtResult.malicious}/${vtResult.total}) + ` + app.reason;
+                    } else if (vtResult && vtResult.not_found) {
+                        app.reason = `[VT 미확인] 신종 의심 + ` + app.reason;
+                    }
 
-            // [최종 판단] 
-            // 사이드로딩(O) + 백그라운드실행(O) + 민감권한(O) + 알람권한(X) -> 검거
-            if (hasSensitivePerm && !hasAlarmPerm) {
-                const caught = perms.filter(p => SENSITIVE_PERMISSIONS.includes(p));
-                const shortNames = caught.map(p => p.split('.').pop()).slice(0, 3);
-                
-                app.reason = `탐지: 백그라운드 실행 + [${shortNames.join(', ')}...]`;
-                return true; 
+                    fs.unlinkSync(tempPath); // 청소
+
+                } catch (vtError) {
+                    console.error(`VT 검사 실패 (${app.packageName}):`, vtError.message);
+                    app.vtResult = { error: "검사 불가" };
+                }
             }
-            return false;
-        });
+        }
 
-        return {
-            deviceInfo,
-            allApps: processedApps,
-            suspiciousApps,
-            apkFiles
-        };
+        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
 
     } catch (err) {
         console.error('검사 실패:', err);
@@ -203,10 +180,128 @@ ipcMain.handle('run-scan', async () => {
     }
 });
 
-// 파일 열기
-ipcMain.handle('open-scan-file', async () => { /* 생략 (기존 유지) */ });
+// 앱 삭제
+ipcMain.handle('uninstall-app', async (event, packageName) => {
+    if (IS_DEV_MODE) return { success: true };
+    try {
+        const devices = await client.listDevices();
+        const serial = devices[0].id;
+        try {
+            await client.uninstall(serial, packageName);
+            return { success: true };
+        } catch (e) {
+            const output = await client.shell(serial, `pm disable-user --user 0 ${packageName}`);
+            if ((await adb.util.readAll(output)).toString().includes('disabled')) return { success: true, message: "무력화됨" };
+            else throw new Error("기기 관리자 해제 필요");
+        }
+    } catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('open-scan-file', async () => { /* 파일 열기 로직 */ });
+
 
 // --- Helper Functions ---
+
+// 1. 필터링 로직
+function filterSuspiciousApps(apps) {
+    const SENSITIVE = [
+        'android.permission.RECORD_AUDIO', 'android.permission.READ_CONTACTS',
+        'android.permission.ACCESS_FINE_LOCATION', 'android.permission.READ_PHONE_STATE',
+        'android.permission.CALL_PHONE', 'android.permission.CAMERA',
+        'android.permission.READ_CALL_LOG', 'android.permission.READ_SMS',
+        'android.permission.RECEIVE_SMS', 'android.permission.SEND_SMS',
+        'android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.BIND_DEVICE_ADMIN',
+        'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
+    ];
+    const ALARM = ['android.permission.SCHEDULE_EXACT_ALARM', 'android.permission.USE_EXACT_ALARM', 'com.android.alarm.permission.SET_ALARM'];
+    const SAFE = ['com.samsung.', 'com.sec.', 'com.qualcomm.', 'com.sktelecom.', 'com.kt.', 'com.lgu.', 'uplus.', 'lgt.', 'com.facebook.', 'com.instagram.', 'com.twitter.', 'com.kakao.', 'jp.naver.'];
+
+    return apps.filter(app => {
+        if (SAFE.some(p => app.packageName.startsWith(p))) return false;
+        if (!app.isSideloaded) return false;
+
+        const perms = app.requestedList || [];
+        const hasSensitive = perms.some(p => SENSITIVE.includes(p));
+        const hasAlarm = perms.some(p => ALARM.includes(p));
+
+        if (hasSensitive && !hasAlarm) {
+            const caught = perms.filter(p => SENSITIVE.includes(p));
+            const shortNames = caught.map(p => p.split('.').pop()).slice(0, 3);
+            app.reason = `행동 탐지: 외부 설치 + [${shortNames.join(', ')}...]`;
+            return true;
+        }
+        return false;
+    });
+}
+
+// 2. VT 조회
+async function checkVirusTotal(fileHash) {
+    try {
+        const response = await axios.get(`https://www.virustotal.com/api/v3/files/${fileHash}`, {
+            headers: { 'x-apikey': VIRUSTOTAL_API_KEY }
+        });
+        const stats = response.data.data.attributes.last_analysis_stats;
+        return {
+            malicious: stats.malicious,
+            suspicious: stats.suspicious,
+            total: stats.malicious + stats.suspicious + stats.harmless + stats.undetected
+        };
+    } catch (error) {
+        if (error.response && error.response.status === 404) return { not_found: true };
+        return null;
+    }
+}
+
+// 3. 앱 목록 (오탐지 방지 버전)
+async function getInstalledApps(serial) {
+    const sysOutput = await client.shell(serial, 'pm list packages -s');
+    const sysData = await adb.util.readAll(sysOutput);
+    const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
+    const output = await client.shell(serial, 'pm list packages -i -f -U');
+    const data = await adb.util.readAll(output);
+    const TRUSTED = ['com.android.vending', 'com.sec.android.app.samsungapps', 'com.skt.skaf.A000Z00040', 'com.kt.olleh.storefront', 'com.lguplus.appstore', 'com.google.android.feedback'];
+    
+    return data.toString().trim().split('\n').map(line => {
+        if (!line) return null;
+        const parts = line.split(/\s+/);
+        let pkg='', path='', inst=null, uid=null;
+        parts.forEach(p => {
+            if(p.startsWith('package:')) { const tmp=p.replace('package:','').split('='); path=tmp[0]; pkg=tmp[1]; }
+            else if(p.startsWith('installer=')) inst=p.replace('installer=','');
+            else if(p.startsWith('uid:')) uid=p.replace('uid:','');
+        });
+        if(!pkg) return null;
+        let side=true;
+        if(systemPackages.has(pkg) || (inst && TRUSTED.includes(inst))) side=false;
+        return { packageName: pkg, apkPath: path, installer: inst, isSideloaded: side, uid };
+    }).filter(i=>i!==null);
+}
+
+// ... (getInstalledApps, getNetworkUsageMap, checkIsRunningBackground, getAppPermissions, findApkFiles, extractAppIcon, getMockData 등 기존 Helper 함수들은 모두 그대로 유지하세요) ...
+// (지면 관계상 이전에 작성된 함수들을 그대로 사용하시면 됩니다.)
+
+async function getInstalledApps(serial) { /* (오탐지 방지 버전 코드 사용) */
+    const sysOutput = await client.shell(serial, 'pm list packages -s');
+    const sysData = await adb.util.readAll(sysOutput);
+    const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
+    const output = await client.shell(serial, 'pm list packages -i -f -U');
+    const data = await adb.util.readAll(output);
+    const TRUSTED = ['com.android.vending', 'com.sec.android.app.samsungapps', 'com.skt.skaf.A000Z00040', 'com.kt.olleh.storefront', 'com.lguplus.appstore', 'com.google.android.feedback'];
+    return data.toString().trim().split('\n').map(line => {
+        if (!line) return null;
+        const parts = line.split(/\s+/);
+        let pkg='', path='', inst=null, uid=null;
+        parts.forEach(p => {
+            if(p.startsWith('package:')) { const tmp=p.replace('package:','').split('='); path=tmp[0]; pkg=tmp[1]; }
+            else if(p.startsWith('installer=')) inst=p.replace('installer=','');
+            else if(p.startsWith('uid:')) uid=p.replace('uid:','');
+        });
+        if(!pkg) return null;
+        let side=true;
+        if(systemPackages.has(pkg) || (inst && TRUSTED.includes(inst))) side=false;
+        return { packageName: pkg, apkPath: path, installer: inst, isSideloaded: side, uid };
+    }).filter(i=>i!==null);
+}
 
 // 앱 목록 가져오기 (오탐지 방지 강화)
 async function getInstalledApps(serial) {

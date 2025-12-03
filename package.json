@@ -16,6 +16,8 @@
   "dependencies": {
     "adb": "^0.2.0",
     "adbkit": "^2.11.1",
+    "app-info-parser": "^1.1.6",
+    "axios": "^1.13.2",
     "xml2js": "^0.6.2"
   }
 }
