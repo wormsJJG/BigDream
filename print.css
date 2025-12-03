@@ -1,19 +1,70 @@
-/* print.css */
-@media print {
-    body * {
-        visibility: hidden; /* 모든 요소 숨기기 */
-    }
+/* style.css 하단부 교체 */
 
-    #results-content, #results-content * {
-        visibility: visible; /* 결과 컨텐츠만 보이게 */
-    }
+@media print {
+    @page { size: A4; margin: 10mm; }
     
-    #results-content {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        box-shadow: none;
-        border: none;
+    /* 화면 UI 숨기기 */
+    body > *:not(#printable-report) { display: none !important; }
+    #printable-report { display: block !important; width: 100%; font-family: 'Malgun Gothic', serif; color: #000; }
+
+    /* --- 레이아웃 --- */
+    .print-page {
+        page-break-after: always; /* 페이지 강제 넘김 */
+        min-height: 280mm;
+        position: relative;
     }
+    .print-page:last-child { page-break-after: auto; }
+
+    /* --- 헤더 & 타이틀 --- */
+    .report-header {
+        display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 30px;
+    }
+    .bd-logo { font-size: 20px; font-weight: 900; color: #3A539B; }
+    .header-confidential { font-size: 10px; color: #D9534F; font-weight: bold; border: 1px solid #D9534F; padding: 2px 5px; }
+    
+    .report-title-box { text-align: center; margin: 50px 0; border: 1px solid #ddd; padding: 30px; background: #f9f9f9; -webkit-print-color-adjust: exact; }
+    .report-title-box h1 { font-size: 28px; margin: 0 0 10px 0; }
+    
+    /* --- 섹션 & 테이블 --- */
+    .section-heading { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-top: 30px; margin-bottom: 10px; }
+    .text-danger { color: #D9534F !important; }
+    .section-desc { font-size: 10px; color: #666; margin-bottom: 10px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; }
+    th { background: #eee !important; font-weight: bold; text-align: center; padding: 6px; border: 1px solid #000; -webkit-print-color-adjust: exact; }
+    td { padding: 6px; border: 1px solid #000; vertical-align: top; }
+    
+    .info-table th { width: 18%; text-align: right; padding-right: 15px; }
+
+    /* --- 요약 박스 (종합 판정) --- */
+    .summary-box { padding: 15px; text-align: center; border: 2px solid #000; font-weight: bold; margin-bottom: 20px; font-size: 16px; }
+    .status-safe { background: #e8f5e9 !important; color: #2e7d32; border-color: #2e7d32; -webkit-print-color-adjust: exact; }
+    .status-danger { background: #ffebee !important; color: #c62828; border-color: #c62828; -webkit-print-color-adjust: exact; }
+
+    .summary-stats { display: flex; justify-content: space-around; margin-top: 20px; border: 1px solid #ddd; padding: 15px; }
+    .stat-item { text-align: center; }
+    .stat-label { display: block; font-size: 10px; color: #666; }
+    .stat-value { display: block; font-size: 20px; font-weight: bold; margin-top: 5px; }
+
+    /* --- 부록: 앱 리스트 (3단 편집으로 압축) --- */
+    .compact-app-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr; /* 3단 */
+        gap: 0;
+        border-top: 1px solid #ccc;
+        border-left: 1px solid #ccc;
+        font-size: 9px; /* 글자 작게 */
+    }
+    .compact-item {
+        border-right: 1px solid #ccc;
+        border-bottom: 1px solid #ccc;
+        padding: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .compact-sideload { font-weight: bold; background: #eee !important; -webkit-print-color-adjust: exact; }
+
+    /* 푸터 */
+    .disclaimer { font-size: 9px; color: #888; text-align: center; margin-top: 100px; line-height: 1.6; }
 }

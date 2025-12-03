@@ -25,7 +25,28 @@ contextBridge.exposeInMainWorld(
 
         forceWindowReset: () => {
             return ipcRenderer.invoke('force-window-reset');
+        },
+
+        getAppIcon: (packageName) => {
+                        console.log('--- preload.js: getAppIcon() 호출됨 ---');
+
+            return ipcRenderer.invoke('get-app-icon', packageName);
+        },
+
+        uninstallApp: (packageName) => {
+
+            console.log('--- preload.js: uninstallApp 호출됨');
+
+            return ipcRenderer.invoke('uninstall-app', packageName);
+        },
+
+        neutralizeApp: (pkg) => {
+
+            console.log('--- preload.js: neutalizeApp 호출됨')
+            
+            return ipcRenderer.invoke('neutralize-app', pkg);
         }
+        
     }
 );
 
@@ -34,7 +55,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     runScan: () => ipcRenderer.invoke('run-scan'),
     openScanFile: () => ipcRenderer.invoke('open-scan-file'),
     checkDeviceConnection: () => ipcRenderer.invoke('check-device-connection'),
-    forceWindowReset: () => ipcRenderer.invoke('force-window-reset')
+    forceWindowReset: () => ipcRenderer.invoke('force-window-reset'),
+    uninstallApp: (packageName) => ipcRenderer.invoke('uninstall-app', packageName),
+    neutralizeApp: (pkg) => ipcRenderer.invoke('neutralize-app', pkg),
+    getAppIcon: (packageName) => ipcRenderer.invoke('get-app-icon', packageName)
 });
 
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');

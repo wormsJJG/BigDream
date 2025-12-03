@@ -518,6 +518,32 @@ p {
     background-color: #fff5f5;
 }
 
+.app-icon-wrapper {
+    width: 50px;
+    height: 50px;
+    background-color: #f0f2f5;
+    border-radius: 12px;
+    margin: 0 auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden; /* 이미지가 튀어나가지 않게 자름 */
+    border: 1px solid #e1e4e8;
+    position: relative;
+}
+
+.app-real-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* 비율 유지하며 꽉 채움 */
+}
+
+/* 의심 앱은 배경을 붉게 */
+.app-item.suspicious .app-icon-wrapper {
+    background-color: #ffeaea;
+    border-color: #ffcccc;
+}
+
 .app-icon-placeholder {
     width: 45px;
     height: 45px;
@@ -735,6 +761,93 @@ p {
     margin-top: -5px;            /* 버튼 사이 간격 */
     box-sizing: border-box;      /* 테두리 포함 크기 계산 */
     border-radius: 8px;          /* 둥근 모서리 */
+}
+
+#uninstall-btn {
+    /* 위치 및 크기 */
+    margin-left: auto; /* 헤더의 가장 오른쪽으로 밀어내기 */
+    padding: 10px 20px;
+    
+    /* 폰트 및 색상 */
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: var(--danger-color); /* #e74c3c (빨간색) */
+    
+    /* 테두리 및 모양 */
+    border: none;
+    border-radius: 6px;
+    
+    /* 인터랙션 */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    /* 입체감 (중요한 버튼임을 강조) */
+    box-shadow: 0 4px 6px rgba(231, 76, 60, 0.25);
+    
+    /* 아이콘 정렬 */
+    display: inline-flex;
+    align-items: center;
+    gap: 6px; /* 아이콘과 텍스트 사이 간격 */
+}
+
+/* 마우스 올렸을 때 (Hover) */
+#uninstall-btn:hover {
+    background-color: #c0392b; /* 더 진한 빨간색 */
+    transform: translateY(-2px); /* 살짝 위로 떠오름 */
+    box-shadow: 0 6px 12px rgba(231, 76, 60, 0.35);
+}
+
+/* 클릭했을 때 (Active) */
+#uninstall-btn:active {
+    transform: translateY(0); /* 다시 가라앉음 */
+    box-shadow: none;
+}
+
+/* 비활성화 상태 (처리 중일 때) */
+#uninstall-btn:disabled {
+    background-color: #95a5a6; /* 회색 */
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.warning-button {
+    background-color: #F0AD4E; /* 주황색 */
+    color: white;
+    border: none;
+    font-weight: 600;
+    box-shadow: 0 4px 6px rgba(240, 173, 78, 0.25);
+    display: inline-flex; align-items: center; gap: 5px;
+}
+
+.warning-button:hover {
+    background-color: #ec971f;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(240, 173, 78, 0.35);
+}
+
+.warning-button:active { transform: translateY(0); box-shadow: none; }
+
+.warning-button:disabled {
+    background-color: #ddd;
+    color: #999;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.action-buttons {
+    margin-left: auto; /* 오른쪽 끝으로 밀어내기 */
+    display: flex;     /* 가로 배치 */
+    align-items: center;
+    gap: 15px;         /* ★ 버튼 사이 간격 15px (공백 생성) ★ */
+}
+
+/* (참고) 기존 #uninstall-btn 에 있던 margin-left: auto 는 제거해도 됩니다.
+   이제 부모인 .action-buttons가 그 역할을 대신합니다. */
+#uninstall-btn {
+    margin-left: 0 !important; /* 개별 마진 초기화 */
 }
 
 /* 검사 시작 버튼만 강조 (그림자) */

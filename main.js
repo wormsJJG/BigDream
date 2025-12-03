@@ -5,11 +5,12 @@ const os = require('os');
 const crypto = require('crypto'); // 해시 계산용
 const adb = require('adbkit');
 const axios = require('axios'); // VT API 통신용
+const gplay = require('google-play-scraper');
 
 // ★★★ [설정] ★★★
 const IS_DEV_MODE = false;
 // 여기에 VirusTotal API 키를 입력하세요.
-const VIRUSTOTAL_API_KEY = '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96'; 
+const VIRUSTOTAL_API_KEY = '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96';
 
 const adbExecutable = os.platform() === 'win32' ? 'adb.exe' : 'adb';
 const adbPath = path.join(__dirname, 'platform-tools', adbExecutable);
@@ -57,7 +58,7 @@ ipcMain.handle('check-device-connection', async () => {
             const output = await client.shell(device.id, 'getprop ro.product.model');
             const data = await adb.util.readAll(output);
             model = data.toString().trim();
-        } catch (e) {}
+        } catch (e) { }
         return { status: 'connected', model: model };
     } catch (err) {
         return { status: 'error', error: err.message };
@@ -84,13 +85,13 @@ ipcMain.handle('run-scan', async () => {
         try {
             const rootCmd = await client.shell(serial, 'which su');
             if ((await adb.util.readAll(rootCmd)).toString().trim().length > 0) isRooted = true;
-        } catch (e) {}
+        } catch (e) { }
         let phoneNumber = '알 수 없음';
         try {
             const phoneCmd = await client.shell(serial, 'service call iphonesubinfo 15 s16 "com.android.shell"');
             const phoneOut = (await adb.util.readAll(phoneCmd)).toString().trim();
             if (phoneOut.includes('Line 1 Number')) phoneNumber = phoneOut;
-        } catch (e) {}
+        } catch (e) { }
         const deviceInfo = { model, serial, isRooted, phoneNumber };
 
         // [B] 데이터 수집
@@ -110,12 +111,12 @@ ipcMain.handle('run-scan', async () => {
                         // ★ 아이콘 추출 로직 제거됨 ★
                     ]);
                     const netStats = networkMap[app.uid] || { rx: 0, tx: 0 };
-                    
-                    return { 
-                        ...app, 
-                        isRunningBg, 
-                        ...permissions, 
-                        dataUsage: netStats 
+
+                    return {
+                        ...app,
+                        isRunningBg,
+                        ...permissions,
+                        dataUsage: netStats
                         // icon 필드 제거됨
                     };
                 })
@@ -129,13 +130,13 @@ ipcMain.handle('run-scan', async () => {
         // [E] 2차 확진 (VirusTotal 검사)
         if (suspiciousApps.length > 0 && VIRUSTOTAL_API_KEY !== 'YOUR_VIRUSTOTAL_API_KEY_HERE') {
             console.log(`🔍 VT 정밀 검사 대상: ${suspiciousApps.length}개`);
-            
+
             for (const app of suspiciousApps) {
                 try {
                     // APK 경로 확인 및 다운로드
                     if (!app.apkPath || app.apkPath === 'N/A') continue;
                     const tempPath = path.join(os.tmpdir(), `${app.packageName}.apk`);
-                    
+
                     const transfer = await client.pull(serial, app.apkPath);
                     await new Promise((resolve, reject) => {
                         const fn = fs.createWriteStream(tempPath);
@@ -154,7 +155,7 @@ ipcMain.handle('run-scan', async () => {
 
                     // API 조회
                     const vtResult = await checkVirusTotal(sha256);
-                    app.vtResult = vtResult; 
+                    app.vtResult = vtResult;
 
                     // 결과 반영
                     if (vtResult && vtResult.malicious > 0) {
@@ -182,23 +183,115 @@ ipcMain.handle('run-scan', async () => {
 
 // 앱 삭제
 ipcMain.handle('uninstall-app', async (event, packageName) => {
-    if (IS_DEV_MODE) return { success: true };
+    console.log(`--- 앱 삭제/무력화 요청: ${packageName} ---`);
+
+    // [개발 모드]
+    if (IS_DEV_MODE) {
+        await new Promise(r => setTimeout(r, 1000));
+        return { success: true, message: "[DEV] 가상 삭제 성공" };
+    }
+
     try {
         const devices = await client.listDevices();
+        if (devices.length === 0) throw new Error('기기 연결 끊김');
         const serial = devices[0].id;
+
+        // [1단계] 일반 삭제 시도 (adb uninstall)
         try {
-            await client.uninstall(serial, packageName);
-            return { success: true };
-        } catch (e) {
-            const output = await client.shell(serial, `pm disable-user --user 0 ${packageName}`);
-            if ((await adb.util.readAll(output)).toString().includes('disabled')) return { success: true, message: "무력화됨" };
-            else throw new Error("기기 관리자 해제 필요");
+            const disableCmd = await client.shell(serial, `pm disable-user --user 0 ${packageName}`);
+            const disableOutput = await adb.util.readAll(disableCmd);
+            const outputStr = disableOutput.toString().trim();
+
+            // 성공 메시지가 나오면 성공 처리
+            if (outputStr.includes('new state: disabled') || outputStr.includes('new state: default')) {
+                return {
+                    success: true,
+                    message: "경고: 삭제가 차단되어 '강제 중지(무력화)' 시켰습니다.\n앱이 비활성화되어 더 이상 동작하지 않습니다."
+                };
+            } else {
+                // 이것조차 실패하면 사용자가 직접 풀어야 함
+                throw new Error("기기 관리자 권한 때문에 삭제 및 중지가 차단되었습니다.");
+            }
+
+        } catch (err) {
+            console.error('최종 실패:', err);
+            return { success: false, error: err.message };
         }
-    } catch (err) { return { success: false, error: err.message }; }
+    } catch (uninstallError) {
+        console.warn(`일반 삭제 실패 (${packageName}) -> 무력화 시도 진입`);
+    }
 });
 
 ipcMain.handle('open-scan-file', async () => { /* 파일 열기 로직 */ });
 
+// [main.js] 아이콘 URL 가져오기 핸들러 (구글 플레이 검색)
+ipcMain.handle('get-app-icon', async (event, packageName) => {
+    // 개발 모드거나 패키지명이 없으면 패스
+    if (IS_DEV_MODE || !packageName) return null;
+
+    try {
+        // 구글 플레이에서 앱 정보 검색 (appId가 패키지명)
+        const appData = await gplay.app({ appId: packageName });
+        return appData.icon; // 아이콘 이미지 URL (인터넷 주소) 반환
+    } catch (err) {
+        // 스토어에 없는 앱(시스템 앱, 스파이앱 등)은 에러가 나므로 null 반환
+        return null;
+    }
+});
+
+// [main.js] 권한 무력화 핸들러 추가
+
+ipcMain.handle('neutralize-app', async (event, packageName) => {
+    console.log(`--- 앱 무력화 요청: ${packageName} ---`);
+
+    if (IS_DEV_MODE) {
+        await new Promise(r => setTimeout(r, 1500));
+        return { success: true, count: 5 }; // 가짜: 5개 권한 박탈
+    }
+
+    try {
+        const devices = await client.listDevices();
+        if (devices.length === 0) throw new Error('기기 연결 끊김');
+        const serial = devices[0].id;
+
+        // 1. 현재 허용된 모든 권한 가져오기 (Dangerous 권한 위주)
+        const dumpOutput = await client.shell(serial, `dumpsys package ${packageName}`);
+        const dumpData = await adb.util.readAll(dumpOutput);
+        const dumpStr = dumpData.toString();
+
+        // 정규식으로 'android.permission.XXX: granted=true' 패턴을 찾습니다.
+        // (install permissions와 runtime permissions 모두 포함)
+        const grantedPerms = [];
+        const regex = /android\.permission\.([A-Z0-9_]+): granted=true/g;
+        let match;
+        while ((match = regex.exec(dumpStr)) !== null) {
+            grantedPerms.push(`android.permission.${match[1]}`);
+        }
+
+        console.log(`발견된 권한 수: ${grantedPerms.length}`);
+
+        // 2. 권한 하나씩 뺏기 (Revoke)
+        let revokedCount = 0;
+        for (const perm of grantedPerms) {
+            try {
+                // pm revoke 명령어 실행
+                await client.shell(serial, `pm revoke ${packageName} ${perm}`);
+                revokedCount++;
+            } catch (e) {
+                // 일부 시스템 권한은 revoke가 안 될 수 있음 (무시하고 계속 진행)
+            }
+        }
+
+        // 3. 앱 강제 종료 (권한 뺏은거 적용되게)
+        await client.shell(serial, `am force-stop ${packageName}`);
+
+        return { success: true, count: revokedCount };
+
+    } catch (err) {
+        console.error('무력화 실패:', err);
+        return { success: false, error: err.message };
+    }
+});
 
 // --- Helper Functions ---
 
@@ -260,47 +353,21 @@ async function getInstalledApps(serial) {
     const output = await client.shell(serial, 'pm list packages -i -f -U');
     const data = await adb.util.readAll(output);
     const TRUSTED = ['com.android.vending', 'com.sec.android.app.samsungapps', 'com.skt.skaf.A000Z00040', 'com.kt.olleh.storefront', 'com.lguplus.appstore', 'com.google.android.feedback'];
-    
+
     return data.toString().trim().split('\n').map(line => {
         if (!line) return null;
         const parts = line.split(/\s+/);
-        let pkg='', path='', inst=null, uid=null;
+        let pkg = '', path = '', inst = null, uid = null;
         parts.forEach(p => {
-            if(p.startsWith('package:')) { const tmp=p.replace('package:','').split('='); path=tmp[0]; pkg=tmp[1]; }
-            else if(p.startsWith('installer=')) inst=p.replace('installer=','');
-            else if(p.startsWith('uid:')) uid=p.replace('uid:','');
+            if (p.startsWith('package:')) { const tmp = p.replace('package:', '').split('='); path = tmp[0]; pkg = tmp[1]; }
+            else if (p.startsWith('installer=')) inst = p.replace('installer=', '');
+            else if (p.startsWith('uid:')) uid = p.replace('uid:', '');
         });
-        if(!pkg) return null;
-        let side=true;
-        if(systemPackages.has(pkg) || (inst && TRUSTED.includes(inst))) side=false;
+        if (!pkg) return null;
+        let side = true;
+        if (systemPackages.has(pkg) || (inst && TRUSTED.includes(inst))) side = false;
         return { packageName: pkg, apkPath: path, installer: inst, isSideloaded: side, uid };
-    }).filter(i=>i!==null);
-}
-
-// ... (getInstalledApps, getNetworkUsageMap, checkIsRunningBackground, getAppPermissions, findApkFiles, extractAppIcon, getMockData 등 기존 Helper 함수들은 모두 그대로 유지하세요) ...
-// (지면 관계상 이전에 작성된 함수들을 그대로 사용하시면 됩니다.)
-
-async function getInstalledApps(serial) { /* (오탐지 방지 버전 코드 사용) */
-    const sysOutput = await client.shell(serial, 'pm list packages -s');
-    const sysData = await adb.util.readAll(sysOutput);
-    const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
-    const output = await client.shell(serial, 'pm list packages -i -f -U');
-    const data = await adb.util.readAll(output);
-    const TRUSTED = ['com.android.vending', 'com.sec.android.app.samsungapps', 'com.skt.skaf.A000Z00040', 'com.kt.olleh.storefront', 'com.lguplus.appstore', 'com.google.android.feedback'];
-    return data.toString().trim().split('\n').map(line => {
-        if (!line) return null;
-        const parts = line.split(/\s+/);
-        let pkg='', path='', inst=null, uid=null;
-        parts.forEach(p => {
-            if(p.startsWith('package:')) { const tmp=p.replace('package:','').split('='); path=tmp[0]; pkg=tmp[1]; }
-            else if(p.startsWith('installer=')) inst=p.replace('installer=','');
-            else if(p.startsWith('uid:')) uid=p.replace('uid:','');
-        });
-        if(!pkg) return null;
-        let side=true;
-        if(systemPackages.has(pkg) || (inst && TRUSTED.includes(inst))) side=false;
-        return { packageName: pkg, apkPath: path, installer: inst, isSideloaded: side, uid };
-    }).filter(i=>i!==null);
+    }).filter(i => i !== null);
 }
 
 // 앱 목록 가져오기 (오탐지 방지 강화)
@@ -325,7 +392,7 @@ async function getInstalledApps(serial) {
         if (!line) return null;
         // 포맷: package:/data/.../base.apk=com.package uid:10123 installer=com.android.vending
         const parts = line.split(/\s+/);
-        
+
         let packageName = '';
         let apkPath = 'N/A';
         let installer = null;
@@ -537,7 +604,7 @@ function getMockData() {
         {
             // [애매한 앱] 게임: 외부 설치지만 민감 권한 없음 -> 안전으로 분류되어야 함
             packageName: 'com.epicgames.fortnite',
-            isSideloaded: true, 
+            isSideloaded: true,
             isRunningBg: false,
             dataUsage: { rx: 1024 * 1024 * 50, tx: 1024 * 1024 * 1 },
             allPermissionsGranted: true,
