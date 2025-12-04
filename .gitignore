@@ -1,6 +1,7 @@
 #adb tools
 platform-tools/
-
+#ios tools
+ios-tools/
 # Logs
 logs
 *.log

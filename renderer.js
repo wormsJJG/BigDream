@@ -175,32 +175,151 @@ document.addEventListener('DOMContentLoaded', () => {
             stopDevicePolling();
             return;
         }
-        try {
-            const result = await window.electronAPI.checkDeviceConnection();
-            const icon = document.getElementById('connection-status-icon');
-            const title = document.getElementById('connection-status-title');
-            const desc = document.getElementById('connection-status-desc');
 
-            if (result.status === 'connected') {
-                icon.textContent = '✅';
-                title.textContent = '기기 연결됨';
-                title.style.color = '#5CB85C';
-                desc.innerHTML = `모델: <strong>${result.model}</strong>`;
-                startScanContainer.style.display = 'block';
-            } else if (result.status === 'unauthorized') {
-                icon.textContent = '🔒';
-                title.textContent = '승인 대기 중';
-                title.style.color = '#F0AD4E';
-                desc.innerHTML = '휴대폰에서 <strong>USB 디버깅 허용</strong>을 눌러주세요.';
-                startScanContainer.style.display = 'none';
-            } else {
-                icon.textContent = '🔌';
-                title.textContent = '기기 연결 필요';
-                title.style.color = '#333';
-                startScanContainer.style.display = 'none';
+        const icon = document.getElementById('connection-status-icon');
+        const title = document.getElementById('connection-status-title');
+        const desc = document.getElementById('connection-status-desc');
+
+        // 1. 안드로이드 확인
+        try {
+            const android = await window.electronAPI.checkDeviceConnection();
+            
+            if (android.status === 'connected') {
+                setConnectedUI('android', android.model);
+                
+                // 안드로이드 검사 버튼 연결
+                realStartScanBtn.onclick = async () => {
+                    stopDevicePolling();
+                    showScreen(loggedInView, 'scan-progress-screen');
+                    await startScan(); // 기존 안드로이드 검사 함수
+                };
+                return; // 안드로이드 잡혔으면 종료
+            } 
+            else if (android.status === 'unauthorized') {
+                // ... (기존 안드로이드 승인 대기 UI) ...
+                return;
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {}
+
+        // 2. iOS 확인 (안드로이드가 없을 때만 실행)
+        try {
+            const ios = await window.electronAPI.checkIosConnection();
+            
+            if (ios.status === 'connected') {
+                setConnectedUI('ios', ios.model);
+                
+                // iOS 검사 버튼 연결
+                realStartScanBtn.onclick = async () => {
+                    stopDevicePolling();
+                    showScreen(loggedInView, 'scan-progress-screen');
+                    
+                    // 진행바 텍스트 변경 (iOS는 오래 걸리므로 안내)
+                    const statusText = document.getElementById('scan-status-text');
+                    statusText.textContent = "아이폰 백업 및 정밀 분석 중... (시간이 소요됩니다)";
+                    
+                    // iOS 스캔 실행
+                    try {
+                        const data = await window.electronAPI.runIosScan(ios.udid);
+                        if (data.error) throw new Error(data.error);
+                        
+                        // iOS 결과 렌더링 (별도 함수 필요하거나 기존 renderResults 개조)
+                        // 여기서는 편의상 기존 구조에 맞춰 데이터 변환 후 렌더링
+                        renderResults(transformIosData(data));
+                        showScreen(loggedInView, 'scan-results-screen');
+                    } catch (err) {
+                        statusText.textContent = "오류: " + err.message;
+                        document.getElementById('progress-bar').style.backgroundColor = '#d9534f';
+                    }
+                };
+                return;
+            }
+        } catch (e) {}
+
+        // 3. 둘 다 없음
+        icon.textContent = '🔌';
+        title.textContent = '기기를 연결해주세요';
+        desc.innerHTML = "Android 또는 iOS 기기를 USB로 연결하세요.";
+        title.style.color = '#333';
+        startScanContainer.style.display = 'none';
     }
+
+    // [Helper] 연결 UI 설정 함수
+    function setConnectedUI(type, modelName) {
+        const icon = document.getElementById('connection-status-icon');
+        const title = document.getElementById('connection-status-title');
+        const desc = document.getElementById('connection-status-desc');
+        
+        icon.textContent = type === 'android' ? '✅' : '🍎';
+        title.textContent = `${type === 'android' ? 'Android' : 'iPhone'} 연결됨`;
+        title.style.color = '#5CB85C';
+        desc.innerHTML = `모델: <strong>${modelName}</strong><br>검사를 시작할 수 있습니다.`;
+        document.getElementById('start-scan-container').style.display = 'block';
+    }
+
+    // [Helper] iOS MVT 데이터를 안드로이드 화면 포맷에 맞게 변환
+    function transformIosData(iosData) {
+        // MVT 결과를 기존 renderResults가 알아먹을 수 있게 변환
+        const suspiciousApps = iosData.suspiciousItems.map(item => {
+            return {
+                packageName: item.module || item.source_file, // 패키지명 대신 모듈명
+                reason: `[MVT 탐지] ${item.message || item.process_name || 'Suspicious Artifact'}`,
+                isSideloaded: true // 빨간색 표시를 위해
+            };
+        });
+
+        // 앱 목록 변환
+        const allApps = (iosData.allApps || []).map(app => {
+            return {
+                packageName: app.bundle_id || 'Unknown',
+                isSideloaded: false,
+                isRunningBg: false
+            };
+        });
+
+        return {
+            deviceInfo: {
+                model: iosData.deviceInfo.model,
+                serial: 'iOS-Device',
+                isRooted: false, // 탈옥 여부는 별도 체크 필요
+                phoneNumber: '-'
+            },
+            allApps: allApps,
+            suspiciousApps: suspiciousApps,
+            apkFiles: [] // iOS는 APK 없음
+        };
+    }
+
+    // async function checkDevice() {
+    //     if (!deviceConnectionScreen.classList.contains('active')) {
+    //         stopDevicePolling();
+    //         return;
+    //     }
+    //     try {
+    //         const result = await window.electronAPI.checkDeviceConnection();
+    //         const icon = document.getElementById('connection-status-icon');
+    //         const title = document.getElementById('connection-status-title');
+    //         const desc = document.getElementById('connection-status-desc');
+
+    //         if (result.status === 'connected') {
+    //             icon.textContent = '✅';
+    //             title.textContent = '기기 연결됨';
+    //             title.style.color = '#5CB85C';
+    //             desc.innerHTML = `모델: <strong>${result.model}</strong>`;
+    //             startScanContainer.style.display = 'block';
+    //         } else if (result.status === 'unauthorized') {
+    //             icon.textContent = '🔒';
+    //             title.textContent = '승인 대기 중';
+    //             title.style.color = '#F0AD4E';
+    //             desc.innerHTML = '휴대폰에서 <strong>USB 디버깅 허용</strong>을 눌러주세요.';
+    //             startScanContainer.style.display = 'none';
+    //         } else {
+    //             icon.textContent = '🔌';
+    //             title.textContent = '기기 연결 필요';
+    //             title.style.color = '#333';
+    //             startScanContainer.style.display = 'none';
+    //         }
+    //     } catch (e) { console.error(e); }
+    // }
 
     if (realStartScanBtn) {
         realStartScanBtn.addEventListener('click', async () => {

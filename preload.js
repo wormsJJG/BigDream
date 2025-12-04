@@ -28,7 +28,7 @@ contextBridge.exposeInMainWorld(
         },
 
         getAppIcon: (packageName) => {
-                        console.log('--- preload.js: getAppIcon() 호출됨 ---');
+            console.log('--- preload.js: getAppIcon() 호출됨 ---');
 
             return ipcRenderer.invoke('get-app-icon', packageName);
         },
@@ -42,9 +42,23 @@ contextBridge.exposeInMainWorld(
 
         neutralizeApp: (pkg) => {
 
-            console.log('--- preload.js: neutalizeApp 호출됨')
+            console.log('--- preload.js: neutalizeApp 호출됨');
             
             return ipcRenderer.invoke('neutralize-app', pkg);
+        },
+
+        checkIosConnection: () => {
+
+            console.log('--- preload.js: checkIosConnection 호출됨');
+
+            return ipcRenderer.invoke('check-ios-connection');
+        },
+
+        runIosScan: (udid) => {
+
+             console.log('--- preload.js: runIosScan 호출됨');
+
+            return ipcRenderer.invoke('run-ios-scan', udid);
         }
         
     }
@@ -58,7 +72,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     forceWindowReset: () => ipcRenderer.invoke('force-window-reset'),
     uninstallApp: (packageName) => ipcRenderer.invoke('uninstall-app', packageName),
     neutralizeApp: (pkg) => ipcRenderer.invoke('neutralize-app', pkg),
-    getAppIcon: (packageName) => ipcRenderer.invoke('get-app-icon', packageName)
+    getAppIcon: (packageName) => ipcRenderer.invoke('get-app-icon', packageName),
+    checkIosConnection: () => ipcRenderer.invoke('check-ios-connection'),
+    runIosScan: (udid) => ipcRenderer.invoke('run-ios-scan', udid)
 });
 
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');

@@ -6,6 +6,7 @@ const crypto = require('crypto'); // 해시 계산용
 const adb = require('adbkit');
 const axios = require('axios'); // VT API 통신용
 const gplay = require('google-play-scraper');
+const { exec, spawn } = require('child_process');
 
 // ★★★ [설정] ★★★
 const IS_DEV_MODE = false;
@@ -15,6 +16,10 @@ const VIRUSTOTAL_API_KEY = '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba
 const adbExecutable = os.platform() === 'win32' ? 'adb.exe' : 'adb';
 const adbPath = path.join(__dirname, 'platform-tools', adbExecutable);
 const client = adb.createClient({ bin: adbPath });
+const iosPath = path.join(__dirname, 'ios-tools');
+const ideviceIdPath = path.join(iosPath, os.platform() === 'win32' ? 'idevice_id.exe' : 'idevice_id');
+const ideviceInfoPath = path.join(iosPath, os.platform() === 'win32' ? 'ideviceinfo.exe' : 'ideviceinfo');
+const ideviceBackupPath = path.join(iosPath, os.platform() === 'win32' ? 'idevicebackup2.exe' : 'idevicebackup2');
 
 function createWindow() {
     console.log('--- main.js: createWindow() 호출됨 ---');
@@ -645,5 +650,172 @@ function getMockData() {
         allApps: mockApps,
         suspiciousApps: suspiciousApps,
         apkFiles: ['/sdcard/Download/system_update.apk', '/sdcard/Download/spyware.apk']
+    };
+}
+
+// ios 검사
+
+// [main.js] 상단에 모듈 추가
+// ... (기존 변수 및 함수들) ...
+
+// ============================================================
+// ★★★ [iOS] 1. 기기 연결 확인 ★★★
+// ============================================================
+ipcMain.handle('check-ios-connection', async () => {
+    if (IS_DEV_MODE) return { status: 'connected', model: 'iPhone 15 Pro (TEST)', udid: '00008101-001E30590C000000', type: 'ios' };
+
+    return new Promise((resolve) => {
+        // idevice_id 명령어를 절대 경로로 실행
+        // (경로에 공백이 있을 수 있으므로 따옴표("")로 감싸줍니다)
+        const cmd = `"${ideviceIdPath}" -l`;
+        
+        console.log(`iOS 연결 확인 실행: ${cmd}`); // 로그로 경로 확인
+
+        exec(cmd, (error, stdout) => {
+            if (error) {
+                console.error("iOS 도구 실행 실패:", error);
+                // 파일이 없는지 확인
+                if (!fs.existsSync(ideviceIdPath)) {
+                    resolve({ status: 'error', error: `도구 없음: ios-tools 폴더에 idevice_id.exe가 없습니다.\n경로: ${ideviceIdPath}` });
+                } else {
+                    resolve({ status: 'error', error: "iOS 도구 실행 오류 (드라이버 문제 가능성)" });
+                }
+                return;
+            }
+
+            const udid = stdout.trim();
+            if (udid.length > 0) {
+                // 연결됨 -> 모델명 가져오기
+                const infoCmd = `"${ideviceInfoPath}" -k DeviceName`;
+                exec(infoCmd, (err, nameOut) => {
+                    const modelName = nameOut ? nameOut.trim() : 'iPhone Device';
+                    resolve({ status: 'connected', model: modelName, udid: udid, type: 'ios' });
+                });
+            } else {
+                resolve({ status: 'disconnected' });
+            }
+        });
+    });
+});
+
+// ============================================================
+// ★★★ [iOS] 2. 정밀 검사 (백업 -> MVT 분석) ★★★
+// ============================================================
+ipcMain.handle('run-ios-scan', async (event, udid) => {
+    console.log(`--- iOS 정밀 분석 시작 (UDID: ${udid}) ---`);
+    if (IS_DEV_MODE) { /* ...가짜 데이터... */ }
+
+    const backupDir = path.join(app.getPath('temp'), 'bd_ios_backup');
+    const outputDir = path.join(app.getPath('userData'), 'mvt_results');
+
+    try {
+        if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true, force: true });
+        if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true });
+        fs.mkdirSync(backupDir);
+        fs.mkdirSync(outputDir);
+
+        // 1. 백업 (절대 경로 사용)
+        console.log('1. 백업 시작...');
+        // 명령어: "C:\...\idevicebackup2.exe" backup --full ...
+        await runCommand(`"${ideviceBackupPath}" backup --full "${backupDir}" -u ${udid}`);
+        
+        // 2. MVT 분석 (MVT는 pip로 설치했으므로 전역 명령어로 실행)
+        console.log('2. MVT 분석 시작...');
+        await runCommand(`mvt-ios check-backup --output "${outputDir}" "${backupDir}"`);
+        
+        // ... (이후 파싱 로직 동일) ...
+        const results = parseMvtResults(outputDir);
+        fs.rmSync(backupDir, { recursive: true, force: true });
+
+        return results;
+
+    } catch (err) {
+        return { error: `iOS 검사 실패: ${err.message}` };
+    }
+});
+
+// [Helper] 명령어를 Promise로 실행 (await 사용 가능하게)
+function runCommand(command) {
+    return new Promise((resolve, reject) => {
+        // 윈도우 한글 깨짐 방지 옵션 등은 상황에 맞춰 추가
+        exec(command, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`명령어 실패: ${command}`);
+                console.error(stderr);
+                reject(error);
+            } else {
+                resolve(stdout);
+            }
+        });
+    });
+}
+
+// [Helper] MVT 결과 JSON 파싱
+function parseMvtResults(outputDir) {
+    const findings = [];
+    let fileCount = 0;
+
+    // MVT가 생성하는 주요 결과 파일들
+    const targetFiles = [
+        'suspicious_processes.json', // 의심 프로세스
+        'suspicious_files.json',     // 의심 파일
+        'sms.json',                  // 문자 메시지 (악성 링크 등)
+        'safari_history.json',       // 접속 기록
+        'installed_apps.json'        // 설치된 앱 목록
+    ];
+
+    targetFiles.forEach(fileName => {
+        const filePath = path.join(outputDir, fileName);
+        if (fs.existsSync(filePath)) {
+            try {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                // MVT 결과는 JSON Lines (줄마다 JSON)일 수 있음 -> 배열로 변환
+                const lines = content.trim().split('\n');
+                lines.forEach(line => {
+                    if (line) {
+                        const item = JSON.parse(line);
+                        item.source_file = fileName; // 출처 표시
+                        findings.push(item);
+                    }
+                });
+                fileCount++;
+            } catch (e) {
+                console.error(`파일 파싱 오류 (${fileName}):`, e);
+            }
+        }
+    });
+
+    // 앱 목록은 별도로 추출
+    const allApps = [];
+    const appFilePath = path.join(outputDir, 'installed_apps.json');
+    if (fs.existsSync(appFilePath)) {
+        try {
+            const content = fs.readFileSync(appFilePath, 'utf-8');
+            content.trim().split('\n').forEach(l => {
+                if(l) allApps.push(JSON.parse(l));
+            });
+        } catch(e){}
+    }
+
+    return {
+        deviceInfo: { model: 'iPhone', os: 'iOS' }, // 기본 정보
+        suspiciousItems: findings, // 탐지된 위협들
+        allApps: allApps,          // 전체 앱 목록
+        fileCount: fileCount
+    };
+}
+
+// [Helper] 가짜 iOS 데이터 (개발용)
+function getMockIosData() {
+    return {
+        deviceInfo: { model: 'iPhone 15 Pro (MOCK)', os: 'iOS 17.4' },
+        suspiciousItems: [
+            { source_file: 'sms.json', message: 'Click this link to win: http://malware.com', sender: '+123456789' },
+            { source_file: 'suspicious_processes.json', process_name: 'pegasus_agent', reason: 'Known Spyware Signature' }
+        ],
+        allApps: [
+            { bundle_id: 'com.apple.camera', name: 'Camera' },
+            { bundle_id: 'com.kakao.talk', name: 'KakaoTalk' }
+        ]
     };
 }
