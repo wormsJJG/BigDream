@@ -189,8 +189,6 @@ ipcMain.handle('get-app-data', async (event, packageName) => {
             country: 'kr' 
         });
        
-        console.log(appData.icon)
-        console.log(appData.title)
         return { 
             icon: appData.icon, 
             title: appData.title 
@@ -201,7 +199,6 @@ ipcMain.handle('get-app-data', async (event, packageName) => {
         if (err.status !== 404) {
             console.warn(`[Icon Fetch Fail] ${packageName}:`, err.message);
         }
-        console.log("앱 검색 못함")
         return null; 
     }
 });
