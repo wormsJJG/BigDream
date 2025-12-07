@@ -59,8 +59,7 @@ contextBridge.exposeInMainWorld(
              console.log('--- preload.js: runIosScan 호출됨');
 
             return ipcRenderer.invoke('run-ios-scan', udid);
-        }
-        
+        }   
     }
 );
 

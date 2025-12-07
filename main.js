@@ -221,25 +221,45 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
     const { TEMP_BACKUP, MVT_RESULT, IOS_BACKUP } = CONFIG.PATHS;
 
     try {
-        // 폴더 초기화
-        Utils.cleanDirectory(TEMP_BACKUP);
+        // 1. 결과 폴더는 매번 초기화 (분석 결과는 새로 써야 하므로)
         Utils.cleanDirectory(MVT_RESULT);
-        fs.mkdirSync(TEMP_BACKUP);
-        fs.mkdirSync(MVT_RESULT);
+        if (!fs.existsSync(MVT_RESULT)) fs.mkdirSync(MVT_RESULT);
 
-        // 1. 백업 실행
-        console.log('1. iOS 백업 시작...');
-        await Utils.runCommand(`"${IOS_BACKUP}" backup --full "${TEMP_BACKUP}" -u ${udid}`);
+        // 2. 백업 폴더 확인 로직
+        // idevicebackup2는 TEMP_BACKUP 폴더 안에 'udid' 이름으로 폴더를 만듭니다.
+        const specificBackupPath = path.join(TEMP_BACKUP, udid);
+        const isBackupExists = fs.existsSync(path.join(specificBackupPath, 'Info.plist'));
+
+        if (!fs.existsSync(TEMP_BACKUP)) {
+            fs.mkdirSync(TEMP_BACKUP);
+        }
+
+        if (isBackupExists) {
+            // [A] 백업이 이미 있는 경우 -> 백업 생략
+            console.log(`[iOS] 기존 백업 발견됨 (${udid}). 백업 과정을 건너뛰고 분석을 시작합니다.`);
+            // (선택사항) 여기서 사용자에게 "기존 백업으로 분석합니다"라고 알림을 보낼 수도 있습니다.
+        } else {
+            // [B] 백업이 없는 경우 -> 백업 실행
+            console.log('[iOS] 기존 백업 없음. 새 백업을 시작합니다...');
+            // 기존 폴더가 애매하게 남아있을 수 있으니 해당 UDID 폴더만 정리
+            Utils.cleanDirectory(specificBackupPath); 
+            
+            // 백업 명령어 실행
+            await Utils.runCommand(`"${IOS_BACKUP}" backup --full "${TEMP_BACKUP}" -u ${udid}`);
+            console.log('[iOS] 백업 완료.');
+        }
         
-        // 2. MVT 분석 실행
-        console.log('2. MVT 분석 시작...');
+        // 3. MVT 분석 실행 (경로는 TEMP_BACKUP 폴더 전체를 지정하면 MVT가 알아서 찾거나, 명시적으로 지정)
+        console.log('3. MVT 분석 시작...');
+        // mvt-ios check-backup은 백업 루트 폴더를 지정하면 됨
         await Utils.runCommand(`mvt-ios check-backup --output "${MVT_RESULT}" "${TEMP_BACKUP}"`);
         
-        // 3. 결과 파싱
+        // 4. 결과 파싱
         const results = IosService.parseMvtResults(MVT_RESULT);
 
-        // 4. 청소
-        setTimeout(() => Utils.cleanDirectory(TEMP_BACKUP), 1000); // 1초 뒤 삭제 시도
+        // ★ 중요: 검사가 끝나도 백업 파일을 지우지 않음 (다음에 재활용하기 위해)
+        // setTimeout(() => Utils.cleanDirectory(TEMP_BACKUP), 1000); 
+        console.log('[iOS] 분석 완료. (백업 파일 보존됨)');
 
         return results;
     } catch (err) {
@@ -300,9 +320,9 @@ const AndroidService = {
         }
     },
 
-    // 앱 무력화 (권한 박탈 + 강제 종료)
+    // 앱 무력화 (권한 박탈 + 강제 종료) 
     async neutralizeApp(packageName) {
-        try {
+        try { 
             const devices = await client.listDevices();
             if (devices.length === 0) throw new Error('기기 연결 끊김');
             const serial = devices[0].id;
@@ -329,8 +349,8 @@ const AndroidService = {
             // 강제 종료
             await client.shell(serial, `am force-stop ${packageName}`);
             return { success: true, count: revokedCount };
-        } catch (err) {
-            return { success: false, error: err.message };
+        } catch (err) { 
+            return { success: false, error: err.message }; 
         }
     },
 
@@ -391,7 +411,7 @@ const AndroidService = {
         } catch (e) { return false; }
     },
 
-    // 권한 상세 분석
+    // 권한 상세 분석 
     async getAppPermissions(serial, packageName) {
         try {
             const output = await client.shell(serial, `dumpsys package ${packageName}`);
