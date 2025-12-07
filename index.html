@@ -15,7 +15,7 @@
     <div id="logged-out-view" class="app-view active">
         <nav class="sidebar">
             <div class="logo-area">
-                <span class="app-title">BD SCANNER</span>
+                <span class="app-title" id="admin-title-trigger">BD SCANNER</span>
             </div>
             <ul class="nav-menu">
                 <li id="nav-login" class="nav-item active" data-screen="login-screen">
@@ -137,7 +137,7 @@
                         <div id="progress-bar" style="width: 0%;"></div>
                     </div>
                     <div class="warning-box">
-                        <img src="./assets/icon-warning.svg" alt="Warning">
+                        <img src="./assets/icon-warning.png" alt="Warning">
                         <span><strong>경고:</strong> 검사가 완료될 때까지 USB 케이블을 절대 분리하지 마십시오.</span>
                     </div>
                 </div>
@@ -389,5 +389,23 @@
     </div>
 
 </div>
+
+<div id="admin-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color:#333;">⚡ 관리자 설정</h3>
+            <p style="font-size:14px; color:#666; margin-bottom:15px;">
+                안드로이드 검사 소요 시간(분)을 입력하세요.<br>
+                <span style="font-size:12px;">(범위: 10~60, 해제: 0)</span>
+            </p>
+            <input type="number" id="admin-input" placeholder="0" style="width:100%; padding:10px; margin-bottom:20px; box-sizing:border-box; border:1px solid #ddd; border-radius:4px;">
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button id="admin-cancel-btn" class="secondary-button">취소</button>
+                <button id="admin-save-btn" class="primary-button">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
 
 </html>

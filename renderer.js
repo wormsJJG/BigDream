@@ -13,7 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
         connectionCheckInterval: null,
         currentDeviceMode: null, // 'android' or 'ios'
         currentUdid: null,       // iOS UDID
-        lastScanData: null       // 인쇄용 데이터 백업
+        lastScanData: null,       // 인쇄용 데이터 백업
+        androidTargetMinutes: 0 // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
     };
 
     // =========================================================
@@ -697,7 +698,109 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================
-    // [10] 유틸리티 (UTILS)
+    // [10] 검사 시간 임의 설정
+    // =========================================================
+
+    const adminTriggers = document.querySelectorAll('.app-title');
+    const adminModal = document.getElementById('admin-modal');
+    const adminContent = document.querySelector('.modal-content'); // ★ 내용물 박스 선택
+    const adminInput = document.getElementById('admin-input');
+    const adminSaveBtn = document.getElementById('admin-save-btn');
+    const adminCancelBtn = document.getElementById('admin-cancel-btn');
+
+    // 모달 닫기 함수
+    const closeAdminModal = () => {
+        if (adminModal) adminModal.classList.add('hidden');
+    };
+
+    // 저장 로직 (함수로 분리)
+    const handleAdminSave = () => {
+        const val = adminInput.value;
+        if (!val && val !== '0') { // 0 입력 가능하게 수정
+            alert("값을 입력하세요.");
+            return;
+        }
+
+        const min = parseInt(val, 10);
+
+        if (min === 0) {
+            State.androidTargetMinutes = 0;
+            alert("설정 해제: 즉시 완료 모드");
+            closeAdminModal();
+        } else if (min < 10 || min > 60) {
+            alert("시간은 10분 ~ 60분 사이로 설정해주세요.");
+        } else {
+            State.androidTargetMinutes = min;
+            alert(`✅ 설정됨: 안드로이드 검사 시간 [${min}분]`);
+            closeAdminModal();
+        }
+    };
+
+    if (adminTriggers.length > 0 && adminModal) {
+        console.log(`✅ 히든 메뉴 시스템 활성화됨`);
+
+        // 1. 더블 클릭 이벤트 (모달 열기만 담당)
+        adminTriggers.forEach(trigger => {
+            trigger.style.userSelect = 'none';
+            trigger.style.cursor = 'default';
+
+            trigger.addEventListener('dblclick', () => {
+                // 로그인 및 상태 체크
+                const loggedInView = document.getElementById('logged-in-view');
+                if (!loggedInView.classList.contains('active')) return;
+
+                const progressScreen = document.getElementById('scan-progress-screen');
+                if (progressScreen && progressScreen.classList.contains('active')) {
+                    alert("🚫 검사가 진행 중일 때는 설정을 변경할 수 없습니다.");
+                    return;
+                }
+                
+                const resultScreen = document.getElementById('scan-results-screen');
+                if (resultScreen && resultScreen.classList.contains('active')) {
+                    alert("🚫 결과 화면에서는 변경 불가합니다.");
+                    return;
+                }
+
+                // 모달 열기
+                const currentSetting = State.androidTargetMinutes || 0;
+                adminInput.value = currentSetting;
+                adminModal.classList.remove('hidden');
+                adminInput.focus();
+            });
+        });
+
+        // ★★★ 중요 수정 1: 버튼 이벤트는 반복문 밖에서 '딱 한 번만' 등록 ★★★
+        // 기존 리스너 제거 (혹시 모를 중복 방지용 Clone)
+        const newSaveBtn = adminSaveBtn.cloneNode(true);
+        adminSaveBtn.parentNode.replaceChild(newSaveBtn, adminSaveBtn);
+        
+        newSaveBtn.addEventListener('click', handleAdminSave);
+
+        // 취소 버튼
+        const newCancelBtn = adminCancelBtn.cloneNode(true);
+        adminCancelBtn.parentNode.replaceChild(newCancelBtn, adminCancelBtn);
+        newCancelBtn.addEventListener('click', closeAdminModal);
+
+
+        // ★★★ 중요 수정 2: 드래그 시 닫힘 방지 (이벤트 전파 중단) ★★★
+        // 하얀색 내용 박스(adminContent)를 클릭하거나 드래그해도 배경으로 신호가 안 가게 막음
+        if (adminContent) {
+            adminContent.addEventListener('click', (e) => {
+                e.stopPropagation(); // 배경으로 클릭 신호가 새어나가지 않게 막음
+            });
+        }
+
+        // 4. 모달 배경 클릭 시 닫기
+        adminModal.addEventListener('click', (e) => {
+            // 진짜 배경을 눌렀을 때만 닫힘 (위에서 stopPropagation 했으므로 안전함)
+            if (e.target === adminModal) closeAdminModal();
+        });
+
+    } else {
+        console.warn('❌ 히든 메뉴 트리거 또는 모달 요소를 찾을 수 없습니다.');
+    }
+    // =========================================================
+    // [11] 유틸리티 (UTILS)
     // =========================================================
     const Utils = {
         formatAppName(packageName) {
