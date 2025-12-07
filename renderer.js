@@ -1,10 +1,16 @@
 // renderer.js
 // BD (Big Dream) Security Solution - Renderer Process
+import { auth, db } from './firebaseConfig.js';
+import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
 console.log('--- renderer.js: 파일 로드됨 ---');
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('--- renderer.js: DOM 로드 완료 ---');
 
+    const ID_DOMAIN = "@bd.com";
     // =========================================================
     // [1] 상태 관리 (STATE MANAGEMENT)
     // =========================================================
@@ -64,23 +70,118 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // =========================================================
-    // [3] 인증 및 네비게이션 (AUTH & NAVIGATION)
+    // [3] 인증 및 설정 불러오기 (AUTH & SETTINGS)
     // =========================================================
 
+    //사용자 권한 확인 함수
+    async function checkUserRole(uid) {
+        try {
+            const userDocRef = doc(db, "users", uid);
+            const userSnap = await getDoc(userDocRef);
+
+            if (userSnap.exists()) {
+                const userData = userSnap.data();
+
+                if (userData.isLocked) {
+                    throw new Error("LOCKED_ACCOUNT"); // 에러 발생시킴
+                }
+
+                return userData.role || 'user'; // role이 없으면 기본 'user'
+            } else {
+                // 문서가 없으면(최초 로그인 등) 기본 user로 생성 (선택사항)
+                // 보안을 위해 여기서는 그냥 'user' 리턴
+                return 'user';
+            }
+        } catch (e) {
+            console.error("권한 확인 실패:", e);
+            return 'user'; // 에러 나면 안전하게 일반 유저로
+        }
+    }
+
+    //  Firestore에서 시간 설정 가져오기 함수
+    async function fetchScanSettings() {
+        try {
+            console.log("📥 서버에서 설정값 불러오는 중...");
+            const docRef = doc(db, "settings", "config"); // settings 컬렉션의 config 문서
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                // DB 필드명: android_scan_duration
+                State.androidTargetMinutes = data.android_scan_duration || 0;
+                console.log(`✅ 설정 로드 완료: ${State.androidTargetMinutes}분`);
+            } else {
+                console.log("⚠️ 설정 문서가 존재하지 않음 (기본값 0분 사용)");
+                State.androidTargetMinutes = 0;
+            }
+        } catch (error) {
+            console.error("❌ 설정 불러오기 실패:", error);
+            // 실패해도 앱은 작동해야 하므로 기본값 유지
+        }
+    }
     // 로그인 처리
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('username').value;
+            const inputId = document.getElementById('username').value.trim();
+            const email = inputId + ID_DOMAIN;
             const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('login-error');
 
-            if (username === 'admin' && password === '1234') {
-                ViewManager.showView('logged-in-view');
-                ViewManager.showScreen(loggedInView, 'create-scan-screen');
+            errorMsg.textContent = "로그인 중...";
+
+            try {
+                // 1. Firebase 로그인
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // 2. 권한 확인 (DB 조회)
+                const role = await checkUserRole(user.uid);
+                console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
+
+                // 3. 설정값 불러오기
+                await fetchScanSettings();
+
+                // 4. 화면 전환 분기 처리
+                State.isLoggedIn = true;
+                State.userRole = role; // 상태에 저장
+
+                if (role === 'admin') {
+                    // ★ 관리자라면 관리자 전용 화면으로 (또는 일반화면에 관리자 기능 추가)
+                    ViewManager.showView('logged-in-view');
+                    ViewManager.showScreen(loggedInView, 'create-scan-screen'); // 일단 메인으로 가되
+                    
+                    // [관리자 전용 UI 활성화 예시]
+                    document.body.classList.add('is-admin'); // CSS로 관리자 버튼 보이게 처리 가능
+                    alert(`관리자 계정(${email})으로 접속했습니다.`);
+                    
+                    setTimeout(() => {
+                        console.log("⏳ 관리자 메뉴 생성 시도...");
+                        AdminManager.init();
+                    }, 500);
+                } else {
+                    // ★ 일반 사용자
+                    ViewManager.showView('logged-in-view');
+                    ViewManager.showScreen(loggedInView, 'create-scan-screen');
+                    document.body.classList.remove('is-admin');
+                }
+                
                 document.getElementById('nav-create').classList.add('active');
-            } else {
-                document.getElementById('login-error').textContent = '아이디 또는 비밀번호 불일치';
+                errorMsg.textContent = "";
+
+            } catch (error) {
+                console.error(error);
+                if (error.message === "LOCKED_ACCOUNT") {
+                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다.";
+                    await signOut(auth); // 강제 로그아웃
+                    return;
+                }
+                if (error.code === 'auth/invalid-credential') {
+                    errorMsg.textContent = "이메일 또는 비밀번호가 잘못되었습니다.";
+                } else {
+                    errorMsg.textContent = "로그인 오류: " + error.code;
+                }
             }
         });
     }
@@ -88,12 +189,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // 로그아웃 처리
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
+        logoutBtn.addEventListener('click', async () => {
             if (confirm('로그아웃 하시겠습니까?')) {
-                DeviceManager.stopPolling();
-                ViewManager.showView('logged-out-view');
-                ViewManager.showScreen(loggedOutView, 'login-screen');
-                window.location.reload();
+                try {
+                    await signOut(auth);
+                    DeviceManager.stopPolling();
+                    State.isLoggedIn = false;
+                    State.androidTargetMinutes = 0; // 설정값 초기화
+                    
+                    ViewManager.showView('logged-out-view');
+                    ViewManager.showScreen(loggedOutView, 'login-screen');
+                    window.location.reload();
+                } catch (error) {
+                    alert("로그아웃 실패: " + error.message);
+                }
             }
         });
     }
@@ -714,66 +823,82 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // 저장 로직 (함수로 분리)
-    const handleAdminSave = () => {
+    const handleAdminSave = async () => {
         const val = adminInput.value;
-        if (!val && val !== '0') { // 0 입력 가능하게 수정
+        if (!val && val !== '0') {
             alert("값을 입력하세요.");
             return;
         }
 
         const min = parseInt(val, 10);
+        let message = "";
 
+        // 유효성 검사
         if (min === 0) {
-            State.androidTargetMinutes = 0;
-            alert("설정 해제: 즉시 완료 모드");
-            closeAdminModal();
+            message = "설정 해제: 즉시 완료 모드";
         } else if (min < 10 || min > 60) {
             alert("시간은 10분 ~ 60분 사이로 설정해주세요.");
+            return;
         } else {
-            State.androidTargetMinutes = min;
-            alert(`✅ 설정됨: 안드로이드 검사 시간 [${min}분]`);
+            message = `✅ 설정됨: 안드로이드 검사 시간 [${min}분]`;
+        }
+
+        // 1. UI 반영 (즉시)
+        State.androidTargetMinutes = min;
+        
+        // 2. Firestore 저장 (비동기)
+        adminSaveBtn.textContent = "저장 중...";
+        adminSaveBtn.disabled = true;
+
+        try {
+            const docRef = doc(db, "settings", "config");
+            await updateDoc(docRef, {
+                android_scan_duration: min
+            });
+            alert(`${message}\n(서버에도 저장되었습니다)`);
             closeAdminModal();
+        } catch (error) {
+            console.error("저장 실패:", error);
+            alert(`⚠️ 로컬에는 적용되었으나 서버 저장에 실패했습니다.\n오류: ${error.message}`);
+            closeAdminModal();
+        } finally {
+            adminSaveBtn.textContent = "저장";
+            adminSaveBtn.disabled = false;
         }
     };
 
     if (adminTriggers.length > 0 && adminModal) {
         console.log(`✅ 히든 메뉴 시스템 활성화됨`);
 
-        // 1. 더블 클릭 이벤트 (모달 열기만 담당)
+        // 더블클릭 트리거
         adminTriggers.forEach(trigger => {
             trigger.style.userSelect = 'none';
             trigger.style.cursor = 'default';
 
             trigger.addEventListener('dblclick', () => {
-                // 로그인 및 상태 체크
+                // 로그인 & 상태 체크 (기존과 동일)
                 const loggedInView = document.getElementById('logged-in-view');
                 if (!loggedInView.classList.contains('active')) return;
-
+                
                 const progressScreen = document.getElementById('scan-progress-screen');
                 if (progressScreen && progressScreen.classList.contains('active')) {
-                    alert("🚫 검사가 진행 중일 때는 설정을 변경할 수 없습니다.");
-                    return;
+                    alert("🚫 검사 중에는 변경 불가"); return;
                 }
-                
                 const resultScreen = document.getElementById('scan-results-screen');
                 if (resultScreen && resultScreen.classList.contains('active')) {
-                    alert("🚫 결과 화면에서는 변경 불가합니다.");
-                    return;
+                    alert("🚫 결과 화면에서는 변경 불가"); return;
                 }
 
-                // 모달 열기
-                const currentSetting = State.androidTargetMinutes || 0;
-                adminInput.value = currentSetting;
+                // 현재 값 채우기
+                adminInput.value = State.androidTargetMinutes || 0;
                 adminModal.classList.remove('hidden');
                 adminInput.focus();
             });
         });
 
-        // ★★★ 중요 수정 1: 버튼 이벤트는 반복문 밖에서 '딱 한 번만' 등록 ★★★
-        // 기존 리스너 제거 (혹시 모를 중복 방지용 Clone)
+        // 저장 버튼 이벤트 교체
         const newSaveBtn = adminSaveBtn.cloneNode(true);
         adminSaveBtn.parentNode.replaceChild(newSaveBtn, adminSaveBtn);
-        
         newSaveBtn.addEventListener('click', handleAdminSave);
 
         // 취소 버튼
@@ -781,23 +906,17 @@ document.addEventListener('DOMContentLoaded', () => {
         adminCancelBtn.parentNode.replaceChild(newCancelBtn, adminCancelBtn);
         newCancelBtn.addEventListener('click', closeAdminModal);
 
-
-        // ★★★ 중요 수정 2: 드래그 시 닫힘 방지 (이벤트 전파 중단) ★★★
-        // 하얀색 내용 박스(adminContent)를 클릭하거나 드래그해도 배경으로 신호가 안 가게 막음
+        // 드래그 닫힘 방지
         if (adminContent) {
-            adminContent.addEventListener('click', (e) => {
-                e.stopPropagation(); // 배경으로 클릭 신호가 새어나가지 않게 막음
-            });
+            adminContent.addEventListener('click', (e) => e.stopPropagation());
         }
-
-        // 4. 모달 배경 클릭 시 닫기
+        // 배경 클릭 닫기
         adminModal.addEventListener('click', (e) => {
-            // 진짜 배경을 눌렀을 때만 닫힘 (위에서 stopPropagation 했으므로 안전함)
             if (e.target === adminModal) closeAdminModal();
         });
 
     } else {
-        console.warn('❌ 히든 메뉴 트리거 또는 모달 요소를 찾을 수 없습니다.');
+        console.warn('❌ 히든 메뉴 요소 찾기 실패');
     }
     // =========================================================
     // [11] 유틸리티 (UTILS)
@@ -847,6 +966,220 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             const shortName = permString.split('.').pop();
             return MAP[shortName] || shortName;
+        }
+    };
+    // =========================================================
+    // [12] 관리자 시스템 (ADMIN MANAGER) - 신규 추가
+    // =========================================================
+    const AdminManager = {
+        init() {
+            // ★★★ [수정됨] 로그인 후 화면(#logged-in-view) 안에 있는 메뉴만 찾습니다. ★★★
+            const loggedInContainer = document.getElementById('logged-in-view');
+            const navMenu = loggedInContainer.querySelector('.nav-menu');
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+            if (!navMenu) {
+                console.error("❌ 오류: 로그인 화면 내의 .nav-menu를 찾을 수 없습니다!");
+                return;
+            }
+
+            // 이미 버튼이 있는지 확인 (중복 생성 방지)
+            if (loggedInContainer.querySelector('#nav-admin')) {
+                console.log("⚠️ 이미 관리자 버튼이 존재합니다.");
+                return;
+            }
+
+            // 버튼 생성 로직
+            console.log("✨ 관리자 버튼 생성 중...");
+            const li = document.createElement('li');
+            li.className = 'nav-item';
+            li.id = 'nav-admin';
+            
+            // 스타일 강조
+            li.innerHTML = '🛡️ 관리자 페이지';
+            li.style.color = '#F0AD4E'; 
+            li.style.fontWeight = 'bold'; 
+
+            li.addEventListener('click', () => {
+                ViewManager.activateMenu('nav-admin');
+                ViewManager.showScreen(document.getElementById('logged-in-view'), 'admin-screen');
+                this.loadUsers();
+            });
+            
+            // 메뉴의 맨 앞에 추가 (검사생성 위)
+            navMenu.insertBefore(li, navMenu.firstChild); 
+            
+            console.log("✅ 관리자 버튼 추가 완료! (로그인 화면)");
+
+            // 이벤트 리스너들 (기존과 동일)
+            const refreshBtn = document.getElementById('refresh-users-btn');
+            if(refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
+            
+            const createForm = document.getElementById('admin-create-user-form');
+            if(createForm) createForm.addEventListener('submit', (e) => this.createUser(e));
+            
+            const closeBtn = document.getElementById('admin-result-close-btn');
+            if(closeBtn) closeBtn.addEventListener('click', () => {
+                document.getElementById('admin-result-modal').classList.add('hidden');
+            });
+        },
+
+        // 1. 업체 목록 불러오기 (도메인 떼고 보여주기)
+        async loadUsers() {
+            const tbody = document.getElementById('admin-user-list-body');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">데이터 불러오는 중...</td></tr>';
+
+            try {
+                const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                tbody.innerHTML = '';
+
+                querySnapshot.forEach((docSnap) => {
+                    const user = docSnap.data();
+                    
+                    // ★ 수정됨: 이메일에서 도메인(@bd.com) 제거하여 순수 아이디만 추출
+                    const rawEmail = user.email || "";
+                    const userId = rawEmail.replace(ID_DOMAIN, ""); 
+
+                    const row = document.createElement('tr');
+                    const statusBadge = user.isLocked 
+                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>` 
+                        : `<span class="admin-badge badge-active">✅ 활성</span>`;
+
+                    row.innerHTML = `
+                        <td><b>${userId}</b><br><span style="font-size:11px; color:#888;">(UID: ${docSnap.id.substring(0,6)}...)</span></td>
+                        <td>${statusBadge}</td>
+                        <td><b>${user.quota || 0}</b> 회</td>
+                        <td>${user.lastScanDate ? new Date(user.lastScanDate.toDate()).toLocaleDateString() : '-'}</td>
+                        <td>
+                            <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${user.quota || 0})">➕/➖</button>
+                            ${user.isLocked 
+                                ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">🔓 해제</button>` 
+                                : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">🔒 잠금</button>`
+                            }
+                            <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">📜 기록</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error("유저 로딩 실패:", error);
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 실패: ${error.message}</td></tr>`;
+            }
+        },
+
+        // 2. 신규 업체 등록 (아이디 + 도메인 결합)
+        async createUser(e) {
+            e.preventDefault();
+            
+            // ★ HTML ID 변경 주의: index.html에서 id="new-user-id"로 바꿨다면 여기도 맞춰야 함
+            // 만약 index.html을 안 바꿨으면 'new-user-email' 그대로 사용
+            const inputElement = document.getElementById('new-user-id') || document.getElementById('new-user-email');
+            const inputId = inputElement.value.trim();
+            const password = document.getElementById('new-user-pwd').value;
+            const quota = parseInt(document.getElementById('new-user-quota').value, 10);
+
+            // ★ 수정됨: 아이디 + 도메인 결합
+            const fullEmail = inputId + ID_DOMAIN;
+
+            if (!confirm(`[확인] 다음 계정을 생성합니까?\nID: ${inputId} (실제: ${fullEmail})\n기본 횟수: ${quota}`)) return;
+
+            const secondaryAppName = "secondaryApp-" + Date.now();
+            const config = auth.app.options; 
+            
+            try {
+                const secondaryApp = initializeApp(config, secondaryAppName);
+                const secondaryAuth = getAuth(secondaryApp);
+
+                // 생성은 fullEmail로 진행
+                const userCred = await createUserWithEmailAndPassword(secondaryAuth, fullEmail, password);
+                const newUser = userCred.user;
+
+                await setDoc(doc(db, "users", newUser.uid), {
+                    email: fullEmail, // DB에는 풀 이메일 저장 (관리 차원)
+                    userId: inputId,  // ★ 편의를 위해 순수 ID도 별도 저장
+                    role: 'user',
+                    isLocked: false,
+                    quota: quota,
+                    createdAt: new Date(),
+                    lastScanDate: null
+                });
+
+                alert(`✅ 업체 생성 완료!\n아이디: ${inputId}`);
+                
+                document.getElementById('admin-create-user-form').reset();
+                this.loadUsers();
+
+            } catch (error) {
+                console.error("계정 생성 실패:", error);
+                alert("계정 생성 실패: " + error.message);
+            }
+        }
+    };
+
+    // [전역 함수 노출] HTML onclick에서 호출하기 위해 window에 등록
+    window.toggleLock = async (uid, shouldLock) => {
+        if (!confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return;
+        try {
+            await updateDoc(doc(db, "users", uid), { isLocked: shouldLock });
+            AdminManager.loadUsers(); // 새로고침
+        } catch (e) { alert("처리 실패: " + e.message); }
+    };
+
+    window.changeQuota = async (uid, currentQuota) => {
+        const input = prompt(`현재 횟수: ${currentQuota}\n\n추가하거나 뺄 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
+        if (!input) return;
+        const change = parseInt(input, 10);
+        if (isNaN(change)) return alert("숫자만 입력하세요.");
+
+        try {
+            const newQuota = currentQuota + change;
+            if (newQuota < 0) return alert("횟수는 0보다 작을 수 없습니다.");
+            
+            await updateDoc(doc(db, "users", uid), { quota: newQuota });
+            alert(`✅ 변경 완료! (총 ${newQuota}회)`);
+            AdminManager.loadUsers();
+        } catch (e) { alert("변경 실패: " + e.message); }
+    };
+
+    window.viewHistory = async (uid) => {
+        const modal = document.getElementById('admin-result-modal');
+        const content = document.getElementById('admin-result-content');
+        modal.classList.remove('hidden');
+        content.innerHTML = "데이터 조회 중...";
+
+        try {
+            // users -> uid -> scanResults 서브컬렉션 조회
+            const historyRef = collection(db, "users", uid, "scanResults");
+            const q = query(historyRef, orderBy("date", "desc"));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                content.innerHTML = "<p>📭 제출된 검사 결과가 없습니다.</p>";
+                return;
+            }
+
+            let html = `<ul class="file-list" style="max-height:400px;">`;
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const date = data.date ? new Date(data.date.toDate()).toLocaleString() : '날짜 없음';
+                const threatCount = data.threatCount || 0;
+                const style = threatCount > 0 ? 'color:red; font-weight:bold;' : 'color:green;';
+                
+                html += `
+                    <li style="padding:10px; border-bottom:1px solid #eee;">
+                        <div>🕒 <b>${date}</b></div>
+                        <div style="${style}">결과: 위협 ${threatCount}건 발견</div>
+                        <div style="font-size:12px; color:#666;">모델: ${data.model} (Serial: ${data.serial})</div>
+                    </li>
+                `;
+            });
+            html += "</ul>";
+            content.innerHTML = html;
+
+        } catch (e) {
+            content.innerHTML = `<p style="color:red;">기록 조회 실패: ${e.message}</p>`;
         }
     };
 });
