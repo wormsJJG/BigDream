@@ -382,49 +382,69 @@ document.addEventListener('DOMContentLoaded', () => {
             const isSuspicious = app.reason ? true : false;
             div.className = `app-item ${isSuspicious ? 'suspicious' : ''}`;
 
-            const name = Utils.formatAppName(app.packageName);
+            // 초기 이름 설정 (캐시된 것 우선, 없으면 포맷팅된 이름)
+            const initialName = app.cachedTitle || Utils.formatAppName(app.packageName);
 
             div.innerHTML = `
-                <div class="app-icon-wrapper">
-                    <img src="" class="app-real-icon" id="icon-${app.packageName}" style="display:none;" alt="${name}">
-                    <span class="app-fallback-icon" id="fallback-${app.packageName}" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:24px;">📱</span>
-                </div>
-                <div class="app-display-name">${name}</div>
-                <div class="app-package-sub">${app.packageName}</div>
-            `;
+        <div class="app-icon-wrapper">
+            <img src="" class="app-real-icon" style="display:none;" alt="${initialName}">
+            <span class="app-fallback-icon" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:24px;">📱</span>
+        </div>
+        <div class="app-display-name">${initialName}</div>
+        <div class="app-package-sub">${app.packageName}</div>
+    `;
 
-            // 아이콘 비동기 요청 (사이드로딩 제외)
-            if (!app.isSideloaded) {
-
-                window.electronAPI.getAppIcon(app.packageName).then(iconUrl => {
-                if (iconUrl) {
-
-                    app.cachedIconUrl = iconUrl; // 캐시에 iconURL 저장
-
-                    const imgTag = div.querySelector('.app-real-icon');
-                    const spanTag = div.querySelector('.app-fallback-icon');
-
-                    if (imgTag && spanTag) {
-                        // [팁] onload를 src 할당보다 먼저 정의하는 것이 안전합니다.
-                        imgTag.onload = () => {
-                            imgTag.style.display = 'block';
-                            spanTag.style.display = 'none';
-                        };
-
-                        // 이미지 로딩 실패 시 처리 (엑박 방지)
-                        imgTag.onerror = () => {
-                            // 로딩 실패하면 그냥 원래대로 아이콘(📱) 유지
-                            imgTag.style.display = 'none';
-                            spanTag.style.display = 'flex';
-                        };
-
-                        imgTag.src = iconUrl;
-                    }
-                }
-            }).catch(() => { });
+            // 1. [캐시 확인] 이미 정보가 있는 경우
+            if (app.cachedIconUrl) {
+                const imgTag = div.querySelector('.app-real-icon');
+                const spanTag = div.querySelector('.app-fallback-icon');
+                imgTag.src = app.cachedIconUrl;
+                imgTag.style.display = 'block';
+                spanTag.style.display = 'none';
             }
 
-            div.addEventListener('click', () => AppDetailManager.show(app, name));
+            // 2. [API 요청] 정보가 부족하고 외부 앱이 아니면 요청
+            // (캐시된 아이콘이 없거나, 캐시된 타이틀이 없으면 시도해볼 가치가 있음)
+            if ((!app.cachedIconUrl || !app.cachedTitle)) {
+                window.electronAPI.getAppData(app.packageName).then(result => {
+                    if (!result) return; // 결과가 아예 없으면 종료
+                    // [A] 아이콘 처리 (독립적)
+                    if (result.icon) {
+                        app.cachedIconUrl = result.icon; // 캐싱
+                        const imgTag = div.querySelector('.app-real-icon');
+                        const spanTag = div.querySelector('.app-fallback-icon');
+
+                        if (imgTag && spanTag) {
+                            imgTag.src = result.icon;
+                            imgTag.onload = () => {
+                                imgTag.style.display = 'block';
+                                spanTag.style.display = 'none';
+                            };
+                            imgTag.onerror = () => {
+                                imgTag.style.display = 'none';
+                                spanTag.style.display = 'flex';
+                            };
+                        }
+                    }
+
+                    // [B] 타이틀 처리 (독립적)
+                    if (result.title) {
+                        app.cachedTitle = result.title; // 캐싱
+                        const nameTag = div.querySelector('.app-display-name');
+                        if (nameTag) {
+                            nameTag.textContent = result.title;
+                        }
+                    }
+                }).catch(() => { });
+            }
+
+            // 클릭 이벤트
+            div.addEventListener('click', () => {
+                // 클릭 시점의 최신 이름 사용
+                const currentName = div.querySelector('.app-display-name').textContent;
+                AppDetailManager.show(app, currentName);
+            });
+
             container.appendChild(div);
         },
 
@@ -433,12 +453,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (suspiciousApps && suspiciousApps.length > 0) {
                 let html = '<ul style="list-style:none; padding:0;">';
                 suspiciousApps.forEach(app => {
-                    const dName = Utils.formatAppName(app.packageName);
+                    // 여기도 캐시된 타이틀이 있으면 사용
+                    const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
                     const reason = app.reason || "알 수 없는 위협";
-                    let vtBadge = '';
-                    if (app.vtResult && app.vtResult.malicious > 0) {
-                        vtBadge = `<span style="background:#d9534f; color:white; padding:2px 5px; border-radius:4px; font-size:11px; margin-left:5px;">🦠 VT: ${app.vtResult.malicious}</span>`;
-                    }
+                    let vtBadge = app.vtResult && app.vtResult.malicious > 0 ? `<span style="background:#d9534f; color:white; padding:2px 5px; border-radius:4px; font-size:11px; margin-left:5px;">🦠 VT: ${app.vtResult.malicious}</span>` : '';
                     html += `
                         <li style="padding:15px; border-bottom:1px solid #eee; border-left: 4px solid #D9534F; background-color: #fff5f5; margin-bottom: 10px; border-radius: 4px;">
                             <div style="color:#D9534F; font-weight:bold; font-size: 15px; margin-bottom: 4px;">
@@ -447,8 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div style="font-size:13px; color:#555;">${reason}</div>
                         </li>`;
                 });
-                html += '</ul>';
-                suspList.innerHTML = html;
+                suspList.innerHTML = html + '</ul>';
             } else {
                 suspList.innerHTML = '<p style="color:#5CB85C; padding:10px;">✅ 탐지된 위협이 없습니다.</p>';
             }
@@ -463,45 +480,55 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('results-dashboard-view').classList.add('hidden');
             document.getElementById('app-detail-view').classList.remove('hidden');
 
-            document.getElementById('detail-app-name').textContent = displayName;
+            // 1. 이름 표시 (캐시된 타이틀 우선, 없으면 넘겨받은 이름)
+            const finalName = app.cachedTitle || displayName;
+            document.getElementById('detail-app-name').textContent = finalName;
+
+            // 나머지 텍스트 정보 채우기
             document.getElementById('detail-package-name').textContent = app.packageName;
             document.getElementById('detail-sideload').textContent = app.isSideloaded ? '외부 설치' : 'Play Store';
             document.getElementById('detail-bg').textContent = app.isRunningBg ? '실행 중' : '중지됨';
             document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
             document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
 
+            // 2. 아이콘 DOM 초기화
             const iconWrapper = document.querySelector('.detail-icon-wrapper');
-            
-            // 1. 초기화 (일단 📱로 설정)
             iconWrapper.innerHTML = `
-                <img class="detail-real-img" src="" style="width:100%; height:100%; object-fit:cover; display:none; border-radius: 12px;">
-                <span class="detail-fallback-span" style="font-size:32px;">📱</span>
-            `;
-
+        <img class="detail-real-img" src="" style="width:100%; height:100%; object-fit:cover; display:none; border-radius: 12px;">
+        <span class="detail-fallback-span" style="font-size:32px;">📱</span>
+    `;
             const img = iconWrapper.querySelector('.detail-real-img');
             const span = iconWrapper.querySelector('.detail-fallback-span');
 
-            // 2. 캐시된 URL이 있는지 확인
+            // [Case A] 캐시된 아이콘이 있으면 즉시 표시
             if (app.cachedIconUrl) {
-                // [Case A] 이미 대시보드에서 받아온 경우 -> API 호출 X, 바로 보여줌
-                console.log(`[Cache Hit] ${app.packageName} 아이콘 재사용`);
                 img.src = app.cachedIconUrl;
                 img.style.display = 'block';
                 span.style.display = 'none';
-            } 
-            else if (!app.isSideloaded) {
-                // [Case B] 캐시가 없는데 외부 앱도 아닌 경우 -> 어쩔 수 없이 API 호출 (그리고 저장)
-                console.log(`[Cache Miss] ${app.packageName} 아이콘 새로 요청`);
-                window.electronAPI.getAppIcon(app.packageName).then(iconUrl => {
-                    if (iconUrl) {
-                        app.cachedIconUrl = iconUrl; // 나중을 위해 저장
-                        img.src = iconUrl;
+            }
+
+            // [Case B] 정보가 부족하면 API 요청
+            // (아이콘이 없거나 타이틀이 없으면 요청 시도)
+            if ((!app.cachedIconUrl || !app.cachedTitle)) {
+                window.electronAPI.getAppData(app.packageName).then(result => {
+                    if (!result) return;
+
+                    // [A] 아이콘 처리 (독립적)
+                    if (result.icon) {
+                        app.cachedIconUrl = result.icon; // 캐싱
+                        img.src = result.icon;
                         img.onload = () => {
                             img.style.display = 'block';
                             span.style.display = 'none';
                         };
                     }
-                }).catch(() => {});
+
+                    // [B] 타이틀 처리 (독립적)
+                    if (result.title) {
+                        app.cachedTitle = result.title; // 캐싱
+                        document.getElementById('detail-app-name').textContent = result.title;
+                    }
+                }).catch(() => { });
             }
 
             // 버튼 및 기타 정보 설정 (기존과 동일)
@@ -512,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const total = usage.rx + usage.tx;
             const netEl = document.getElementById('detail-network');
             netEl.innerHTML = `총 ${Utils.formatBytes(total)}<br><span style="font-size:12px; color:#888;">(수신: ${Utils.formatBytes(usage.rx)} / 송신: ${Utils.formatBytes(usage.tx)})</span>`;
-            
+
             const list = document.getElementById('detail-permission-list');
             list.innerHTML = '';
             if (app.requestedList && app.requestedList.length > 0) {

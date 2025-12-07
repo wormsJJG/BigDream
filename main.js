@@ -171,16 +171,9 @@ ipcMain.handle('neutralize-app', async (event, packageName) => {
 });
 
 // 3-5. 아이콘 가져오기 (Google Play)
-ipcMain.handle('get-app-icon', async (event, packageName) => {
+ipcMain.handle('get-app-data', async (event, packageName) => {
    // 1. 개발 모드, 패키지명 없음, 시스템 앱(android 등) 필터링
     if (CONFIG.IS_DEV_MODE || !packageName) return null;
-    if (packageName.startsWith('android') || 
-        packageName.startsWith('com.android') || 
-        packageName.startsWith('com.sec') || 
-        packageName.startsWith('com.samsung')) {
-
-        return null;
-    }
 
     try {
         // 2. gplay.app 함수가 실제로 있는지 확인 (안전장치)
@@ -196,13 +189,19 @@ ipcMain.handle('get-app-icon', async (event, packageName) => {
             country: 'kr' 
         });
        
-        return appData.icon;
+        console.log(appData.icon)
+        console.log(appData.title)
+        return { 
+            icon: appData.icon, 
+            title: appData.title 
+        };
 
     } catch (err) {
         // 404(앱 없음)가 아닌 다른 에러만 로그 출력
         if (err.status !== 404) {
             console.warn(`[Icon Fetch Fail] ${packageName}:`, err.message);
         }
+        console.log("앱 검색 못함")
         return null; 
     }
 });

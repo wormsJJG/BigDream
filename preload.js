@@ -27,10 +27,10 @@ contextBridge.exposeInMainWorld(
             return ipcRenderer.invoke('force-window-reset');
         },
 
-        getAppIcon: (packageName) => {
-            console.log('--- preload.js: getAppIcon() 호출됨 ---');
+        getAppData: (packageName) => {
+            console.log('--- preload.js: getAppData() 호출됨 ---');
 
-            return ipcRenderer.invoke('get-app-icon', packageName);
+            return ipcRenderer.invoke('get-app-data', packageName);
         },
 
         uninstallApp: (packageName) => {
@@ -71,7 +71,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     forceWindowReset: () => ipcRenderer.invoke('force-window-reset'),
     uninstallApp: (packageName) => ipcRenderer.invoke('uninstall-app', packageName),
     neutralizeApp: (pkg) => ipcRenderer.invoke('neutralize-app', pkg),
-    getAppIcon: (packageName) => ipcRenderer.invoke('get-app-icon', packageName),
+    getAppData: (packageName) => ipcRenderer.invoke('get-app-data', packageName),
     checkIosConnection: () => ipcRenderer.invoke('check-ios-connection'),
     runIosScan: (udid) => ipcRenderer.invoke('run-ios-scan', udid)
 });
