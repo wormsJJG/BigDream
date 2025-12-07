@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const viewToShow = document.getElementById(viewId);
             if (viewToShow) viewToShow.classList.add('active');
         },
-        
+
         // 내부 스크린 전환 (로그인 후 콘텐츠)
         showScreen(parentView, screenId) {
             if (!parentView) return;
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     // [3] 인증 및 네비게이션 (AUTH & NAVIGATION)
     // =========================================================
-    
+
     // 로그인 처리
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -173,10 +173,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     navResult.classList.add('hidden');
                     navResult.classList.remove('active');
                 }
-                
+
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'create-scan-screen');
-                
+
                 // 폼 리셋 및 윈도우 리프레시 효과
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
                     return;
                 }
-            } catch (e) {}
+            } catch (e) { }
 
             // 2. iOS 확인
             try {
@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.setUI(ui, '🍎', 'iPhone 연결됨', ios.model, '#5CB85C');
                     return;
                 }
-            } catch (e) {}
+            } catch (e) { }
 
             // 3. 연결 없음
             State.currentDeviceMode = null;
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.title.textContent = titleText;
             ui.title.style.color = color;
             ui.desc.innerHTML = descText.includes('연결') || descText.includes('허용') ? descText : `모델: <strong>${descText}</strong>`;
-            
+
             const btnContainer = document.getElementById('start-scan-container');
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
@@ -263,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     // [6] 검사 실행 (SCAN CONTROLLER)
     // =========================================================
-    
+
     // 검사 시작 버튼 클릭
     const realStartScanBtn = document.getElementById('real-start-scan-btn');
     if (realStartScanBtn) {
@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const rawData = await window.electronAPI.runIosScan(State.currentUdid);
                 if (rawData.error) throw new Error(rawData.error);
-                
+
                 // 데이터 변환 (iOS -> Android 포맷)
                 const data = Utils.transformIosData(rawData);
                 this.finishScan(data);
@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ViewManager.updateProgress(100, "분석 완료!");
             State.lastScanData = data; // 인쇄용 저장
             window.lastScanData = data;
-            
+
             setTimeout(() => {
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
@@ -381,9 +381,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             const isSuspicious = app.reason ? true : false;
             div.className = `app-item ${isSuspicious ? 'suspicious' : ''}`;
-            
+
             const name = Utils.formatAppName(app.packageName);
-            
+
             div.innerHTML = `
                 <div class="app-icon-wrapper">
                     <img src="" class="app-real-icon" id="icon-${app.packageName}" style="display:none;" alt="${name}">
@@ -395,19 +395,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 아이콘 비동기 요청 (사이드로딩 제외)
             if (!app.isSideloaded) {
+
                 window.electronAPI.getAppIcon(app.packageName).then(iconUrl => {
-                    if (iconUrl) {
-                        const imgTag = div.querySelector(`#icon-${app.packageName}`);
-                        const spanTag = div.querySelector(`#fallback-${app.packageName}`);
-                        if (imgTag && spanTag) {
-                            imgTag.src = iconUrl;
-                            imgTag.onload = () => {
-                                imgTag.style.display = 'block';
-                                spanTag.style.display = 'none';
-                            };
-                        }
+                if (iconUrl) {
+
+                    app.cachedIconUrl = iconUrl; // 캐시에 iconURL 저장
+
+                    const imgTag = div.querySelector('.app-real-icon');
+                    const spanTag = div.querySelector('.app-fallback-icon');
+
+                    if (imgTag && spanTag) {
+                        // [팁] onload를 src 할당보다 먼저 정의하는 것이 안전합니다.
+                        imgTag.onload = () => {
+                            imgTag.style.display = 'block';
+                            spanTag.style.display = 'none';
+                        };
+
+                        // 이미지 로딩 실패 시 처리 (엑박 방지)
+                        imgTag.onerror = () => {
+                            // 로딩 실패하면 그냥 원래대로 아이콘(📱) 유지
+                            imgTag.style.display = 'none';
+                            spanTag.style.display = 'flex';
+                        };
+
+                        imgTag.src = iconUrl;
                     }
-                }).catch(() => {});
+                }
+            }).catch(() => { });
             }
 
             div.addEventListener('click', () => AppDetailManager.show(app, name));
@@ -456,27 +470,58 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
             document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
 
-            // 버튼 설정
+            const iconWrapper = document.querySelector('.detail-icon-wrapper');
+            
+            // 1. 초기화 (일단 📱로 설정)
+            iconWrapper.innerHTML = `
+                <img class="detail-real-img" src="" style="width:100%; height:100%; object-fit:cover; display:none; border-radius: 12px;">
+                <span class="detail-fallback-span" style="font-size:32px;">📱</span>
+            `;
+
+            const img = iconWrapper.querySelector('.detail-real-img');
+            const span = iconWrapper.querySelector('.detail-fallback-span');
+
+            // 2. 캐시된 URL이 있는지 확인
+            if (app.cachedIconUrl) {
+                // [Case A] 이미 대시보드에서 받아온 경우 -> API 호출 X, 바로 보여줌
+                console.log(`[Cache Hit] ${app.packageName} 아이콘 재사용`);
+                img.src = app.cachedIconUrl;
+                img.style.display = 'block';
+                span.style.display = 'none';
+            } 
+            else if (!app.isSideloaded) {
+                // [Case B] 캐시가 없는데 외부 앱도 아닌 경우 -> 어쩔 수 없이 API 호출 (그리고 저장)
+                console.log(`[Cache Miss] ${app.packageName} 아이콘 새로 요청`);
+                window.electronAPI.getAppIcon(app.packageName).then(iconUrl => {
+                    if (iconUrl) {
+                        app.cachedIconUrl = iconUrl; // 나중을 위해 저장
+                        img.src = iconUrl;
+                        img.onload = () => {
+                            img.style.display = 'block';
+                            span.style.display = 'none';
+                        };
+                    }
+                }).catch(() => {});
+            }
+
+            // 버튼 및 기타 정보 설정 (기존과 동일)
             this.setupActionButton('uninstall-btn', "🗑️ 앱 강제 삭제", app, displayName);
             this.setupActionButton('neutralize-btn', "🛡️ 무력화 (권한 박탈)", app, displayName);
 
-            // 데이터 사용량
             const usage = app.dataUsage || { rx: 0, tx: 0 };
             const total = usage.rx + usage.tx;
             const netEl = document.getElementById('detail-network');
             netEl.innerHTML = `총 ${Utils.formatBytes(total)}<br><span style="font-size:12px; color:#888;">(수신: ${Utils.formatBytes(usage.rx)} / 송신: ${Utils.formatBytes(usage.tx)})</span>`;
-            netEl.style.color = total > 100 * 1024 * 1024 ? '#333' : '#333';
-
-            // 권한 리스트
+            
             const list = document.getElementById('detail-permission-list');
             list.innerHTML = '';
             if (app.requestedList && app.requestedList.length > 0) {
                 app.requestedList.forEach(perm => {
                     const isGranted = app.grantedList.includes(perm);
-                    const span = document.createElement('span');
-                    span.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
-                    span.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
-                    list.appendChild(span);
+                    const spanElem = document.createElement('span');
+                    spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
+                    spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
+                    list.appendChild(spanElem);
                 });
             } else {
                 list.innerHTML = '<p style="color:#999; padding:5px;">요청된 권한이 없습니다.</p>';
@@ -572,8 +617,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // 인쇄용 DOM 채우기
             const now = new Date();
             document.getElementById('print-date').textContent = now.toLocaleString('ko-KR');
-            document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}-${Math.floor(1000+Math.random()*9000)}`;
-            
+            document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
             // 정보
             document.getElementById('print-model').textContent = data.deviceInfo.model;
             document.getElementById('print-serial').textContent = data.deviceInfo.serial;
@@ -585,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const summaryBox = document.getElementById('print-summary-box');
             summaryBox.className = `summary-box status-${threatCount > 0 ? 'danger' : 'safe'}`;
             summaryBox.innerHTML = threatCount > 0 ? `⚠️ 위험 (DANGER): 총 ${threatCount}건의 위협이 탐지되었습니다.` : `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
-            
+
             document.getElementById('print-total-count').textContent = data.allApps.length;
             document.getElementById('print-threat-count').textContent = threatCount;
             document.getElementById('print-file-count').textContent = data.apkFiles.length;
@@ -605,8 +650,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 파일 테이블
             const fileBody = document.getElementById('print-file-body');
-            fileBody.innerHTML = data.apkFiles.length > 0 
-                ? data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i+1}</td><td>${f}</td></tr>`).join('') 
+            fileBody.innerHTML = data.apkFiles.length > 0
+                ? data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('')
                 : `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
 
             // 전체 목록 (콤팩트)

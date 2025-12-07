@@ -11,7 +11,8 @@ const os = require('os');
 const crypto = require('crypto');
 const adb = require('adbkit');
 const axios = require('axios');
-const gplay = require('google-play-scraper');
+const gplayRaw = require('google-play-scraper');
+const gplay = gplayRaw.default || gplayRaw;
 const { exec, spawn } = require('child_process');
 
 // ============================================================
@@ -171,11 +172,39 @@ ipcMain.handle('neutralize-app', async (event, packageName) => {
 
 // 3-5. 아이콘 가져오기 (Google Play)
 ipcMain.handle('get-app-icon', async (event, packageName) => {
+   // 1. 개발 모드, 패키지명 없음, 시스템 앱(android 등) 필터링
     if (CONFIG.IS_DEV_MODE || !packageName) return null;
+    if (packageName.startsWith('android') || 
+        packageName.startsWith('com.android') || 
+        packageName.startsWith('com.sec') || 
+        packageName.startsWith('com.samsung')) {
+
+        return null;
+    }
+
     try {
-        const appData = await gplay.app({ appId: packageName });
+        // 2. gplay.app 함수가 실제로 있는지 확인 (안전장치)
+        if (typeof gplay.app !== 'function') {
+            console.error('[Error] gplay.app 함수를 찾을 수 없습니다. gplay 객체:', gplay);
+            return null; // 함수가 없으면 null 반환하여 멈춤 방지
+        }
+
+        // 3. 한국 스토어 기준으로 검색
+        const appData = await gplay.app({ 
+            appId: packageName,
+            lang: 'ko', 
+            country: 'kr' 
+        });
+       
         return appData.icon;
-    } catch (err) { return null; }
+
+    } catch (err) {
+        // 404(앱 없음)가 아닌 다른 에러만 로그 출력
+        if (err.status !== 404) {
+            console.warn(`[Icon Fetch Fail] ${packageName}:`, err.message);
+        }
+        return null; 
+    }
 });
 
 
