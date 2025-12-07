@@ -151,13 +151,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ★ 관리자라면 관리자 전용 화면으로 (또는 일반화면에 관리자 기능 추가)
                     ViewManager.showView('logged-in-view');
                     ViewManager.showScreen(loggedInView, 'create-scan-screen'); // 일단 메인으로 가되
-                    
+
                     // [관리자 전용 UI 활성화 예시]
                     document.body.classList.add('is-admin'); // CSS로 관리자 버튼 보이게 처리 가능
                     alert(`관리자 계정(${email})으로 접속했습니다.`);
-                    
+
                     setTimeout(() => {
-                        console.log("⏳ 관리자 메뉴 생성 시도...");
+
                         AdminManager.init();
                     }, 500);
                 } else {
@@ -166,7 +166,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     ViewManager.showScreen(loggedInView, 'create-scan-screen');
                     document.body.classList.remove('is-admin');
                 }
-                
+
+                setTimeout(() => {
+                    console.log("🔄 입력창 먹통 방지: 창 포커스 리셋 실행");
+                    window.electronAPI.forceWindowReset();
+                }, 100);
+
                 document.getElementById('nav-create').classList.add('active');
                 errorMsg.textContent = "";
 
@@ -196,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     DeviceManager.stopPolling();
                     State.isLoggedIn = false;
                     State.androidTargetMinutes = 0; // 설정값 초기화
-                    
+
                     ViewManager.showView('logged-out-view');
                     ViewManager.showScreen(loggedOutView, 'login-screen');
                     window.location.reload();
@@ -845,7 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 1. UI 반영 (즉시)
         State.androidTargetMinutes = min;
-        
+
         // 2. Firestore 저장 (비동기)
         adminSaveBtn.textContent = "저장 중...";
         adminSaveBtn.disabled = true;
@@ -879,7 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 로그인 & 상태 체크 (기존과 동일)
                 const loggedInView = document.getElementById('logged-in-view');
                 if (!loggedInView.classList.contains('active')) return;
-                
+
                 const progressScreen = document.getElementById('scan-progress-screen');
                 if (progressScreen && progressScreen.classList.contains('active')) {
                     alert("🚫 검사 중에는 변경 불가"); return;
@@ -994,32 +999,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const li = document.createElement('li');
             li.className = 'nav-item';
             li.id = 'nav-admin';
-            
+
             // 스타일 강조
             li.innerHTML = '🛡️ 관리자 페이지';
-            li.style.color = '#F0AD4E'; 
-            li.style.fontWeight = 'bold'; 
+            li.style.color = '#F0AD4E';
+            li.style.fontWeight = 'bold';
 
             li.addEventListener('click', () => {
                 ViewManager.activateMenu('nav-admin');
                 ViewManager.showScreen(document.getElementById('logged-in-view'), 'admin-screen');
                 this.loadUsers();
             });
-            
+
             // 메뉴의 맨 앞에 추가 (검사생성 위)
-            navMenu.insertBefore(li, navMenu.firstChild); 
-            
+            navMenu.insertBefore(li, navMenu.firstChild);
+
             console.log("✅ 관리자 버튼 추가 완료! (로그인 화면)");
 
             // 이벤트 리스너들 (기존과 동일)
             const refreshBtn = document.getElementById('refresh-users-btn');
-            if(refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
-            
+            if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
+
             const createForm = document.getElementById('admin-create-user-form');
-            if(createForm) createForm.addEventListener('submit', (e) => this.createUser(e));
-            
+            if (createForm) createForm.addEventListener('submit', (e) => this.createUser(e));
+
             const closeBtn = document.getElementById('admin-result-close-btn');
-            if(closeBtn) closeBtn.addEventListener('click', () => {
+            if (closeBtn) closeBtn.addEventListener('click', () => {
                 document.getElementById('admin-result-modal').classList.add('hidden');
             });
         },
@@ -1032,32 +1037,32 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
                 const querySnapshot = await getDocs(q);
-                
+
                 tbody.innerHTML = '';
 
                 querySnapshot.forEach((docSnap) => {
                     const user = docSnap.data();
-                    
+
                     // ★ 수정됨: 이메일에서 도메인(@bd.com) 제거하여 순수 아이디만 추출
                     const rawEmail = user.email || "";
-                    const userId = rawEmail.replace(ID_DOMAIN, ""); 
+                    const userId = rawEmail.replace(ID_DOMAIN, "");
 
                     const row = document.createElement('tr');
-                    const statusBadge = user.isLocked 
-                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>` 
+                    const statusBadge = user.isLocked
+                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>`
                         : `<span class="admin-badge badge-active">✅ 활성</span>`;
 
                     row.innerHTML = `
-                        <td><b>${userId}</b><br><span style="font-size:11px; color:#888;">(UID: ${docSnap.id.substring(0,6)}...)</span></td>
+                        <td><b>${userId}</b><br><span style="font-size:11px; color:#888;">(UID: ${docSnap.id.substring(0, 6)}...)</span></td>
                         <td>${statusBadge}</td>
                         <td><b>${user.quota || 0}</b> 회</td>
                         <td>${user.lastScanDate ? new Date(user.lastScanDate.toDate()).toLocaleDateString() : '-'}</td>
                         <td>
                             <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${user.quota || 0})">➕/➖</button>
-                            ${user.isLocked 
-                                ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">🔓 해제</button>` 
-                                : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">🔒 잠금</button>`
-                            }
+                            ${user.isLocked
+                            ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">🔓 해제</button>`
+                            : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">🔒 잠금</button>`
+                        }
                             <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">📜 기록</button>
                         </td>
                     `;
@@ -1072,7 +1077,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2. 신규 업체 등록 (아이디 + 도메인 결합)
         async createUser(e) {
             e.preventDefault();
-            
+
             // ★ HTML ID 변경 주의: index.html에서 id="new-user-id"로 바꿨다면 여기도 맞춰야 함
             // 만약 index.html을 안 바꿨으면 'new-user-email' 그대로 사용
             const inputElement = document.getElementById('new-user-id') || document.getElementById('new-user-email');
@@ -1086,8 +1091,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!confirm(`[확인] 다음 계정을 생성합니까?\nID: ${inputId} (실제: ${fullEmail})\n기본 횟수: ${quota}`)) return;
 
             const secondaryAppName = "secondaryApp-" + Date.now();
-            const config = auth.app.options; 
-            
+            const config = auth.app.options;
+
             try {
                 const secondaryApp = initializeApp(config, secondaryAppName);
                 const secondaryAuth = getAuth(secondaryApp);
@@ -1107,7 +1112,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 alert(`✅ 업체 생성 완료!\n아이디: ${inputId}`);
-                
+
                 document.getElementById('admin-create-user-form').reset();
                 this.loadUsers();
 
@@ -1136,7 +1141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const newQuota = currentQuota + change;
             if (newQuota < 0) return alert("횟수는 0보다 작을 수 없습니다.");
-            
+
             await updateDoc(doc(db, "users", uid), { quota: newQuota });
             alert(`✅ 변경 완료! (총 ${newQuota}회)`);
             AdminManager.loadUsers();
@@ -1166,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const date = data.date ? new Date(data.date.toDate()).toLocaleString() : '날짜 없음';
                 const threatCount = data.threatCount || 0;
                 const style = threatCount > 0 ? 'color:red; font-weight:bold;' : 'color:green;';
-                
+
                 html += `
                     <li style="padding:10px; border-bottom:1px solid #eee;">
                         <div>🕒 <b>${date}</b></div>

@@ -941,9 +941,3 @@ p {
 .btn-unlock { color: #5CB85C; border-color: #5CB85C; }
 .btn-quota { color: #3A539B; border-color: #3A539B; }
 
-.modal.hidden {
-    display: none !important;
-    pointer-events: none !important; 
-    visibility: hidden !important;
-    z-index: -9999 !important;
-}

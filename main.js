@@ -58,11 +58,19 @@ app.whenReady().then(() => { createWindow(); });
 ipcMain.handle('force-window-reset', () => {
     const mainWindow = BrowserWindow.getAllWindows()[0];
     if (mainWindow) {
-        mainWindow.minimize();
+        // 1. 강제로 포커스 해제 (Blur)
+        mainWindow.blur();
+        
+        // 2. 아주 짧은 딜레이 후 다시 포커스 및 활성화
         setTimeout(() => {
-            mainWindow.restore();
-            mainWindow.focus();
-        }, 100);
+            mainWindow.focus(); // 창 자체 포커스
+            mainWindow.show();  // 확실하게 보이기
+            
+            // 3. 웹 콘텐츠(HTML) 내부에도 포커스 신호 전달
+            if (mainWindow.webContents) {
+                mainWindow.webContents.focus();
+            }
+        }, 50); // 0.05초 딜레이 (OS가 인식할 시간 확보)
     }
 });
 
