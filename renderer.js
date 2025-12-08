@@ -1646,4 +1646,25 @@ document.addEventListener('DOMContentLoaded', () => {
             await CustomUI.alert("삭제 실패: " + e.message);
         }
     };
+
+    signInWithEmailAndPassword(auth, email, password)
+    .then(async (userCredential) => {
+        const user = userCredential.user;
+        
+        // ★ DB에 유저 정보가 있는지 확인
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        
+        if (!userDoc.exists()) {
+            // DB에 정보가 없으면 (삭제된 업체면)
+            CustomUI.alert("존재하지 않거나 삭제된 계정입니다.");
+            auth.signOut(); // 즉시 로그아웃 시킴
+            return;
+        }
+
+        // 정상 로그인 처리...
+        console.log("로그인 성공");
+    })
+    .catch((error) => {
+        alert("로그인 실패: " + error.message);
+    });
 });
