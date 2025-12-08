@@ -68,6 +68,63 @@ document.addEventListener('DOMContentLoaded', () => {
     const loggedInView = document.getElementById('logged-in-view');
     const loggedOutView = document.getElementById('logged-out-view');
 
+    // 재사용 가능한 custom Alert
+    const CustomUI = {
+        // 알림창 (Alert)
+        alert(message) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('custom-alert-modal');
+                const msgEl = document.getElementById('custom-alert-msg');
+                const btn = document.getElementById('custom-alert-ok-btn');
+
+                msgEl.textContent = message;
+                modal.classList.remove('hidden');
+
+                // 엔터키 처리 및 클릭 처리
+                const close = () => {
+                    modal.classList.add('hidden');
+                    btn.removeEventListener('click', close);
+                    resolve(); // 창이 닫혀야 다음 코드 실행
+                };
+
+                btn.addEventListener('click', close);
+                btn.focus(); // 버튼에 포커스 (접근성)
+            });
+        },
+
+        // 확인창 (Confirm) - 중요: await와 함께 써야 함
+        confirm(message) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('custom-confirm-modal');
+                const msgEl = document.getElementById('custom-confirm-msg');
+                const okBtn = document.getElementById('custom-confirm-ok-btn');
+                const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
+
+                msgEl.textContent = message;
+                modal.classList.remove('hidden');
+
+                const handleOk = () => {
+                    cleanup();
+                    resolve(true); // true 반환
+                };
+
+                const handleCancel = () => {
+                    cleanup();
+                    resolve(false); // false 반환
+                };
+
+                const cleanup = () => {
+                    modal.classList.add('hidden');
+                    okBtn.removeEventListener('click', handleOk);
+                    cancelBtn.removeEventListener('click', handleCancel);
+                };
+
+                okBtn.addEventListener('click', handleOk);
+                cancelBtn.addEventListener('click', handleCancel);
+                cancelBtn.focus(); // 실수 방지를 위해 취소에 포커스
+            });
+        }
+    };
 
     // =========================================================
     // [3] 인증 및 설정 불러오기 (AUTH & SETTINGS)
@@ -154,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // [관리자 전용 UI 활성화 예시]
                     document.body.classList.add('is-admin'); // CSS로 관리자 버튼 보이게 처리 가능
-                    alert(`관리자 계정(${email})으로 접속했습니다.`);
+                    !await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
 
                     setTimeout(() => {
 
@@ -166,11 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     ViewManager.showScreen(loggedInView, 'create-scan-screen');
                     document.body.classList.remove('is-admin');
                 }
-
-                setTimeout(() => {
-                    console.log("🔄 입력창 먹통 방지: 창 포커스 리셋 실행");
-                    window.electronAPI.forceWindowReset();
-                }, 100);
 
                 document.getElementById('nav-create').classList.add('active');
                 errorMsg.textContent = "";
@@ -195,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
-            if (confirm('로그아웃 하시겠습니까?')) {
+            if (await CustomUI.confirm('로그아웃 하시겠습니까?')) {
                 try {
                     await signOut(auth);
                     DeviceManager.stopPolling();
@@ -278,8 +330,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 연결 끊기 (결과 화면 -> 정보 입력)
     const disconnectBtn = document.getElementById('disconnect-btn');
     if (disconnectBtn) {
-        disconnectBtn.addEventListener('click', () => {
-            if (confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+        disconnectBtn.addEventListener('click', async () => {
+            if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
                 // UI 초기화
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
@@ -295,7 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 폼 리셋 및 윈도우 리프레시 효과
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
-                window.electronAPI.forceWindowReset();
             }
         });
     }
@@ -369,7 +420,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 잔상 방지 리셋
             if (showBtn && !btnContainer.dataset.visible) {
-                window.electronAPI.forceWindowReset();
                 btnContainer.dataset.visible = "true";
             }
         }
@@ -400,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (State.currentDeviceMode === 'ios') {
                 await ScanController.startIosScan();
             } else {
-                alert("연결된 기기가 없습니다.");
+                await CustomUI.alert("연결된 기기가 없습니다.");
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'device-connection-screen');
             }
@@ -698,21 +748,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const { package: packageName, appName } = uninstallBtn.dataset;
             if (!packageName) return;
 
-            if (!confirm(`[경고] 정말로 '${appName}' 앱을 삭제하시겠습니까?\n\n패키지명: ${packageName}`)) return;
+            // 기존: if (!confirm(...)) return;
+            if (!await CustomUI.confirm(`[경고] 정말로 '${appName}' 앱을 삭제하시겠습니까?\n\n패키지명: ${packageName}`)) return;
 
-            uninstallBtn.disabled = true;
-            uninstallBtn.textContent = "처리 중...";
+            // ... (중간 생략) ...
 
             try {
                 const result = await window.electronAPI.uninstallApp(packageName);
                 if (result.success) {
-                    alert(result.message);
+                    await CustomUI.alert(result.message); // alert 대체
                     document.getElementById('back-to-dashboard-btn').click();
                 } else {
                     throw new Error(result.error);
                 }
             } catch (err) {
-                alert(`삭제 실패: ${err.message}\n\n[기기 관리자 해제 필요] 설정 > 보안 > 기기 관리자 앱에서 '${appName}' 체크 해제 후 다시 시도하세요.`);
+                await CustomUI.alert(`삭제 실패: ${err.message}\n\n[기기 관리자 해제 필요] 설정 > 보안 > 기기 관리자 앱에서 '${appName}' 체크 해제 후 다시 시도하세요.`);
             } finally {
                 uninstallBtn.disabled = false;
                 uninstallBtn.textContent = "🗑️ 앱 강제 삭제";
@@ -727,7 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
-            if (!confirm(`[주의] '${appName}' 앱의 모든 권한을 회수하고 강제 종료하시겠습니까?`)) return;
+            if (!await CustomUI.confirm(`[주의] '${appName}' 앱의 모든 권한을 회수하고 강제 종료하시겠습니까?`)) return;
 
             neutralizeBtn.disabled = true;
             neutralizeBtn.textContent = "무력화 중...";
@@ -735,13 +785,13 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const result = await window.electronAPI.neutralizeApp(packageName);
                 if (result.success) {
-                    alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
+                    await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
                     document.getElementById('back-to-dashboard-btn').click();
                 } else {
                     throw new Error(result.error);
                 }
             } catch (err) {
-                alert(`무력화 실패: ${err.message}`);
+                await CustomUI.alert(`무력화 실패: ${err.message}`);
             } finally {
                 neutralizeBtn.disabled = false;
                 neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
@@ -831,7 +881,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleAdminSave = async () => {
         const val = adminInput.value;
         if (!val && val !== '0') {
-            alert("값을 입력하세요.");
+            await CustomUI.alert("값을 입력하세요.");
             return;
         }
 
@@ -842,7 +892,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (min === 0) {
             message = "설정 해제: 즉시 완료 모드";
         } else if (min < 10 || min > 60) {
-            alert("시간은 10분 ~ 60분 사이로 설정해주세요.");
+            await CustomUI.alert("시간은 10분 ~ 60분 사이로 설정해주세요.");
             return;
         } else {
             message = `✅ 설정됨: 안드로이드 검사 시간 [${min}분]`;
@@ -860,11 +910,11 @@ document.addEventListener('DOMContentLoaded', () => {
             await updateDoc(docRef, {
                 android_scan_duration: min
             });
-            alert(`${message}\n(서버에도 저장되었습니다)`);
+            await CustomUI.alert(`${message}\n(서버에도 저장되었습니다)`);
             closeAdminModal();
         } catch (error) {
             console.error("저장 실패:", error);
-            alert(`⚠️ 로컬에는 적용되었으나 서버 저장에 실패했습니다.\n오류: ${error.message}`);
+            await CustomUI.alert(`⚠️ 로컬에는 적용되었으나 서버 저장에 실패했습니다.\n오류: ${error.message}`);
             closeAdminModal();
         } finally {
             adminSaveBtn.textContent = "저장";
@@ -1088,8 +1138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // ★ 수정됨: 아이디 + 도메인 결합
             const fullEmail = inputId + ID_DOMAIN;
 
-            if (!confirm(`[확인] 다음 계정을 생성합니까?\nID: ${inputId} (실제: ${fullEmail})\n기본 횟수: ${quota}`)) return;
-
+            if (!await CustomUI.confirm(`[확인] 다음 계정을 생성합니까?\nID: ${inputId} (실제: ${fullEmail})\n기본 횟수: ${quota}`)) return;
             const secondaryAppName = "secondaryApp-" + Date.now();
             const config = auth.app.options;
 
@@ -1111,41 +1160,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     lastScanDate: null
                 });
 
-                alert(`✅ 업체 생성 완료!\n아이디: ${inputId}`);
-
+                await CustomUI.alert(`✅ 업체 생성 완료!\n아이디: ${inputId}`);
                 document.getElementById('admin-create-user-form').reset();
                 this.loadUsers();
 
             } catch (error) {
                 console.error("계정 생성 실패:", error);
-                alert("계정 생성 실패: " + error.message);
+                await CustomUI.alert("계정 생성 실패: " + error.message);
             }
         }
     };
 
     // [전역 함수 노출] HTML onclick에서 호출하기 위해 window에 등록
     window.toggleLock = async (uid, shouldLock) => {
-        if (!confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return;
-        try {
+        if (!await CustomUI.confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return; try {
             await updateDoc(doc(db, "users", uid), { isLocked: shouldLock });
             AdminManager.loadUsers(); // 새로고침
-        } catch (e) { alert("처리 실패: " + e.message); }
+        } catch (e) { await CustomUI.alert("처리 실패: " + e.message); }
     };
 
     window.changeQuota = async (uid, currentQuota) => {
         const input = prompt(`현재 횟수: ${currentQuota}\n\n추가하거나 뺄 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
         if (!input) return;
         const change = parseInt(input, 10);
-        if (isNaN(change)) return alert("숫자만 입력하세요.");
+        if (isNaN(change)) return CustomUI.alert("숫자만 입력하세요.");
 
         try {
             const newQuota = currentQuota + change;
             if (newQuota < 0) return alert("횟수는 0보다 작을 수 없습니다.");
 
             await updateDoc(doc(db, "users", uid), { quota: newQuota });
-            alert(`✅ 변경 완료! (총 ${newQuota}회)`);
+            await CustomUI.alert(`✅ 변경 완료! (총 ${newQuota}회)`);
             AdminManager.loadUsers();
-        } catch (e) { alert("변경 실패: " + e.message); }
+        } catch (e) { await CustomUI.alert("변경 실패: " + e.message); }
     };
 
     window.viewHistory = async (uid) => {
