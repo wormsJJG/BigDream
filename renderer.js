@@ -321,6 +321,67 @@ document.addEventListener('DOMContentLoaded', () => {
         phone: document.getElementById('client-phone')
     };
 
+    // DOM 참조 캐싱 (익명 기능 추가)
+    const anonChecks = {
+        name: document.getElementById('anon-name'),
+        dob: document.getElementById('anon-dob'),
+        phone: document.getElementById('anon-phone')
+    };
+
+    const anonValues = {
+        name: '익명 사용자',
+        dob: '0001-01-01',
+        phone: '000-0000-0000'
+    };
+
+    // 개별 익명 처리 함수
+    function setupAnonToggle(key) {
+        const inputEl = clientInputs[key];
+        const checkEl = anonChecks[key];
+        const anonValue = anonValues[key];
+
+        if (!checkEl || !inputEl) return;
+
+        checkEl.addEventListener('change', () => {
+            const isAnonymous = checkEl.checked;
+            
+            if (isAnonymous) {
+                // 익명 모드: 값 채우고, 비활성화 (disabled)
+                inputEl.value = anonValue;
+                inputEl.disabled = true;
+            } else {
+                // 일반 모드: 값 비우고, 활성화
+                inputEl.value = '';
+                inputEl.disabled = false;
+            }
+            
+            // 익명 상태 변경 시마다 전체 폼 유효성 재검사
+            checkFormValidity(); 
+        });
+    }
+
+    // 모든 필드에 익명 처리 로직 적용
+    setupAnonToggle('name');
+    setupAnonToggle('dob');
+    setupAnonToggle('phone');
+
+
+    // 유효성 검사 함수 (새로 정의)
+    function checkFormValidity() {
+        const isNameAnon = anonChecks.name && anonChecks.name.checked;
+        const isDobAnon = anonChecks.dob && anonChecks.dob.checked;
+        const isPhoneAnon = anonChecks.phone && anonChecks.phone.checked;
+        
+        // 익명이 아니면서(isAnon=false) 값이 채워지지 않은 필드가 있는지 검사
+        const isNameValid = isNameAnon || !!clientInputs.name.value.trim();
+        const isDobValid = isDobAnon || !!clientInputs.dob.value.trim();
+        const isPhoneValid = isPhoneAnon || !!clientInputs.phone.value.trim();
+        
+        // 모든 필드가 유효해야 버튼 활성화
+        const isValid = isNameValid && isDobValid && isPhoneValid;
+        toConnectionScreenBtn.disabled = !isValid;
+    }
+
     if (clientInfoForm) {
         // 입력 감지 (버튼 활성화)
         clientInfoForm.addEventListener('input', () => {

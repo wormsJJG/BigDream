@@ -83,15 +83,42 @@
                 <div class="content-card input-card-relative">
                     <button id="reset-client-info-btn" type="button" class="reset-icon-btn">↺ 정보 초기화</button>
                     <form id="client-info-form">
-                        <label>대상자 이름</label>
-                        <input type="text" id="client-name">
-                        <label>생년월일</label>
-                        <input type="date" id="client-dob">
-                        <label>휴대폰 번호</label>
-                        <input type="tel" id="client-phone" placeholder="010-1234-5678">
+                        <div class="form-group-anon">
+                            <label for="client-name">대상자 이름</label>
+                            <div class="input-and-anon">
+                                <input type="text" id="client-name">
+                                <label for="anon-name" class="anon-label">
+                                    <input type="checkbox" id="anon-name" class="anon-check">
+                                    익명
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group-anon">
+                            <label for="client-dob">생년월일</label>
+                            <div class="input-and-anon">
+                                <input type="date" id="client-dob">
+                                <label for="anon-dob" class="anon-label">
+                                    <input type="checkbox" id="anon-dob" class="anon-check">
+                                    익명
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group-anon">
+                            <label for="client-phone">휴대폰 번호</label>
+                            <div class="input-and-anon">
+                                <input type="tel" id="client-phone" placeholder="010-1234-5678">
+                                <label for="anon-phone" class="anon-label">
+                                    <input type="checkbox" id="anon-phone" class="anon-check">
+                                    익명
+                                </label>
+                            </div>
+                        </div>
+
                         <button id="to-connection-screen-btn" type="submit" class="primary-button" disabled>다음 단계 (기기 연결)</button>
                     </form>
-                </div>
+                    </div>
             </section>
 
             <section id="device-connection-screen" class="screen">
