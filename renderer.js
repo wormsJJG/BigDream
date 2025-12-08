@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
             State.androidTargetMinutes = 0;
         }
     }
-    
+
     // 로그인 처리
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -459,7 +459,6 @@ document.addEventListener('DOMContentLoaded', () => {
         realStartScanBtn.addEventListener('click', async () => {
             DeviceManager.stopPolling();
 
-            // 사이드바 UI 변경
             document.getElementById('nav-create').classList.add('hidden');
             document.getElementById('nav-open').classList.add('hidden');
             const navResult = document.getElementById('nav-result');
@@ -468,7 +467,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             ViewManager.showScreen(loggedInView, 'scan-progress-screen');
 
-            // 모드별 검사 시작
             if (State.currentDeviceMode === 'android') {
                 await ScanController.startAndroidScan();
             } else if (State.currentDeviceMode === 'ios') {
@@ -482,14 +480,78 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const ScanController = {
+        // ★★★ [수정됨] 실제 앱 목록을 활용한 정밀 검사 연출 ★★★
         async startAndroidScan() {
-            ViewManager.updateProgress(10, "안드로이드 정밀 분석 시작...");
+            // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
+            ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
+            
+            let scanData = null;
             try {
-                const data = await window.electronAPI.runScan();
-                this.finishScan(data);
+                // 실제 검사는 여기서 순식간에 끝냅니다. (데이터 확보용)
+                scanData = await window.electronAPI.runScan();
             } catch (error) {
                 this.handleError(error);
+                return;
             }
+
+            // 2. 시간 설정 확인 (설정값 없으면 즉시 완료)
+            const targetMinutes = State.androidTargetMinutes || 0;
+            if (targetMinutes === 0) {
+                this.finishScan(scanData);
+                return;
+            }
+
+            // 3. Theater Mode 진입 (설정된 시간동안 연기 시작)
+            const apps = scanData.allApps || [];
+            const totalApps = apps.length;
+            
+            // 앱이 하나도 없는 경우(예외)는 바로 종료
+            if (totalApps === 0) {
+                this.finishScan(scanData);
+                return;
+            }
+
+            // 시간 계산
+            // 전체 목표 시간(밀리초)
+            const totalDurationMs = targetMinutes * 60 * 1000; 
+            
+            // 앱 하나당 보여줄 시간 (최소 0.1초 ~ 최대 제한 없음)
+            // 예: 10분(600초) / 앱 100개 = 앱 하나당 6초씩 "분석중..." 표시
+            const timePerApp = totalDurationMs / totalApps;
+            
+            console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp/1000).toFixed(2)}초 소요`);
+
+            let currentIndex = 0;
+
+            // ★ 애니메이션 루프 함수
+            const processNextApp = () => {
+                // 종료 조건: 모든 앱을 다 보여줬으면 끝
+                if (currentIndex >= totalApps) {
+                    this.finishScan(scanData);
+                    return;
+                }
+
+                const app = apps[currentIndex];
+                const appName = Utils.formatAppName(app.packageName);
+                
+                // 진행률 계산 (현재 순번 / 전체 갯수)
+                // 100%는 finishScan에서 찍으므로 최대 99%까지만
+                const percent = Math.min(99, Math.floor(((currentIndex + 1) / totalApps) * 100));
+
+                // 화면 갱신: "카카오톡 - com.kakao.talk 정밀 해시 분석 중..."
+                ViewManager.updateProgress(
+                    percent, 
+                    `[${currentIndex + 1}/${totalApps}] ${appName} - ${app.packageName} 정밀 분석 중...`
+                );
+
+                currentIndex++;
+
+                // 다음 앱으로 넘어가는 타이머
+                setTimeout(processNextApp, timePerApp);
+            };
+
+            // 루프 시작
+            processNextApp();
         },
 
         async startIosScan() {
@@ -497,8 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const rawData = await window.electronAPI.runIosScan(State.currentUdid);
                 if (rawData.error) throw new Error(rawData.error);
-
-                // 데이터 변환 (iOS -> Android 포맷)
                 const data = Utils.transformIosData(rawData);
                 this.finishScan(data);
             } catch (error) {
@@ -507,22 +567,22 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         finishScan(data) {
-            ViewManager.updateProgress(100, "분석 완료!");
-            State.lastScanData = data; // 인쇄용 저장
+            ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
+            State.lastScanData = data;
             window.lastScanData = data;
 
             setTimeout(() => {
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
-            }, 1000);
+            }, 1000); // 1초 뒤 결과 화면으로 전환
         },
 
         handleError(error) {
             console.error(error);
             const statusText = document.getElementById('scan-status-text');
             const statusBar = document.getElementById('progress-bar');
-            statusText.textContent = "오류: " + error.message;
-            statusBar.style.backgroundColor = '#d9534f';
+            if(statusText) statusText.textContent = "오류: " + error.message;
+            if(statusBar) statusBar.style.backgroundColor = '#d9534f';
         }
     };
 
