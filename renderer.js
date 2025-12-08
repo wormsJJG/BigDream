@@ -777,7 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 suspList.innerHTML = html + '</ul>';
             } else {
-                suspList.innerHTML = '<p style="color:#5CB85C; padding:10px;">✅ 탐지된 위협이 없습니다.</p>';
+                suspList.innerHTML = '<p style="color:#5CB85C; padding:10px;">✅ 탐지된 스파이앱이 없습니다.</p>';
             }
         }
     };
@@ -966,7 +966,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const threatCount = data.suspiciousApps.length;
             const summaryBox = document.getElementById('print-summary-box');
             summaryBox.className = `summary-box status-${threatCount > 0 ? 'danger' : 'safe'}`;
-            summaryBox.innerHTML = threatCount > 0 ? `⚠️ 위험 (DANGER): 총 ${threatCount}건의 위협이 탐지되었습니다.` : `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
+            summaryBox.innerHTML = threatCount > 0 ? `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.` : `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
 
             document.getElementById('print-total-count').textContent = data.allApps.length;
             document.getElementById('print-threat-count').textContent = threatCount;
@@ -1481,7 +1481,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `
                     <li style="padding:10px; border-bottom:1px solid #eee;">
                         <div>🕒 <b>${date}</b></div>
-                        <div style="${style}">결과: 위협 ${threatCount}건 발견</div>
+                        <div style="${style}">결과: 스파이앱 ${threatCount}개 발견</div>
                         <div style="font-size:12px; color:#666;">모델: ${data.model} (Serial: ${data.serial})</div>
                     </li>
                 `;
