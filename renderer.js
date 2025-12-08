@@ -2,7 +2,20 @@
 // BD (Big Dream) Security Solution - Renderer Process
 import { auth, db } from './firebaseConfig.js';
 import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, 
+    getDoc,
+    updateDoc, 
+    collection, 
+    getDocs, 
+    setDoc, 
+    query, 
+    orderBy, 
+    where, 
+    runTransaction, 
+    addDoc, 
+    serverTimestamp, 
+    deleteDoc,
+increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { startTransition } from 'react';
 
@@ -153,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
 
             if (e.message === "LOCKED_ACCOUNT") {
-                throw e; 
+                throw e;
             }
 
             console.error("권한 확인 실패:", e);
@@ -166,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // 1. 현재 로그인한 유저 정보 가져오기
             const user = auth.currentUser;
-            
+
             // (혹시 로그인이 안 된 상태라면 함수 종료)
             if (!user) {
                 console.log("⚠️ 로그인 정보가 없어 설정을 불러올 수 없습니다.");
@@ -176,16 +189,16 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`📥 [${user.uid}] 계정의 설정값 불러오는 중...`);
 
             // 2. 공용 설정(settings/config) 대신 '내 유저 문서(users/uid)' 참조
-            const docRef = doc(db, "users", user.uid); 
+            const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                
+
                 // 3. 저장된 시간 값 가져오기 (없으면 0)
                 // 필드명: android_scan_duration (아까 통일한 이름)
                 State.androidTargetMinutes = data.android_scan_duration || 0;
-                
+
                 console.log(`✅ 설정 로드 완료: 안드로이드 검사 시간 [${State.androidTargetMinutes}분]`);
             } else {
                 console.log("⚠️ 유저 문서가 존재하지 않습니다. (기본값 0분 사용)");
@@ -345,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         checkEl.addEventListener('change', () => {
             const isAnonymous = checkEl.checked;
-            
+
             if (isAnonymous) {
                 // 익명 모드: 값 채우고, 비활성화 (disabled)
                 inputEl.value = anonValue;
@@ -355,9 +368,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 inputEl.value = '';
                 inputEl.disabled = false;
             }
-            
+
             // 익명 상태 변경 시마다 전체 폼 유효성 재검사
-            checkFormValidity(); 
+            checkFormValidity();
         });
     }
 
@@ -372,12 +385,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isNameAnon = anonChecks.name && anonChecks.name.checked;
         const isDobAnon = anonChecks.dob && anonChecks.dob.checked;
         const isPhoneAnon = anonChecks.phone && anonChecks.phone.checked;
-        
+
         // 익명이 아니면서(isAnon=false) 값이 채워지지 않은 필드가 있는지 검사
         const isNameValid = isNameAnon || !!clientInputs.name.value.trim();
         const isDobValid = isDobAnon || !!clientInputs.dob.value.trim();
         const isPhoneValid = isPhoneAnon || !!clientInputs.phone.value.trim();
-        
+
         // 모든 필드가 유효해야 버튼 활성화
         const isValid = isNameValid && isDobValid && isPhoneValid;
         toConnectionScreenBtn.disabled = !isValid;
@@ -530,10 +543,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return; // ★ 절대 넘어가지 않음
             }
 
-        
+
             const isLogged = await ScanController.startLogTransaction(State.currentDeviceMode);
 
-            if(!isLogged) {
+            if (!isLogged) {
 
                 CustomUI.alert('서버 통신 오류로 검사를 시작할 수 없습니다. 네트워크를 연결해주세요.');
                 return;
@@ -568,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
         async startAndroidScan() {
             // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
             ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
-            
+
             let scanData = null;
             try {
                 // 실제 검사는 여기서 순식간에 끝냅니다. (데이터 확보용)
@@ -588,7 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 3. Theater Mode 진입 (설정된 시간동안 연기 시작)
             const apps = scanData.allApps || [];
             const totalApps = apps.length;
-            
+
             // 앱이 하나도 없는 경우(예외)는 바로 종료
             if (totalApps === 0) {
                 this.finishScan(scanData);
@@ -597,13 +610,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 시간 계산
             // 전체 목표 시간(밀리초)
-            const totalDurationMs = targetMinutes * 60 * 1000; 
-            
+            const totalDurationMs = targetMinutes * 60 * 1000;
+
             // 앱 하나당 보여줄 시간 (최소 0.1초 ~ 최대 제한 없음)
             // 예: 10분(600초) / 앱 100개 = 앱 하나당 6초씩 "분석중..." 표시
             const timePerApp = totalDurationMs / totalApps;
-            
-            console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp/1000).toFixed(2)}초 소요`);
+
+            console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp / 1000).toFixed(2)}초 소요`);
 
             let currentIndex = 0;
 
@@ -617,14 +630,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const app = apps[currentIndex];
                 const appName = Utils.formatAppName(app.packageName);
-                
+
                 // 진행률 계산 (현재 순번 / 전체 갯수)
                 // 100%는 finishScan에서 찍으므로 최대 99%까지만
                 const percent = Math.min(99, Math.floor(((currentIndex + 1) / totalApps) * 100));
 
                 // 화면 갱신: "카카오톡 - com.kakao.talk 정밀 해시 분석 중..."
                 ViewManager.updateProgress(
-                    percent, 
+                    percent,
                     `[${currentIndex + 1}/${totalApps}] ${appName} - ${app.packageName} 정밀 분석 중...`
                 );
 
@@ -647,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const userRef = doc(db, "users", user.uid);
                 const userSnap = await getDoc(userRef);
                 const userData = userSnap.exists() ? userSnap.data() : {};
-                
+
                 // 업체명 (DB에 없으면 이메일이나 기본값 사용)
                 const companyName = userData.companyName || userData.email || "Unknown Company";
 
@@ -669,7 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 생성된 로그 ID 저장 (나중에 완료 처리할 때 씀)
                 this.currentLogId = newLogRef.id;
-                
+
                 console.log(`[Log] 시작 로그 생성됨 (ID: ${newLogRef.id})`);
                 return true;
 
@@ -684,17 +697,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const logRef = doc(db, "scan_logs", this.currentLogId);
-                
+
                 await updateDoc(logRef, {
                     status: status,              // ★ 상태: completed 또는 error
                     endTime: serverTimestamp(),  // ★ 종료 시간
                     errorMessage: errorMessage   // 에러일 경우 사유 기록
                 });
-                
+
                 console.log(`[Log] 로그 업데이트 완료 (Status: ${status})`);
-                
+
                 // 초기화
-                this.currentLogId = null; 
+                this.currentLogId = null;
 
             } catch (e) {
                 console.error("로그 마무리에 실패했습니다:", e);
@@ -725,7 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 에러 발생 시 일단 진행시킬지 막을지 결정 (보통은 막거나, 에러 알림)
                 // 여기서는 네트워크 에러면 일단 false 처리하여 안전하게
                 await CustomUI.alert("서버 통신 오류로 횟수를 확인할 수 없습니다.");
-                return false; 
+                return false;
             }
         },
 
@@ -741,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        
+
 
         finishScan(data) {
             this.endLogTransaction('completed');
@@ -760,8 +773,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.endLogTransaction('error', error.message);
             const statusText = document.getElementById('scan-status-text');
             const statusBar = document.getElementById('progress-bar');
-            if(statusText) statusText.textContent = "오류: " + error.message;
-            if(statusBar) statusBar.style.backgroundColor = '#d9534f';
+            if (statusText) statusText.textContent = "오류: " + error.message;
+            if (statusBar) statusBar.style.backgroundColor = '#d9534f';
         }
     };
 
@@ -1169,18 +1182,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 2. UI 즉시 반영
         State.androidTargetMinutes = min;
-        
+
         adminSaveBtn.textContent = "저장 중...";
         adminSaveBtn.disabled = true;
 
         try {
             // ★★★ [수정됨] 공용 설정(settings/config)이 아니라 내 계정(users/uid)을 수정 ★★★
             const docRef = doc(db, "users", user.uid);
-            
+
             await updateDoc(docRef, {
                 android_scan_duration: min // 필드명 통일
             });
-            
+
             await CustomUI.alert(`${message}\n(서버 계정 정보에도 저장되었습니다)`);
             closeAdminModal();
 
@@ -1194,7 +1207,7 @@ document.addEventListener('DOMContentLoaded', () => {
             adminSaveBtn.disabled = false;
         }
     };
-    
+
     if (adminTriggers.length > 0 && adminModal) {
         console.log(`✅ 히든 메뉴 시스템 활성화됨`);
 
@@ -1314,20 +1327,20 @@ document.addEventListener('DOMContentLoaded', () => {
             li.className = 'nav-item';
             li.id = 'nav-admin';
             li.innerHTML = '🛡️ 관리자 페이지';
-            li.style.color = '#F0AD4E'; 
-            li.style.fontWeight = 'bold'; 
+            li.style.color = '#F0AD4E';
+            li.style.fontWeight = 'bold';
 
             li.addEventListener('click', () => {
                 ViewManager.activateMenu('nav-admin');
                 ViewManager.showScreen(document.getElementById('logged-in-view'), 'admin-screen');
                 // 기본적으로 첫 번째 탭(업체 등록) 보이기
-                this.switchTab('admin-tab-register'); 
+                this.switchTab('admin-tab-register');
             });
             navMenu.insertBefore(li, navMenu.firstChild);
 
             // 2. 관리자 내부 탭 전환 이벤트 연결
             const tabButtons = document.querySelectorAll('.admin-tab-btn');
-            
+
             tabButtons.forEach(btn => {
                 btn.addEventListener('click', () => {
                     const targetId = btn.dataset.target;
@@ -1339,7 +1352,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('admin-create-user-form').addEventListener('submit', (e) => this.createUser(e));
             document.getElementById('refresh-users-btn').addEventListener('click', () => this.loadUsers());
             document.getElementById('refresh-reports-btn').addEventListener('click', () => this.loadReports());
-            
+
             // 결과 모달 닫기
             document.getElementById('admin-result-close-btn').addEventListener('click', () => {
                 document.getElementById('admin-result-modal').classList.add('hidden');
@@ -1368,7 +1381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // [탭 1] 신규 업체 등록
         async createUser(e) {
             e.preventDefault();
-            
+
             // 1. 입력값 가져오기
             const nameInput = document.getElementById('new-user-name'); // 업체명 요소
             const idInput = document.getElementById('new-user-id');
@@ -1378,10 +1391,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const companyName = nameInput.value.trim(); // ★ 업체명
             const inputId = idInput.value.trim();
             const password = pwdInput.value;
-            
+
             // ★ 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
             let quota = parseInt(quotaInput.value, 10);
-            if (isNaN(quota)) quota = 40; 
+            if (isNaN(quota)) quota = 40;
 
             const fullEmail = inputId + ID_DOMAIN;
 
@@ -1390,8 +1403,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 보조 앱을 이용한 생성
             const secondaryAppName = "secondaryApp-" + Date.now();
-            const config = auth.app.options; 
-            
+            const config = auth.app.options;
+
             try {
                 const secondaryApp = initializeApp(config, secondaryAppName);
                 const secondaryAuth = getAuth(secondaryApp);
@@ -1412,12 +1425,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 await CustomUI.alert(`✅ 생성 완료!\n업체명: ${companyName}\n아이디: ${inputId}`);
-                
+
                 // 폼 초기화
                 document.getElementById('admin-create-user-form').reset();
                 // 초기화 후 기본값 40 다시 세팅
-                if(quotaInput) quotaInput.value = 40; 
-                
+                if (quotaInput) quotaInput.value = 40;
+
                 this.loadUsers(); // 목록 새로고침
 
             } catch (error) {
@@ -1426,7 +1439,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        // [탭 2] 업체 목록 로딩 (업체명 표시 추가)
         async loadUsers() {
             const tbody = document.getElementById('admin-user-list-body');
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">불러오는 중...</td></tr>';
@@ -1434,7 +1446,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
                 const querySnapshot = await getDocs(q);
-                
+
                 tbody.innerHTML = '';
                 if (querySnapshot.empty) {
                     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">등록된 업체가 없습니다.</td></tr>';
@@ -1443,49 +1455,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 querySnapshot.forEach((docSnap) => {
                     const user = docSnap.data();
-                    if (user.role === 'admin') return; 
+                    if (user.role === 'admin') return;
 
-                    const userId = user.userId || user.email.replace(ID_DOMAIN, ""); 
-                    
-                    // ★ [수정] 업체명이 있으면 같이 표시, 없으면 아이디만
-                    const displayName = user.companyName 
+                    const userId = user.userId || user.email.replace(ID_DOMAIN, "");
+
+                    const displayName = user.companyName
                         ? `<div style="font-weight:bold; font-size:15px;">${user.companyName}</div><div style="font-size:12px; color:#666;">ID: ${userId}</div>`
                         : `<div style="font-weight:bold; font-size:15px;">${userId}</div>`;
 
                     const row = document.createElement('tr');
-                    
-                    const statusBadge = user.isLocked 
-                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>` 
+
+                    const statusBadge = user.isLocked
+                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>`
                         : `<span class="admin-badge badge-active">✅ 활성</span>`;
 
-                    const lastScan = user.lastScanDate 
-                        ? new Date(user.lastScanDate.toDate()).toLocaleDateString() 
+                    const lastScan = user.lastScanDate
+                        ? new Date(user.lastScanDate.toDate()).toLocaleDateString()
                         : '<span style="color:#ccc;">기록 없음</span>';
 
-                    // ★ quota 값이 undefined면 0으로 표시
                     const userQuota = (user.quota !== undefined && user.quota !== null) ? user.quota : 0;
 
+                    // ★ 삭제 버튼에서 사용할 이름 (따옴표 문제 방지)
+                    const safeName = (user.companyName || userId).replace(/'/g, "");
+
+                    // ★ [수정] 마지막 td에 삭제 버튼 추가 (style로 빨간색 강조)
                     row.innerHTML = `
-                        <td>${displayName}</td>
-                        <td>${statusBadge}</td>
-                        <td><strong style="font-size:16px; color:#3A539B;">${userQuota}</strong> 회</td>
-                        <td>${lastScan}</td>
-                        <td>
-                            <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${userQuota})">횟수조정</button>
-                            ${user.isLocked 
-                                ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">해제</button>` 
-                                : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">잠금</button>`
-                            }
-                            <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">기록보기</button>
-                        </td>
-                    `;
+                    <td>${displayName}</td>
+                    <td>${statusBadge}</td>
+                    <td><strong style="font-size:16px; color:#3A539B;">${userQuota}</strong> 회</td>
+                    <td>${lastScan}</td>
+                    <td>
+                        <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${userQuota})">횟수</button>
+                        ${user.isLocked
+                            ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">해제</button>`
+                            : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">잠금</button>`
+                        }
+                        <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">기록</button>
+                        <button class="control-btn" style="background-color:#d9534f; color:white; margin-left:4px;" onclick="window.deleteUser('${docSnap.id}', '${safeName}')">삭제</button>
+                    </td>
+                `;
                     tbody.appendChild(row);
                 });
             } catch (error) {
                 tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 에러: ${error.message}</td></tr>`;
             }
         },
-
         // [탭 3] 전송된 리포트 로딩 (신규 기능)
         async loadReports() {
             const tbody = document.getElementById('admin-reports-body');
@@ -1534,7 +1548,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 여기서는 간단히 알림으로 대체하거나 기존 결과 모달을 재활용할 수 있음
         const docRef = doc(db, "reported_logs", reportId);
         const docSnap = await getDoc(docRef);
-        if(docSnap.exists()) {
+        if (docSnap.exists()) {
             const data = docSnap.data();
             // 데이터를 가공해서 admin-result-modal에 띄워주면 됩니다.
             const modal = document.getElementById('admin-result-modal');
@@ -1609,6 +1623,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e) {
             content.innerHTML = `<p style="color:red;">기록 조회 실패: ${e.message}</p>`;
+        }
+    };
+
+    window.deleteUser = async (uid, name) => {
+        const msg = `⚠️ [삭제 경고]\n\n업체명: ${name}\n\n정말로 삭제하시겠습니까?\n삭제된 업체는 더 이상 로그인할 수 없으며, 모든 데이터가 제거됩니다.`;
+
+        // confirm 창 띄우기
+        if (!await CustomUI.confirm(msg)) return;
+
+        try {
+            // 1. Firestore 문서 삭제
+            // (import { deleteDoc, doc } ... 가 되어 있어야 함)
+            await deleteDoc(doc(db, "users", uid));
+
+            // 2. 알림 및 새로고침
+            await CustomUI.alert("🗑️ 업체가 삭제되었습니다.");
+            AdminManager.loadUsers();
+
+        } catch (e) {
+            console.error("삭제 실패:", e);
+            await CustomUI.alert("삭제 실패: " + e.message);
         }
     };
 });
