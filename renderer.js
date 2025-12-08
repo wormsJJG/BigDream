@@ -2,8 +2,9 @@
 // BD (Big Dream) Security Solution - Renderer Process
 import { auth, db } from './firebaseConfig.js';
 import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { startTransition } from 'react';
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
@@ -457,6 +458,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const realStartScanBtn = document.getElementById('real-start-scan-btn');
     if (realStartScanBtn) {
         realStartScanBtn.addEventListener('click', async () => {
+
+
+            const hasQuota = await ScanController.checkQuota();
+
+            if (!hasQuota) {
+                // 횟수 부족 시: 기기 연결 화면 유지 및 폴링 중단
+                DeviceManager.stopPolling();
+                ViewManager.showScreen(loggedInView, 'device-connection-screen');
+                return; // ★ 절대 넘어가지 않음
+            }
+
+        
+            const isLogged = await ScanController.startLogTransaction(State.currentDeviceMode);
+
+            if(!isLogged) {
+
+                CustomUI.alert('서버 통신 오류로 검사를 시작할 수 없습니다. 네트워크를 연결해주세요.');
+                return;
+            }
+
             DeviceManager.stopPolling();
 
             document.getElementById('nav-create').classList.add('hidden');
@@ -480,6 +501,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const ScanController = {
+
+        currentLogId: null,
         // ★★★ [수정됨] 실제 앱 목록을 활용한 정밀 검사 연출 ★★★
         async startAndroidScan() {
             // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
@@ -554,6 +577,97 @@ document.addEventListener('DOMContentLoaded', () => {
             processNextApp();
         },
 
+        async startLogTransaction(deviceMode) {
+            const user = auth.currentUser;
+            if (!user) return false;
+
+            try {
+                // 1. 유저 정보 가져오기 (업체명 확인용)
+                const userRef = doc(db, "users", user.uid);
+                const userSnap = await getDoc(userRef);
+                const userData = userSnap.exists() ? userSnap.data() : {};
+                
+                // 업체명 (DB에 없으면 이메일이나 기본값 사용)
+                const companyName = userData.companyName || userData.email || "Unknown Company";
+
+                // 2. 쿼터 차감 & 로그 생성 병렬 처리
+                // (batch를 쓰면 더 안전하지만, 편의상 순차 처리)
+                await updateDoc(userRef, {
+                    quota: increment(-1)
+                });
+
+                const newLogRef = await addDoc(collection(db, "scan_logs"), {
+                    userId: user.uid,
+                    companyName: companyName,     // ★ 요청하신 업체명
+                    deviceMode: deviceMode,
+                    startTime: serverTimestamp(), // ★ 시작 시간
+                    endTime: null,
+                    status: 'started',            // ★ 상태: 시작됨
+                    resultSummary: null
+                });
+
+                // 생성된 로그 ID 저장 (나중에 완료 처리할 때 씀)
+                this.currentLogId = newLogRef.id;
+                
+                console.log(`[Log] 시작 로그 생성됨 (ID: ${newLogRef.id})`);
+                return true;
+
+            } catch (e) {
+                console.error("로그 생성 또는 차감 실패:", e);
+                return false;
+            }
+        },
+
+        async endLogTransaction(status, errorMessage = null) {
+            if (!this.currentLogId) return; // 시작 로그가 없으면 무시
+
+            try {
+                const logRef = doc(db, "scan_logs", this.currentLogId);
+                
+                await updateDoc(logRef, {
+                    status: status,              // ★ 상태: completed 또는 error
+                    endTime: serverTimestamp(),  // ★ 종료 시간
+                    errorMessage: errorMessage   // 에러일 경우 사유 기록
+                });
+                
+                console.log(`[Log] 로그 업데이트 완료 (Status: ${status})`);
+                
+                // 초기화
+                this.currentLogId = null; 
+
+            } catch (e) {
+                console.error("로그 마무리에 실패했습니다:", e);
+            }
+        },
+
+        async checkQuota() {
+            // 관리자면 무사통과
+            if (State.userRole === 'admin') return true;
+
+            try {
+                const user = auth.currentUser;
+                if (!user) return false;
+
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    const currentQuota = userData.quota || 0;
+
+                    if (currentQuota <= 0) {
+                        await CustomUI.alert("🚫 잔여 검사 횟수가 부족합니다.\n관리자에게 충전을 문의하세요.");
+                        return false; // 횟수 부족
+                    }
+                }
+                return true; // 횟수 충분함
+            } catch (e) {
+                console.error("횟수 조회 실패:", e);
+                // 에러 발생 시 일단 진행시킬지 막을지 결정 (보통은 막거나, 에러 알림)
+                // 여기서는 네트워크 에러면 일단 false 처리하여 안전하게
+                await CustomUI.alert("서버 통신 오류로 횟수를 확인할 수 없습니다.");
+                return false; 
+            }
+        },
+
         async startIosScan() {
             ViewManager.updateProgress(5, "아이폰 백업 준비 중... (시간이 소요됩니다)");
             try {
@@ -566,7 +680,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
+        
+
         finishScan(data) {
+            this.endLogTransaction('completed');
             ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
             State.lastScanData = data;
             window.lastScanData = data;
@@ -579,6 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         handleError(error) {
             console.error(error);
+            this.endLogTransaction('error', error.message);
             const statusText = document.getElementById('scan-status-text');
             const statusBar = document.getElementById('progress-bar');
             if(statusText) statusText.textContent = "오류: " + error.message;
@@ -1024,18 +1142,18 @@ document.addEventListener('DOMContentLoaded', () => {
             trigger.style.userSelect = 'none';
             trigger.style.cursor = 'default';
 
-            trigger.addEventListener('dblclick', () => {
+            trigger.addEventListener('dblclick', async () => {
                 // 로그인 & 상태 체크 (기존과 동일)
                 const loggedInView = document.getElementById('logged-in-view');
                 if (!loggedInView.classList.contains('active')) return;
 
                 const progressScreen = document.getElementById('scan-progress-screen');
                 if (progressScreen && progressScreen.classList.contains('active')) {
-                    alert("🚫 검사 중에는 변경 불가"); return;
+                    await CustomUI.alert("🚫 검사 중에는 변경 불가"); return;
                 }
                 const resultScreen = document.getElementById('scan-results-screen');
                 if (resultScreen && resultScreen.classList.contains('active')) {
-                    alert("🚫 결과 화면에서는 변경 불가"); return;
+                    await CustomUI.alert("🚫 결과 화면에서는 변경 불가"); return;
                 }
 
                 // 현재 값 채우기
