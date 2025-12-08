@@ -150,6 +150,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return 'user';
             }
         } catch (e) {
+
+            if (e.message === "LOCKED_ACCOUNT") {
+                throw e; 
+            }
+
             console.error("권한 확인 실패:", e);
             return 'user'; // 에러 나면 안전하게 일반 유저로
         }
@@ -230,12 +235,15 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error(error);
                 if (error.message === "LOCKED_ACCOUNT") {
-                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다.";
-                    await signOut(auth); // 강제 로그아웃
-                    return;
+                    await CustomUI.alert("🚫 관리자에 의해 이용이 정지된 계정입니다.\n(문의: 010-8119-1837)");
+                    await signOut(auth); // Firebase 세션도 즉시 로그아웃
+                    errorMsg.textContent = ""; // 로딩 메시지 지움
+                    return; // 함수 종료 (화면 전환 안 함)
                 }
+
+                // 기존 에러 처리
                 if (error.code === 'auth/invalid-credential') {
-                    errorMsg.textContent = "이메일 또는 비밀번호가 잘못되었습니다.";
+                    errorMsg.textContent = "아이디 또는 비밀번호가 잘못되었습니다.";
                 } else {
                     errorMsg.textContent = "로그인 오류: " + error.code;
                 }
