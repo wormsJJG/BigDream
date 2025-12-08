@@ -163,24 +163,40 @@ document.addEventListener('DOMContentLoaded', () => {
     //  Firestore에서 시간 설정 가져오기 함수
     async function fetchScanSettings() {
         try {
-            console.log("📥 서버에서 설정값 불러오는 중...");
-            const docRef = doc(db, "settings", "config"); // settings 컬렉션의 config 문서
+            // 1. 현재 로그인한 유저 정보 가져오기
+            const user = auth.currentUser;
+            
+            // (혹시 로그인이 안 된 상태라면 함수 종료)
+            if (!user) {
+                console.log("⚠️ 로그인 정보가 없어 설정을 불러올 수 없습니다.");
+                return;
+            }
+
+            console.log(`📥 [${user.uid}] 계정의 설정값 불러오는 중...`);
+
+            // 2. 공용 설정(settings/config) 대신 '내 유저 문서(users/uid)' 참조
+            const docRef = doc(db, "users", user.uid); 
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                // DB 필드명: android_scan_duration
+                
+                // 3. 저장된 시간 값 가져오기 (없으면 0)
+                // 필드명: android_scan_duration (아까 통일한 이름)
                 State.androidTargetMinutes = data.android_scan_duration || 0;
-                console.log(`✅ 설정 로드 완료: ${State.androidTargetMinutes}분`);
+                
+                console.log(`✅ 설정 로드 완료: 안드로이드 검사 시간 [${State.androidTargetMinutes}분]`);
             } else {
-                console.log("⚠️ 설정 문서가 존재하지 않음 (기본값 0분 사용)");
+                console.log("⚠️ 유저 문서가 존재하지 않습니다. (기본값 0분 사용)");
                 State.androidTargetMinutes = 0;
             }
         } catch (error) {
             console.error("❌ 설정 불러오기 실패:", error);
-            // 실패해도 앱은 작동해야 하므로 기본값 유지
+            // 에러 나도 앱이 멈추지 않게 기본값 0 유지
+            State.androidTargetMinutes = 0;
         }
     }
+    
     // 로그인 처리
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -896,7 +912,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const min = parseInt(val, 10);
         let message = "";
 
-        // 유효성 검사
         if (min === 0) {
             message = "설정 해제: 즉시 완료 모드";
         } else if (min < 10 || min > 60) {
@@ -906,30 +921,41 @@ document.addEventListener('DOMContentLoaded', () => {
             message = `✅ 설정됨: 안드로이드 검사 시간 [${min}분]`;
         }
 
-        // 1. UI 반영 (즉시)
-        State.androidTargetMinutes = min;
+        // 1. 현재 로그인한 유저 확인
+        const user = auth.currentUser;
+        if (!user) {
+            await CustomUI.alert("오류: 로그인 정보를 찾을 수 없습니다.");
+            return;
+        }
 
-        // 2. Firestore 저장 (비동기)
+        // 2. UI 즉시 반영
+        State.androidTargetMinutes = min;
+        
         adminSaveBtn.textContent = "저장 중...";
         adminSaveBtn.disabled = true;
 
         try {
-            const docRef = doc(db, "settings", "config");
+            // ★★★ [수정됨] 공용 설정(settings/config)이 아니라 내 계정(users/uid)을 수정 ★★★
+            const docRef = doc(db, "users", user.uid);
+            
             await updateDoc(docRef, {
-                android_scan_duration: min
+                android_scan_duration: min // 필드명 통일
             });
-            await CustomUI.alert(`${message}\n(서버에도 저장되었습니다)`);
+            
+            await CustomUI.alert(`${message}\n(서버 계정 정보에도 저장되었습니다)`);
             closeAdminModal();
+
         } catch (error) {
             console.error("저장 실패:", error);
-            await CustomUI.alert(`⚠️ 로컬에는 적용되었으나 서버 저장에 실패했습니다.\n오류: ${error.message}`);
+            // 만약 문서가 없어서 에러가 나면 setDoc으로 시도하거나 알림
+            await CustomUI.alert(`⚠️ 저장 실패: ${error.message}`);
             closeAdminModal();
         } finally {
             adminSaveBtn.textContent = "저장";
             adminSaveBtn.disabled = false;
         }
     };
-
+    
     if (adminTriggers.length > 0 && adminModal) {
         console.log(`✅ 히든 메뉴 시스템 활성화됨`);
 
@@ -1036,149 +1062,253 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     const AdminManager = {
         init() {
-            // ★★★ [수정됨] 로그인 후 화면(#logged-in-view) 안에 있는 메뉴만 찾습니다. ★★★
+            console.log("🚀 AdminManager.init() 시작됨!");
+
             const loggedInContainer = document.getElementById('logged-in-view');
             const navMenu = loggedInContainer.querySelector('.nav-menu');
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
-            if (!navMenu) {
-                console.error("❌ 오류: 로그인 화면 내의 .nav-menu를 찾을 수 없습니다!");
-                return;
-            }
+            if (!navMenu) return console.error("❌ nav-menu 없음");
+            if (loggedInContainer.querySelector('#nav-admin')) return;
 
-            // 이미 버튼이 있는지 확인 (중복 생성 방지)
-            if (loggedInContainer.querySelector('#nav-admin')) {
-                console.log("⚠️ 이미 관리자 버튼이 존재합니다.");
-                return;
-            }
-
-            // 버튼 생성 로직
-            console.log("✨ 관리자 버튼 생성 중...");
+            // 1. 메인 사이드바에 '관리자 페이지' 버튼 생성
             const li = document.createElement('li');
             li.className = 'nav-item';
             li.id = 'nav-admin';
-
-            // 스타일 강조
             li.innerHTML = '🛡️ 관리자 페이지';
-            li.style.color = '#F0AD4E';
-            li.style.fontWeight = 'bold';
+            li.style.color = '#F0AD4E'; 
+            li.style.fontWeight = 'bold'; 
 
             li.addEventListener('click', () => {
                 ViewManager.activateMenu('nav-admin');
                 ViewManager.showScreen(document.getElementById('logged-in-view'), 'admin-screen');
-                this.loadUsers();
+                // 기본적으로 첫 번째 탭(업체 등록) 보이기
+                this.switchTab('admin-tab-register'); 
             });
-
-            // 메뉴의 맨 앞에 추가 (검사생성 위)
             navMenu.insertBefore(li, navMenu.firstChild);
 
-            console.log("✅ 관리자 버튼 추가 완료! (로그인 화면)");
+            // 2. 관리자 내부 탭 전환 이벤트 연결
+            const tabButtons = document.querySelectorAll('.admin-tab-btn');
+            
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.target;
+                    this.switchTab(targetId);
+                });
+            });
 
-            // 이벤트 리스너들 (기존과 동일)
-            const refreshBtn = document.getElementById('refresh-users-btn');
-            if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
-
-            const createForm = document.getElementById('admin-create-user-form');
-            if (createForm) createForm.addEventListener('submit', (e) => this.createUser(e));
-
-            const closeBtn = document.getElementById('admin-result-close-btn');
-            if (closeBtn) closeBtn.addEventListener('click', () => {
+            // 3. 각 탭 내부 버튼 이벤트 연결
+            document.getElementById('admin-create-user-form').addEventListener('submit', (e) => this.createUser(e));
+            document.getElementById('refresh-users-btn').addEventListener('click', () => this.loadUsers());
+            document.getElementById('refresh-reports-btn').addEventListener('click', () => this.loadReports());
+            
+            // 결과 모달 닫기
+            document.getElementById('admin-result-close-btn').addEventListener('click', () => {
                 document.getElementById('admin-result-modal').classList.add('hidden');
             });
         },
 
-        // 1. 업체 목록 불러오기 (도메인 떼고 보여주기)
+        // ★ 탭 전환 함수
+        switchTab(tabId) {
+            // 탭 버튼 활성화 UI 처리
+            document.querySelectorAll('.admin-tab-btn').forEach(item => {
+                if (item.dataset.target === tabId) item.classList.add('active');
+                else item.classList.remove('active');
+            });
+
+            // 내용 콘텐츠 보이기/숨기기
+            document.querySelectorAll('.admin-tab-content').forEach(content => {
+                if (content.id === tabId) content.classList.add('active');
+                else content.classList.remove('active');
+            });
+
+            // 데이터 로딩
+            if (tabId === 'admin-tab-list') this.loadUsers();
+            if (tabId === 'admin-tab-reports') this.loadReports();
+        },
+
+        // [탭 1] 신규 업체 등록
+        async createUser(e) {
+            e.preventDefault();
+            
+            // 1. 입력값 가져오기
+            const nameInput = document.getElementById('new-user-name'); // 업체명 요소
+            const idInput = document.getElementById('new-user-id');
+            const pwdInput = document.getElementById('new-user-pwd');
+            const quotaInput = document.getElementById('new-user-quota');
+
+            const companyName = nameInput.value.trim(); // ★ 업체명
+            const inputId = idInput.value.trim();
+            const password = pwdInput.value;
+            
+            // ★ 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
+            let quota = parseInt(quotaInput.value, 10);
+            if (isNaN(quota)) quota = 40; 
+
+            const fullEmail = inputId + ID_DOMAIN;
+
+            // 확인창
+            if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n기본 횟수: ${quota}회`)) return;
+
+            // 보조 앱을 이용한 생성
+            const secondaryAppName = "secondaryApp-" + Date.now();
+            const config = auth.app.options; 
+            
+            try {
+                const secondaryApp = initializeApp(config, secondaryAppName);
+                const secondaryAuth = getAuth(secondaryApp);
+                const userCred = await createUserWithEmailAndPassword(secondaryAuth, fullEmail, password);
+                const newUser = userCred.user;
+
+                // ★★★ [수정됨] Firestore에 업체명과 횟수 저장 ★★★
+                await setDoc(doc(db, "users", newUser.uid), {
+                    companyName: companyName, // [추가] 업체명
+                    userId: inputId,          // 아이디
+                    email: fullEmail,         // 이메일(풀버전)
+                    role: 'user',             // 권한
+                    isLocked: false,          // 잠금여부
+                    quota: quota,             // [확인] 검사 횟수 저장
+                    android_scan_duration: 0,
+                    createdAt: new Date(),
+                    lastScanDate: null
+                });
+
+                await CustomUI.alert(`✅ 생성 완료!\n업체명: ${companyName}\n아이디: ${inputId}`);
+                
+                // 폼 초기화
+                document.getElementById('admin-create-user-form').reset();
+                // 초기화 후 기본값 40 다시 세팅
+                if(quotaInput) quotaInput.value = 40; 
+                
+                this.loadUsers(); // 목록 새로고침
+
+            } catch (error) {
+                console.error(error);
+                await CustomUI.alert("생성 실패: " + error.message);
+            }
+        },
+
+        // [탭 2] 업체 목록 로딩 (업체명 표시 추가)
         async loadUsers() {
             const tbody = document.getElementById('admin-user-list-body');
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">데이터 불러오는 중...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">불러오는 중...</td></tr>';
 
             try {
                 const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
                 const querySnapshot = await getDocs(q);
-
+                
                 tbody.innerHTML = '';
+                if (querySnapshot.empty) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">등록된 업체가 없습니다.</td></tr>';
+                    return;
+                }
 
                 querySnapshot.forEach((docSnap) => {
                     const user = docSnap.data();
+                    if (user.role === 'admin') return; 
 
-                    // ★ 수정됨: 이메일에서 도메인(@bd.com) 제거하여 순수 아이디만 추출
-                    const rawEmail = user.email || "";
-                    const userId = rawEmail.replace(ID_DOMAIN, "");
+                    const userId = user.userId || user.email.replace(ID_DOMAIN, ""); 
+                    
+                    // ★ [수정] 업체명이 있으면 같이 표시, 없으면 아이디만
+                    const displayName = user.companyName 
+                        ? `<div style="font-weight:bold; font-size:15px;">${user.companyName}</div><div style="font-size:12px; color:#666;">ID: ${userId}</div>`
+                        : `<div style="font-weight:bold; font-size:15px;">${userId}</div>`;
 
                     const row = document.createElement('tr');
-                    const statusBadge = user.isLocked
-                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>`
+                    
+                    const statusBadge = user.isLocked 
+                        ? `<span class="admin-badge badge-locked">🔒 잠김</span>` 
                         : `<span class="admin-badge badge-active">✅ 활성</span>`;
 
+                    const lastScan = user.lastScanDate 
+                        ? new Date(user.lastScanDate.toDate()).toLocaleDateString() 
+                        : '<span style="color:#ccc;">기록 없음</span>';
+
+                    // ★ quota 값이 undefined면 0으로 표시
+                    const userQuota = (user.quota !== undefined && user.quota !== null) ? user.quota : 0;
+
                     row.innerHTML = `
-                        <td><b>${userId}</b><br><span style="font-size:11px; color:#888;">(UID: ${docSnap.id.substring(0, 6)}...)</span></td>
+                        <td>${displayName}</td>
                         <td>${statusBadge}</td>
-                        <td><b>${user.quota || 0}</b> 회</td>
-                        <td>${user.lastScanDate ? new Date(user.lastScanDate.toDate()).toLocaleDateString() : '-'}</td>
+                        <td><strong style="font-size:16px; color:#3A539B;">${userQuota}</strong> 회</td>
+                        <td>${lastScan}</td>
                         <td>
-                            <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${user.quota || 0})">➕/➖</button>
-                            ${user.isLocked
-                            ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">🔓 해제</button>`
-                            : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">🔒 잠금</button>`
-                        }
-                            <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">📜 기록</button>
+                            <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${userQuota})">횟수조정</button>
+                            ${user.isLocked 
+                                ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">해제</button>` 
+                                : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">잠금</button>`
+                            }
+                            <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">기록보기</button>
                         </td>
                     `;
                     tbody.appendChild(row);
                 });
             } catch (error) {
-                console.error("유저 로딩 실패:", error);
-                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 실패: ${error.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 에러: ${error.message}</td></tr>`;
             }
         },
 
-        // 2. 신규 업체 등록 (아이디 + 도메인 결합)
-        async createUser(e) {
-            e.preventDefault();
-
-            // ★ HTML ID 변경 주의: index.html에서 id="new-user-id"로 바꿨다면 여기도 맞춰야 함
-            // 만약 index.html을 안 바꿨으면 'new-user-email' 그대로 사용
-            const inputElement = document.getElementById('new-user-id') || document.getElementById('new-user-email');
-            const inputId = inputElement.value.trim();
-            const password = document.getElementById('new-user-pwd').value;
-            const quota = parseInt(document.getElementById('new-user-quota').value, 10);
-
-            // ★ 수정됨: 아이디 + 도메인 결합
-            const fullEmail = inputId + ID_DOMAIN;
-
-            if (!await CustomUI.confirm(`[확인] 다음 계정을 생성합니까?\nID: ${inputId} (실제: ${fullEmail})\n기본 횟수: ${quota}`)) return;
-            const secondaryAppName = "secondaryApp-" + Date.now();
-            const config = auth.app.options;
+        // [탭 3] 전송된 리포트 로딩 (신규 기능)
+        async loadReports() {
+            const tbody = document.getElementById('admin-reports-body');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">데이터 조회 중...</td></tr>';
 
             try {
-                const secondaryApp = initializeApp(config, secondaryAppName);
-                const secondaryAuth = getAuth(secondaryApp);
+                // 'reported_logs' 컬렉션에서 데이터 가져오기 (가정)
+                const q = query(collection(db, "reported_logs"), orderBy("reportedAt", "desc"));
+                const querySnapshot = await getDocs(q);
 
-                // 생성은 fullEmail로 진행
-                const userCred = await createUserWithEmailAndPassword(secondaryAuth, fullEmail, password);
-                const newUser = userCred.user;
+                tbody.innerHTML = '';
+                if (querySnapshot.empty) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#999;">전송된 기록이 없습니다.</td></tr>';
+                    return;
+                }
 
-                await setDoc(doc(db, "users", newUser.uid), {
-                    email: fullEmail, // DB에는 풀 이메일 저장 (관리 차원)
-                    userId: inputId,  // ★ 편의를 위해 순수 ID도 별도 저장
-                    role: 'user',
-                    isLocked: false,
-                    quota: quota,
-                    createdAt: new Date(),
-                    lastScanDate: null
+                querySnapshot.forEach((docSnap) => {
+                    const report = docSnap.data();
+                    const date = report.reportedAt ? new Date(report.reportedAt.toDate()).toLocaleString() : '-';
+                    const row = document.createElement('tr');
+
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td><b>${report.agencyId}</b></td>
+                        <td>${report.message || '내용 없음'}</td>
+                        <td>
+                            위협: <b style="color:red;">${report.threatCount}</b>건<br>
+                            <span style="font-size:11px; color:#666;">${report.deviceModel}</span>
+                        </td>
+                        <td>
+                            <button class="control-btn" onclick="window.viewReportDetail('${docSnap.id}')">상세보기</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
                 });
 
-                await CustomUI.alert(`✅ 업체 생성 완료!\n아이디: ${inputId}`);
-                document.getElementById('admin-create-user-form').reset();
-                this.loadUsers();
-
             } catch (error) {
-                console.error("계정 생성 실패:", error);
-                await CustomUI.alert("계정 생성 실패: " + error.message);
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 실패: ${error.message}</td></tr>`;
             }
         }
     };
 
+    // [전역 함수] 전송된 리포트 상세보기 (임시)
+    window.viewReportDetail = async (reportId) => {
+        // 실제로는 DB에서 해당 리포트의 상세 데이터를 가져와서 모달에 띄워야 함
+        // 여기서는 간단히 알림으로 대체하거나 기존 결과 모달을 재활용할 수 있음
+        const docRef = doc(db, "reported_logs", reportId);
+        const docSnap = await getDoc(docRef);
+        if(docSnap.exists()) {
+            const data = docSnap.data();
+            // 데이터를 가공해서 admin-result-modal에 띄워주면 됩니다.
+            const modal = document.getElementById('admin-result-modal');
+            const content = document.getElementById('admin-result-content');
+            modal.classList.remove('hidden');
+            content.innerHTML = `
+                <h4>[${data.agencyId}] 님이 전송한 리포트</h4>
+                <p><b>메시지:</b> ${data.message}</p>
+                <hr>
+                <p><b>탐지된 위협:</b> ${JSON.stringify(data.suspiciousApps, null, 2)}</p>
+            `;
+        }
+    };
     // [전역 함수 노출] HTML onclick에서 호출하기 위해 window에 등록
     window.toggleLock = async (uid, shouldLock) => {
         if (!await CustomUI.confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return; try {

@@ -216,49 +216,105 @@
             </section>
 
             <div id="admin-screen" class="screen">
-                <h2 style="border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px;">
-                    🛡️ 관리자 대시보드
-                </h2>
-                <div class="content-card" style="margin-top: 0; margin-bottom: 30px;">
-                    <h3>➕ 신규 업체 등록</h3>
-                    <form id="admin-create-user-form" style="display: flex; gap: 10px; align-items: flex-end;">
-                        <div style="flex: 1;">
-                            <label style="display:block; font-size:12px; margin-bottom:5px;">업체 아이디 (ID)</label>
-                            <input type="text" id="new-user-id" placeholder="예: company01" required style="width:100%; padding:8px;">
-                        </div>
-                        <div style="flex: 1;">
-                            <label style="display:block; font-size:12px; margin-bottom:5px;">비밀번호</label>
-                            <input type="text" id="new-user-pwd" placeholder="초기 비밀번호" required style="width:100%; padding:8px;">
-                        </div>
-                        <div style="width: 100px;">
-                            <label style="display:block; font-size:12px; margin-bottom:5px;">기본 횟수</label>
-                            <input type="number" id="new-user-quota" value="40" style="width:100%; padding:8px;">
-                        </div>
-                        <button type="submit" class="primary-button" style="padding: 9px 20px;">등록</button>
-                    </form>
+                
+                <div class="admin-top-header">
+                    <h2 style="margin: 0;">🛡️ 관리자 대시보드</h2>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">
+                        업체 관리 및 검사 리포트 조회 시스템
+                    </p>
                 </div>
-                <div class="content-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                        <h3>🏢 등록된 업체 목록</h3>
-                        <button id="refresh-users-btn" class="secondary-button">🔄 새로고침</button>
+
+                <div class="admin-tabs">
+                    <button class="admin-tab-btn active" data-target="admin-tab-register">
+                        ➕ 업체 등록
+                    </button>
+                    <button class="admin-tab-btn" data-target="admin-tab-list">
+                        🏢 업체 목록
+                    </button>
+                    <button class="admin-tab-btn" data-target="admin-tab-reports">
+                        📩 전송된 기록
+                    </button>
+                </div>
+
+                <div class="admin-content-area">
+                    
+                    <div id="admin-tab-register" class="admin-tab-content active">
+                        <div class="content-card">
+                            <h3>신규 업체 계정 생성</h3>
+                            <p style="margin-bottom: 20px; color: #666;">
+                                파트너 업체의 정보를 입력하여 계정을 생성합니다.
+                            </p>
+                            <form id="admin-create-user-form">
+                                <div class="form-group">
+                                    <label>업체명 (Company Name)</label>
+                                    <input type="text" id="new-user-name" placeholder="예: 빅드림 시큐리티" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>업체 아이디 (ID)</label>
+                                    <input type="text" id="new-user-id" placeholder="예: agency_seoul" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>초기 비밀번호</label>
+                                    <input type="text" id="new-user-pwd" placeholder="비밀번호 입력" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>기본 검사 횟수 (Quota)</label>
+                                    <input type="number" id="new-user-quota" value="40" style="width: 150px;">
+                                </div>
+                                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                                    <button type="submit" class="primary-button" style="width: 200px;">계정 생성하기</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>업체명(ID)</th>
-                                <th>상태</th>
-                                <th>남은 횟수</th>
-                                <th>최근 검사</th>
-                                <th>기능 제어</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-user-list-body"></tbody>
-                    </table>
+
+                    <div id="admin-tab-list" class="admin-tab-content">
+                        <div class="content-card">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                                <h3>등록된 업체 현황</h3>
+                                <button id="refresh-users-btn" class="secondary-button">🔄 새로고침</button>
+                            </div>
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>업체명 (ID)</th>
+                                        <th>상태</th>
+                                        <th>잔여 횟수</th>
+                                        <th>최근 접속/검사</th>
+                                        <th>기능 제어</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-user-list-body">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="admin-tab-reports" class="admin-tab-content">
+                        <div class="content-card">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                                <h3>전송된 리포트 목록</h3>
+                                <button id="refresh-reports-btn" class="secondary-button">🔄 새로고침</button>
+                            </div>
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th width="15%">전송 일시</th>
+                                        <th width="15%">업체명</th>
+                                        <th>메시지/사유</th>
+                                        <th width="15%">검사 결과</th>
+                                        <th width="10%">보기</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-reports-body">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                 </div>
             </div>
-            </main>
-    </div>
-
     <link rel="stylesheet" href="print.css" media="print">
     <div id="printable-report" style="display: none;">
         </div>
