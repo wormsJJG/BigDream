@@ -397,16 +397,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (clientInfoForm) {
-        // 입력 감지 (버튼 활성화)
-        clientInfoForm.addEventListener('input', () => {
-            const isFilled = clientInputs.name.value && clientInputs.dob.value && clientInputs.phone.value;
-            toConnectionScreenBtn.disabled = !isFilled;
-        });
+        // 입력 감지 (버튼 활성화) - 익명 기능을 고려하여 checkFormValidity 함수 사용
+        clientInfoForm.addEventListener('input', checkFormValidity);
 
         // 초기화 버튼
         document.getElementById('reset-client-info-btn').addEventListener('click', () => {
-            Object.values(clientInputs).forEach(input => input.value = '');
-            toConnectionScreenBtn.disabled = true;
+            // 1. 모든 입력 필드 초기화 및 활성화
+            Object.values(clientInputs).forEach(input => {
+                input.value = '';
+                input.disabled = false; // 익명 체크로 비활성화되었을 경우를 위해 활성화
+            });
+
+            // 2. ★★★익명 체크박스 해제★★★
+            Object.values(anonChecks).forEach(check => {
+                if (check) check.checked = false;
+            });
+
+            // 3. 유효성 검사 함수 호출 (버튼 비활성화 상태 업데이트)
+            checkFormValidity();
         });
 
         // 폼 제출 -> 연결 화면 이동
