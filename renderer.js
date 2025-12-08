@@ -322,6 +322,67 @@ document.addEventListener('DOMContentLoaded', () => {
         phone: document.getElementById('client-phone')
     };
 
+    // DOM 참조 캐싱 (익명 기능 추가)
+    const anonChecks = {
+        name: document.getElementById('anon-name'),
+        dob: document.getElementById('anon-dob'),
+        phone: document.getElementById('anon-phone')
+    };
+
+    const anonValues = {
+        name: '익명 사용자',
+        dob: '0001-01-01',
+        phone: '000-0000-0000'
+    };
+
+    // 개별 익명 처리 함수
+    function setupAnonToggle(key) {
+        const inputEl = clientInputs[key];
+        const checkEl = anonChecks[key];
+        const anonValue = anonValues[key];
+
+        if (!checkEl || !inputEl) return;
+
+        checkEl.addEventListener('change', () => {
+            const isAnonymous = checkEl.checked;
+            
+            if (isAnonymous) {
+                // 익명 모드: 값 채우고, 비활성화 (disabled)
+                inputEl.value = anonValue;
+                inputEl.disabled = true;
+            } else {
+                // 일반 모드: 값 비우고, 활성화
+                inputEl.value = '';
+                inputEl.disabled = false;
+            }
+            
+            // 익명 상태 변경 시마다 전체 폼 유효성 재검사
+            checkFormValidity(); 
+        });
+    }
+
+    // 모든 필드에 익명 처리 로직 적용
+    setupAnonToggle('name');
+    setupAnonToggle('dob');
+    setupAnonToggle('phone');
+
+
+    // 유효성 검사 함수 (새로 정의)
+    function checkFormValidity() {
+        const isNameAnon = anonChecks.name && anonChecks.name.checked;
+        const isDobAnon = anonChecks.dob && anonChecks.dob.checked;
+        const isPhoneAnon = anonChecks.phone && anonChecks.phone.checked;
+        
+        // 익명이 아니면서(isAnon=false) 값이 채워지지 않은 필드가 있는지 검사
+        const isNameValid = isNameAnon || !!clientInputs.name.value.trim();
+        const isDobValid = isDobAnon || !!clientInputs.dob.value.trim();
+        const isPhoneValid = isPhoneAnon || !!clientInputs.phone.value.trim();
+        
+        // 모든 필드가 유효해야 버튼 활성화
+        const isValid = isNameValid && isDobValid && isPhoneValid;
+        toConnectionScreenBtn.disabled = !isValid;
+    }
+
     if (clientInfoForm) {
         // 입력 감지 (버튼 활성화)
         clientInfoForm.addEventListener('input', () => {
@@ -834,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 suspList.innerHTML = html + '</ul>';
             } else {
-                suspList.innerHTML = '<p style="color:#5CB85C; padding:10px;">✅ 탐지된 위협이 없습니다.</p>';
+                suspList.innerHTML = '<p style="color:#5CB85C; padding:10px;">✅ 탐지된 스파이앱이 없습니다.</p>';
             }
         }
     };
@@ -1023,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const threatCount = data.suspiciousApps.length;
             const summaryBox = document.getElementById('print-summary-box');
             summaryBox.className = `summary-box status-${threatCount > 0 ? 'danger' : 'safe'}`;
-            summaryBox.innerHTML = threatCount > 0 ? `⚠️ 위험 (DANGER): 총 ${threatCount}건의 위협이 탐지되었습니다.` : `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
+            summaryBox.innerHTML = threatCount > 0 ? `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.` : `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
 
             document.getElementById('print-total-count').textContent = data.allApps.length;
             document.getElementById('print-threat-count').textContent = threatCount;
@@ -1538,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `
                     <li style="padding:10px; border-bottom:1px solid #eee;">
                         <div>🕒 <b>${date}</b></div>
-                        <div style="${style}">결과: 위협 ${threatCount}건 발견</div>
+                        <div style="${style}">결과: 스파이앱 ${threatCount}개 발견</div>
                         <div style="font-size:12px; color:#666;">모델: ${data.model} (Serial: ${data.serial})</div>
                     </li>
                 `;

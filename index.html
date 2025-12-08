@@ -93,16 +93,43 @@
                 <div class="content-card input-card-relative">
                     <button id="reset-client-info-btn" type="button" class="reset-icon-btn">↺ 정보 초기화</button>
                     <form id="client-info-form">
-                        <label>대상자 이름</label>
-                        <input type="text" id="client-name">
-                        <label>생년월일</label>
-                        <input type="date" id="client-dob">
-                        <label>휴대폰 번호</label>
-                        <input type="tel" id="client-phone" placeholder="010-1234-5678">
-                        <button id="to-connection-screen-btn" type="submit" class="primary-button" disabled>다음 단계 (기기
-                            연결)</button>
+                        <div class="form-group-anon">
+                            <label for="client-name">대상자 이름</label>
+                            <div class="input-and-anon">
+                                <input type="text" id="client-name">
+                                <label for="anon-name" class="anon-label">
+                                    <input type="checkbox" id="anon-name" class="anon-check">
+                                    익명
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group-anon">
+                            <label for="client-dob">생년월일</label>
+                            <div class="input-and-anon">
+                                <input type="date" id="client-dob">
+                                <label for="anon-dob" class="anon-label">
+                                    <input type="checkbox" id="anon-dob" class="anon-check">
+                                    익명
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group-anon">
+                            <label for="client-phone">휴대폰 번호</label>
+                            <div class="input-and-anon">
+                                <input type="tel" id="client-phone" placeholder="010-1234-5678">
+                                <label for="anon-phone" class="anon-label">
+                                    <input type="checkbox" id="anon-phone" class="anon-check">
+                                    익명
+                                </label>
+                            </div>
+                        </div>
+
+                        <button id="to-connection-screen-btn" type="submit" class="primary-button" disabled>다음 단계 (기기 연결)</button>
+>>>>>>> 4bb2bea8d83584a87fcbd3159fca57d824870886
                     </form>
-                </div>
+                    </div>
             </section>
 
             <section id="device-connection-screen" class="screen">
@@ -165,7 +192,7 @@
 
                 <div id="results-dashboard-view">
                     <div class="content-card info-summary-card">
-                        <h3>📱 기기 정보 (Device Information)</h3>
+                        <h3>📱 기기 정보 </h3>
                         <div class="device-info-grid">
                             <div class="info-item"><span class="label">모델명</span><span class="value"
                                     id="res-model">-</span></div>
@@ -178,13 +205,13 @@
                         </div>
                     </div>
                     <div class="content-card warning-card">
-                        <h3>⚠️ 위협 탐지 (Threats Detected)</h3>
+                        <h3>⚠️ 탐지 결과</h3>
                         <div id="suspicious-list-container"></div>
                     </div>
                     <div class="content-card">
-                        <h3>📲 설치된 애플리케이션 (Installed Apps)</h3>
-                        <p class="sub-text">아이콘을 클릭하면 <strong>권한 상세 내역</strong> 및 <strong>백그라운드 실행 여부</strong>를 확인할 수
-                            있습니다.</p>
+                        <h3>📲 설치된 애플리케이션</h3>
+                        <p class="sub-text">아이콘을 클릭하면 <strong>권한 상세 내역</strong> 및 <strong>백그라운드 실행 여부</strong>를 확인할 수 있습니다.</p>
+>>>>>>> 4bb2bea8d83584a87fcbd3159fca57d824870886
                         <div id="app-grid-container" class="app-grid"></div>
                     </div>
                     <div class="content-card">
