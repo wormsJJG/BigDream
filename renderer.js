@@ -2,19 +2,19 @@
 // BD (Big Dream) Security Solution - Renderer Process
 import { auth, db } from './firebaseConfig.js';
 import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { 
-    doc, 
+import {
+    doc,
     getDoc,
-    updateDoc, 
-    collection, 
-    getDocs, 
-    setDoc, 
-    query, 
-    orderBy, 
-    where, 
-    runTransaction, 
-    addDoc, 
-    serverTimestamp, 
+    updateDoc,
+    collection,
+    getDocs,
+    setDoc,
+    query,
+    orderBy,
+    where,
+    runTransaction,
+    addDoc,
+    serverTimestamp,
     deleteDoc,
     increment,
     limit  // ★ [수정 1] 비정상 로그 불러올 때 필요한 limit 추가
@@ -36,7 +36,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentDeviceMode: null, // 'android' or 'ios'
         currentUdid: null,       // iOS UDID
         lastScanData: null,      // 인쇄용 데이터 백업
-        androidTargetMinutes: 0 // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
+        androidTargetMinutes: 0, // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
+        agencyName: 'BD SCANNER', // 회사 정보 상태
+        quota: -1 // -1은 로딩 중 또는 알 수 없음
     };
 
     // =========================================================
@@ -238,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     //  Firestore에서 시간 설정 가져오기 함수
-    async function fetchScanSettings() {
+    async function fetchUserInfoAndSettings() {
         try {
             // 1. 현재 로그인한 유저 정보 가져오기
             const user = auth.currentUser;
@@ -256,7 +258,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 State.androidTargetMinutes = data.android_scan_duration || 0;
+                State.agencyName = data.companyName || (data.userId ? `(주) ${data.userId}` : "업체명 없음");
+                State.quota = data.quota !== undefined ? data.quota : 0;
                 console.log(`✅ 설정 로드 완료: 안드로이드 검사 시간 [${State.androidTargetMinutes}분]`);
+
+                updateAgencyDisplay();
+
             } else {
                 console.log("⚠️ 유저 문서가 존재하지 않습니다. (기본값 0분 사용)");
                 State.androidTargetMinutes = 0;
@@ -264,6 +271,34 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("❌ 설정 불러오기 실패:", error);
             State.androidTargetMinutes = 0;
+        }
+    }
+
+    //회사 정보 UI 업데이트 함수
+    function updateAgencyDisplay() {
+        // ⚠️ 참고: index.html에 #agency-info-display, #agency-name, #agency-quota 요소가 있다고 가정
+        const nameEl = document.getElementById('agency-name');
+        const quotaEl = document.getElementById('agency-quota');
+
+        if (nameEl && quotaEl) {
+            // 관리자 계정은 쿼터 무제한으로 표시
+            if (State.userRole === 'admin') {
+                nameEl.textContent = `(주) 관리자 계정`;
+                quotaEl.textContent = `남은 횟수 : 무제한`;
+                quotaEl.style.color = 'var(--warning-color)';
+            } else {
+                nameEl.textContent = State.agencyName;
+                quotaEl.textContent = `남은 횟수 : ${State.quota} 회`;
+
+                // 쿼터 경고 색상 설정
+                if (State.quota === 0) {
+                    quotaEl.style.color = 'var(--danger-color)';
+                } else if (State.quota < 10) {
+                    quotaEl.style.color = 'var(--warning-color)';
+                } else {
+                    quotaEl.style.color = 'var(--text-color)';
+                }
+            }
         }
     }
 
@@ -289,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
 
                 // 3. 설정값 불러오기
-                await fetchScanSettings();
+                await fetchUserInfoAndSettings();
 
                 // 4. 화면 전환 분기 처리
                 State.isLoggedIn = true;
@@ -298,9 +333,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (role === 'admin') {
                     // ★ 관리자 화면
                     ViewManager.showView('logged-in-view');
-                    ViewManager.showScreen(loggedInView, 'create-scan-screen'); 
+                    ViewManager.showScreen(loggedInView, 'create-scan-screen');
 
-                    document.body.classList.add('is-admin'); 
+                    document.body.classList.add('is-admin');
                     await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
 
                     setTimeout(() => {
@@ -319,9 +354,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error(error);
                 if (error.message === "LOCKED_ACCOUNT") {
-                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다. \n(문의: 010-8119-1837)"; 
+                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다. \n(문의: 010-8119-1837)";
                     await signOut(auth); // Firebase 세션도 즉시 로그아웃
-                    return;    
+                    return;
                 }
 
                 // 기존 에러 처리
@@ -344,6 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     DeviceManager.stopPolling();
                     State.isLoggedIn = false;
                     State.androidTargetMinutes = 0; // 설정값 초기화
+                    State.agencyName = 'BD SCANNER'; // 회사 정보 상태 초기화
+                    State.quota = -1;
 
                     ViewManager.showView('logged-out-view');
                     ViewManager.showScreen(loggedOutView, 'login-screen');
@@ -1447,19 +1484,19 @@ document.addEventListener('DOMContentLoaded', () => {
             screen.appendChild(detailDiv);
 
             document.getElementById('detail-back-btn').addEventListener('click', () => {
-            // 1. 상세뷰 숨기기
-            document.getElementById('admin-user-detail-view').classList.add('hidden');
-            
-            // 2. 목록뷰 보이기 (hidden 제거 + active 추가)
-            const listTab = document.getElementById('admin-tab-list');
-            listTab.classList.remove('hidden');
-            listTab.classList.add('active');
+                // 1. 상세뷰 숨기기
+                document.getElementById('admin-user-detail-view').classList.add('hidden');
 
-            this.currentUserUid = null;
+                // 2. 목록뷰 보이기 (hidden 제거 + active 추가)
+                const listTab = document.getElementById('admin-tab-list');
+                listTab.classList.remove('hidden');
+                listTab.classList.add('active');
 
-            // 3. ★ 핵심: 목록 데이터 다시 불러오기 (이게 없어서 안 떴던 것임)
-            this.loadUsers(); 
-        });
+                this.currentUserUid = null;
+
+                // 3. ★ 핵심: 목록 데이터 다시 불러오기 (이게 없어서 안 떴던 것임)
+                this.loadUsers();
+            });
         },
 
         // ★ 탭 전환 함수
@@ -1909,7 +1946,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     };
-    
+
     // ★★★ [수정 2] AdminManager를 전역 window 객체에 등록 (HTML onclick에서 접근 가능하게) ★★★
     window.AdminManager = AdminManager;
 
@@ -1952,10 +1989,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const input = await CustomUI.prompt(`[횟수 조정]\n현재 횟수: ${currentQuota}회\n\n추가(+)하거나 차감(-)할 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
-        
+
         if (!input) return; // 취소 누름
         const change = parseInt(input, 10);
-        
+
         if (isNaN(change)) {
             await CustomUI.alert("❌ 숫자만 입력해주세요.");
             return;
@@ -1972,8 +2009,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // DB 업데이트 (increment 사용)
             const userRef = doc(db, "users", uid);
-            await updateDoc(userRef, { 
-                quota: increment(change) 
+            await updateDoc(userRef, {
+                quota: increment(change)
             });
 
             await CustomUI.alert(`✅ 변경 완료!\n${currentQuota}회 -> ${newQuota}회`);

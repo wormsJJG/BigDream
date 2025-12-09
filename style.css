@@ -125,6 +125,35 @@ body {
     display: none;
 }
 
+/* [시작] 회사 정보 표시 스타일 */
+#agency-info-display {
+    position: absolute; /* 절대 위치 지정 */
+    top: 40px; /* main-content의 패딩만큼 아래로 */
+    right: 40px; /* main-content의 패딩만큼 왼쪽으로 */
+    
+    padding: 10px 20px;
+    background-color: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    text-align: right;
+    
+    z-index: 50; /* 다른 요소 위에 표시 */
+}
+
+#agency-info-display #agency-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 2px;
+}
+
+#agency-info-display #agency-quota {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
 .screen.active {
     display: block;
     animation: fadeIn 0.4s ease-out;
