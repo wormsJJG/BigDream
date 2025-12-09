@@ -541,6 +541,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'create-scan-screen');
 
+                // 기기 연결 화면 버튼 초기화
+                const realStartScanBtn = document.getElementById('real-start-scan-btn');
+                if (realStartScanBtn) {
+                    realStartScanBtn.disabled = false;
+                    realStartScanBtn.textContent = '검사 시작하기';
+                }
+
                 // 폼 리셋 및 윈도우 리프레시 효과
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
