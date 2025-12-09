@@ -218,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (userSnap.exists()) {
                 const userData = userSnap.data();
-
+                
                 if (userData.isLocked) {
                     throw new Error("LOCKED_ACCOUNT"); // 에러 발생시킴
                 }
@@ -1865,7 +1865,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">데이터 조회 중...</td></tr>';
 
             try {
-                // 'reported_logs' 컬렉션에서 데이터 가져오기 (가정)
+                // 1. 리포트 데이터 가져오기
                 const q = query(collection(db, "reported_logs"), orderBy("reportedAt", "desc"));
                 const querySnapshot = await getDocs(q);
 
@@ -1878,15 +1878,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 querySnapshot.forEach((docSnap) => {
                     const report = docSnap.data();
                     const date = report.reportedAt ? new Date(report.reportedAt.toDate()).toLocaleString() : '-';
+                    
+                    // ★ [핵심] 저장된 이름을 바로 씀 (없으면 기존 방식대로 ID 표시)
+                    // 예전 로그(이름 저장 안 된 것)를 위해 OR(||) 연산자 사용
+                    const displayName = report.agencyName || report.agencyId; 
+                    
                     const row = document.createElement('tr');
 
                     row.innerHTML = `
                         <td>${date}</td>
-                        <td><b>${report.agencyId}</b></td>
+                        <td>
+                            <b>${displayName}</b><br>
+                            ${report.agencyName ? `<span style="font-size:11px; color:#888;">(${report.agencyId})</span>` : ''}
+                        </td>
                         <td>${report.message || '내용 없음'}</td>
                         <td>
                             위협: <b style="color:red;">${report.threatCount}</b>건<br>
-                            <span style="font-size:11px; color:#666;">${report.deviceModel}</span>
+                            <span style="font-size:11px; color:#666;">${report.deviceModel || '-'}</span>
                         </td>
                         <td>
                             <button class="control-btn" onclick="window.viewReportDetail('${docSnap.id}')">상세보기</button>
@@ -1896,6 +1904,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
             } catch (error) {
+                console.error(error);
                 tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 실패: ${error.message}</td></tr>`;
             }
         }
@@ -2045,4 +2054,101 @@ document.addEventListener('DOMContentLoaded', () => {
             await CustomUI.alert("삭제 실패: " + e.message);
         }
     };
+
+    // =========================================================
+    // [결과 전송] 서버로 검사 결과 데이터 전송
+    // =========================================================
+    const reportResultsBtn = document.getElementById('report-results-btn');
+    if (reportResultsBtn) {
+        reportResultsBtn.addEventListener('click', async () => {
+            
+            // 1. 데이터 유효성 검사
+            if (!State.lastScanData) {
+                await CustomUI.alert("전송할 검사 결과 데이터가 없습니다.");
+                return;
+            }
+
+            // 2. 전송 여부 확인 (메시지 입력 받기)
+            // (입력창이 없으면 그냥 confirm으로 대체 가능, 여기선 prompt 사용)
+            const message = await CustomUI.prompt("서버로 결과를 전송하시겠습니까?\n관리자에게 남길 메모가 있다면 적어주세요.", "특이사항 없음");
+            if (message === null) return; // 취소 누름
+
+            reportResultsBtn.disabled = true;
+            reportResultsBtn.textContent = "전송 중...";
+
+            try {
+                // 3. 데이터 수집
+                const user = auth.currentUser;
+                const scanData = State.lastScanData;
+
+                // ★★★ [추가] 업체명 가져오기 (DB에서 조회) ★★★
+                let currentCompanyName = "알 수 없는 업체";
+                let currentAgencyEmail = "-";
+                
+                if (user) {
+                    currentAgencyEmail = user.email;
+                    try {
+                        const uSnap = await getDoc(doc(db, "users", user.uid));
+                        if (uSnap.exists()) {
+                            currentCompanyName = uSnap.data().companyName || user.email;
+                        }
+                    } catch (e) {
+                        console.error("업체명 조회 실패:", e);
+                    }
+                }
+
+                // (1) 고객 정보 (입력폼에서 가져옴)
+                // 익명일 경우 값 처리는 client-info-form 로직을 따름
+                const clientName = document.getElementById('client-name').value || "익명";
+                const clientDob = document.getElementById('client-dob').value || "0000-00-00";
+                const clientPhone = document.getElementById('client-phone').value || "000-0000-0000";
+
+                // (2) 기기 정보
+                const deviceInfo = {
+                    model: scanData.deviceInfo.model,
+                    serial: scanData.deviceInfo.serial,
+                    os: State.currentDeviceMode // 'android' or 'ios'
+                };
+
+                // (3) 발견된 스파이앱 정보 (요청하신 이름, 패키지, 해시값 포함)
+                // 해시값은 스캔 엔진에서 app.hash로 준다고 가정 (없으면 'N/A')
+                const detectedApps = scanData.suspiciousApps.map(app => ({
+                    appName: app.cachedTitle || Utils.formatAppName(app.packageName),
+                    packageName: app.packageName,
+                    hash: app.hash || 'N/A', // ★ 해시값 (없으면 N/A)
+                    reason: app.reason || 'Unknown Threat'
+                }));
+
+                // 4. Firestore 전송
+                await addDoc(collection(db, "reported_logs"), {
+                    agencyId: user ? user.uid : 'anonymous_agent', // 보낸 업체 ID
+                    agencyName: currentCompanyName,
+                    agencyEmail: user ? user.email : '-',          // 보낸 업체 이메일
+                    
+                    // --- 요청하신 핵심 데이터 ---
+                    clientInfo: {
+                        name: clientName,
+                        dob: clientDob,
+                        phone: clientPhone
+                    },
+                    deviceInfo: deviceInfo,
+                    suspiciousApps: detectedApps,
+                    
+                    // --- 관리용 메타 데이터 ---
+                    threatCount: detectedApps.length,
+                    message: message, // 아까 입력받은 메모
+                    reportedAt: serverTimestamp() // 서버 시간
+                });
+
+                await CustomUI.alert("✅ 결과가 서버로 성공적으로 전송되었습니다.");
+
+            } catch (error) {
+                console.error("전송 실패:", error);
+                await CustomUI.alert("전송 실패: " + error.message);
+            } finally {
+                reportResultsBtn.disabled = false;
+                reportResultsBtn.textContent = "📡 서버 전송";
+            }
+        });
+    }
 });
