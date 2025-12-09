@@ -2,7 +2,8 @@
 // BD (Big Dream) Security Solution - Renderer Process
 import { auth, db } from './firebaseConfig.js';
 import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, 
+import { 
+    doc, 
     getDoc,
     updateDoc, 
     collection, 
@@ -15,9 +16,10 @@ import { doc,
     addDoc, 
     serverTimestamp, 
     deleteDoc,
-increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    increment,
+    limit  // ★ [수정 1] 비정상 로그 불러올 때 필요한 limit 추가
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { startTransition } from 'react';
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
@@ -33,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         connectionCheckInterval: null,
         currentDeviceMode: null, // 'android' or 'ios'
         currentUdid: null,       // iOS UDID
-        lastScanData: null,       // 인쇄용 데이터 백업
+        lastScanData: null,      // 인쇄용 데이터 백업
         androidTargetMinutes: 0 // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
     };
 
@@ -87,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 알림창 (Alert)
         alert(message) {
             return new Promise((resolve) => {
+
                 const modal = document.getElementById('custom-alert-modal');
                 const msgEl = document.getElementById('custom-alert-msg');
                 const btn = document.getElementById('custom-alert-ok-btn');
@@ -137,6 +140,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 cancelBtn.addEventListener('click', handleCancel);
                 cancelBtn.focus(); // 실수 방지를 위해 취소에 포커스
             });
+        },
+
+        prompt(message, defaultValue = '') {
+            return new Promise((resolve) => {
+                // 1. 모달 배경 생성
+                const modalOverlay = document.createElement('div');
+                modalOverlay.style.cssText = `
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    background-color: rgba(0,0,0,0.5); display: flex;
+                    justify-content: center; align-items: center; z-index: 10000;
+                `;
+
+                // 2. 모달 박스 생성
+                const modalBox = document.createElement('div');
+                modalBox.style.cssText = `
+                    background: white; padding: 20px; border-radius: 8px;
+                    width: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    text-align: center; font-family: sans-serif;
+                `;
+
+                // 3. 내용물 (텍스트, 입력창, 버튼)
+                modalBox.innerHTML = `
+                    <h3 style="margin-top:0; color:#333; font-size:16px;">${message.replace(/\n/g, '<br>')}</h3>
+                    <input type="text" id="custom-prompt-input" value="${defaultValue}" 
+                        style="width: 100%; padding: 10px; margin: 15px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px;">
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button id="prompt-cancel-btn" style="padding: 8px 16px; border: none; background: #f5f5f5; border-radius: 4px; cursor: pointer;">취소</button>
+                        <button id="prompt-ok-btn" style="padding: 8px 16px; border: none; background: #337ab7; color: white; border-radius: 4px; cursor: pointer;">확인</button>
+                    </div>
+                `;
+
+                modalOverlay.appendChild(modalBox);
+                document.body.appendChild(modalOverlay);
+
+                const input = modalBox.querySelector('#custom-prompt-input');
+                const okBtn = modalBox.querySelector('#prompt-ok-btn');
+                const cancelBtn = modalBox.querySelector('#prompt-cancel-btn');
+
+                // 포커스 자동 지정
+                input.focus();
+                input.select();
+
+                // 4. 이벤트 핸들러
+                const handleOk = () => {
+                    const val = input.value;
+                    modalOverlay.remove();
+                    resolve(val); // 입력값 반환
+                };
+
+                const handleCancel = () => {
+                    modalOverlay.remove();
+                    resolve(null); // 취소 시 null 반환
+                };
+
+                okBtn.addEventListener('click', handleOk);
+                cancelBtn.addEventListener('click', handleCancel);
+
+                // 엔터키 누르면 확인, ESC 누르면 취소
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') handleOk();
+                    if (e.key === 'Escape') handleCancel();
+                });
+            });
         }
     };
 
@@ -159,16 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 return userData.role || 'user'; // role이 없으면 기본 'user'
             } else {
-                // 문서가 없으면(최초 로그인 등) 기본 user로 생성 (선택사항)
-                // 보안을 위해 여기서는 그냥 'user' 리턴
                 return 'user';
             }
         } catch (e) {
-
             if (e.message === "LOCKED_ACCOUNT") {
+                console.log("잡았다! 잠긴 계정임.")
                 throw e;
             }
-
             console.error("권한 확인 실패:", e);
             return 'user'; // 에러 나면 안전하게 일반 유저로
         }
@@ -180,7 +243,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. 현재 로그인한 유저 정보 가져오기
             const user = auth.currentUser;
 
-            // (혹시 로그인이 안 된 상태라면 함수 종료)
             if (!user) {
                 console.log("⚠️ 로그인 정보가 없어 설정을 불러올 수 없습니다.");
                 return;
@@ -188,17 +250,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log(`📥 [${user.uid}] 계정의 설정값 불러오는 중...`);
 
-            // 2. 공용 설정(settings/config) 대신 '내 유저 문서(users/uid)' 참조
             const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 const data = docSnap.data();
-
-                // 3. 저장된 시간 값 가져오기 (없으면 0)
-                // 필드명: android_scan_duration (아까 통일한 이름)
                 State.androidTargetMinutes = data.android_scan_duration || 0;
-
                 console.log(`✅ 설정 로드 완료: 안드로이드 검사 시간 [${State.androidTargetMinutes}분]`);
             } else {
                 console.log("⚠️ 유저 문서가 존재하지 않습니다. (기본값 0분 사용)");
@@ -206,7 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error("❌ 설정 불러오기 실패:", error);
-            // 에러 나도 앱이 멈추지 않게 기본값 0 유지
             State.androidTargetMinutes = 0;
         }
     }
@@ -240,16 +296,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 State.userRole = role; // 상태에 저장
 
                 if (role === 'admin') {
-                    // ★ 관리자라면 관리자 전용 화면으로 (또는 일반화면에 관리자 기능 추가)
+                    // ★ 관리자 화면
                     ViewManager.showView('logged-in-view');
-                    ViewManager.showScreen(loggedInView, 'create-scan-screen'); // 일단 메인으로 가되
+                    ViewManager.showScreen(loggedInView, 'create-scan-screen'); 
 
-                    // [관리자 전용 UI 활성화 예시]
-                    document.body.classList.add('is-admin'); // CSS로 관리자 버튼 보이게 처리 가능
-                    !await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
+                    document.body.classList.add('is-admin'); 
+                    await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
 
                     setTimeout(() => {
-
                         AdminManager.init();
                     }, 500);
                 } else {
@@ -265,10 +319,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error(error);
                 if (error.message === "LOCKED_ACCOUNT") {
-                    await CustomUI.alert("🚫 관리자에 의해 이용이 정지된 계정입니다.\n(문의: 010-8119-1837)");
+                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다. \n(문의: 010-8119-1837)"; 
                     await signOut(auth); // Firebase 세션도 즉시 로그아웃
-                    errorMsg.textContent = ""; // 로딩 메시지 지움
-                    return; // 함수 종료 (화면 전환 안 함)
+                    return;    
                 }
 
                 // 기존 에러 처리
@@ -707,9 +760,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const logRef = doc(db, "scan_logs", this.currentLogId);
 
                 await updateDoc(logRef, {
-                    status: status,              // ★ 상태: completed 또는 error
-                    endTime: serverTimestamp(),  // ★ 종료 시간
-                    errorMessage: errorMessage   // 에러일 경우 사유 기록
+                    status: status,               // ★ 상태: completed 또는 error
+                    endTime: serverTimestamp(),   // ★ 종료 시간
+                    errorMessage: errorMessage    // 에러일 경우 사유 기록
                 });
 
                 console.log(`[Log] 로그 업데이트 완료 (Status: ${status})`);
@@ -743,8 +796,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return true; // 횟수 충분함
             } catch (e) {
                 console.error("횟수 조회 실패:", e);
-                // 에러 발생 시 일단 진행시킬지 막을지 결정 (보통은 막거나, 에러 알림)
-                // 여기서는 네트워크 에러면 일단 false 처리하여 안전하게
                 await CustomUI.alert("서버 통신 오류로 횟수를 확인할 수 없습니다.");
                 return false;
             }
@@ -1321,6 +1372,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // [12] 관리자 시스템 (ADMIN MANAGER) - 신규 추가
     // =========================================================
     const AdminManager = {
+
+        currentUserUid: null, // 현재 보고 있는 상세 페이지의 업체 UID
+
         init() {
             console.log("🚀 AdminManager.init() 시작됨!");
 
@@ -1346,45 +1400,123 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             navMenu.insertBefore(li, navMenu.firstChild);
 
-            // 2. 관리자 내부 탭 전환 이벤트 연결
-            const tabButtons = document.querySelectorAll('.admin-tab-btn');
+            const tabContainer = document.querySelector('.admin-tabs'); // 탭 버튼 감싸는 div 가정
+            if (tabContainer && !document.getElementById('btn-abnormal-logs')) {
+                const abBtn = document.createElement('button');
+                abBtn.className = 'admin-tab-btn';
+                abBtn.id = 'btn-abnormal-logs';
+                abBtn.dataset.target = 'admin-tab-abnormal';
+                abBtn.innerText = '⚠️ 비정상 로그';
+                tabContainer.appendChild(abBtn);
 
-            tabButtons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const targetId = btn.dataset.target;
-                    this.switchTab(targetId);
-                });
+                // 탭 클릭 이벤트 연결
+                abBtn.addEventListener('click', () => this.switchTab('admin-tab-abnormal'));
+            }
+
+            // 기존 탭 이벤트 연결
+            document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => this.switchTab(btn.dataset.target));
             });
 
-            // 3. 각 탭 내부 버튼 이벤트 연결
-            document.getElementById('admin-create-user-form').addEventListener('submit', (e) => this.createUser(e));
-            document.getElementById('refresh-users-btn').addEventListener('click', () => this.loadUsers());
-            document.getElementById('refresh-reports-btn').addEventListener('click', () => this.loadReports());
+            // 이벤트 리스너들
+            const createUserForm = document.getElementById('admin-create-user-form');
+            if (createUserForm) createUserForm.addEventListener('submit', (e) => this.createUser(e));
 
-            // 결과 모달 닫기
-            document.getElementById('admin-result-close-btn').addEventListener('click', () => {
-                document.getElementById('admin-result-modal').classList.add('hidden');
-            });
+            const refreshBtn = document.getElementById('refresh-users-btn');
+            if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
+
+            // 상세페이지 닫기(뒤로가기) 버튼용 컨테이너 생성
+            this.createDetailViewContainer();
+        },
+
+        // 상세 페이지용 HTML 구조 생성 (최초 1회)
+        createDetailViewContainer() {
+            const screen = document.getElementById('admin-screen');
+            const detailDiv = document.createElement('div');
+            detailDiv.id = 'admin-user-detail-view';
+            detailDiv.className = 'hidden'; // 기본 숨김
+            detailDiv.style.background = '#fff';
+            detailDiv.style.padding = '20px';
+            detailDiv.style.height = '100%';
+            detailDiv.style.overflowY = 'auto';
+
+            detailDiv.innerHTML = `
+            <button id="detail-back-btn" class="admin-btn" style="background:#666; margin-bottom:15px;">⬅️ 목록으로 돌아가기</button>
+            <div id="user-detail-content"></div>
+        `;
+            screen.appendChild(detailDiv);
+
+            document.getElementById('detail-back-btn').addEventListener('click', () => {
+            // 1. 상세뷰 숨기기
+            document.getElementById('admin-user-detail-view').classList.add('hidden');
+            
+            // 2. 목록뷰 보이기 (hidden 제거 + active 추가)
+            const listTab = document.getElementById('admin-tab-list');
+            listTab.classList.remove('hidden');
+            listTab.classList.add('active');
+
+            this.currentUserUid = null;
+
+            // 3. ★ 핵심: 목록 데이터 다시 불러오기 (이게 없어서 안 떴던 것임)
+            this.loadUsers(); 
+        });
         },
 
         // ★ 탭 전환 함수
         switchTab(tabId) {
-            // 탭 버튼 활성화 UI 처리
-            document.querySelectorAll('.admin-tab-btn').forEach(item => {
-                if (item.dataset.target === tabId) item.classList.add('active');
-                else item.classList.remove('active');
+            document.getElementById('admin-user-detail-view').classList.add('hidden');
+            this.currentUserUid = null;
+
+            // 탭 버튼 스타일
+            document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+                if (btn.dataset.target === tabId) btn.classList.add('active');
+                else btn.classList.remove('active');
             });
 
-            // 내용 콘텐츠 보이기/숨기기
+            // 콘텐츠 표시
             document.querySelectorAll('.admin-tab-content').forEach(content => {
-                if (content.id === tabId) content.classList.add('active');
-                else content.classList.remove('active');
+                content.classList.remove('active'); // 일단 다 숨김
+                if (content.id === tabId) content.classList.add('active'); // 타겟만 표시
             });
 
-            // 데이터 로딩
+            // 동적으로 생성된 탭(비정상 로그) 처리
+            if (tabId === 'admin-tab-abnormal') {
+                // HTML에 콘텐츠 영역이 없을 수 있으므로 동적 생성
+                let abContent = document.getElementById('admin-tab-abnormal');
+                if (!abContent) {
+                    abContent = document.createElement('div');
+                    abContent.id = 'admin-tab-abnormal';
+                    abContent.className = 'admin-tab-content active';
+                    abContent.innerHTML = `
+                    <h3>⚠️ 비정상/에러 로그 감지</h3>
+                    <div style="margin-bottom:10px; color:#666; font-size:13px;">
+                        * <b>Error:</b> 검사 중 오류 발생 <br>
+                        * <b>Incomplete:</b> 시작은 했으나 종료 기록 없음 (강제종료/튕김)
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>시간</th>
+                                <th>업체명</th>
+                                <th>기기모드</th>
+                                <th>상태</th>
+                                <th>내용</th>
+                            </tr>
+                        </thead>
+                        <tbody id="abnormal-log-body"></tbody>
+                    </table>
+                `;
+                    document.querySelector('.admin-content-area').appendChild(abContent);
+                } else {
+                    abContent.classList.add('active');
+                }
+                this.loadAbnormalLogs();
+            }
+
             if (tabId === 'admin-tab-list') this.loadUsers();
             if (tabId === 'admin-tab-reports') this.loadReports();
         },
+
 
         // [탭 1] 신규 업체 등록
         async createUser(e) {
@@ -1449,63 +1581,282 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async loadUsers() {
             const tbody = document.getElementById('admin-user-list-body');
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">불러오는 중...</td></tr>';
+            // 헤더 수정 (최근접속 제거)
+            const thead = document.querySelector('#admin-tab-list thead tr');
+            if (thead) {
+                thead.innerHTML = `
+                <th>업체명 (ID)</th>
+                <th>상태</th>
+                <th>잔여 횟수</th>
+                <th>기능 제어</th>
+            `;
+            }
+
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">로딩 중...</td></tr>';
 
             try {
                 const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-                const querySnapshot = await getDocs(q);
+                const snapshot = await getDocs(q);
 
                 tbody.innerHTML = '';
-                if (querySnapshot.empty) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">등록된 업체가 없습니다.</td></tr>';
+                if (snapshot.empty) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">등록된 업체가 없습니다.</td></tr>';
                     return;
                 }
 
-                querySnapshot.forEach((docSnap) => {
+                snapshot.forEach((docSnap) => {
                     const user = docSnap.data();
                     if (user.role === 'admin') return;
 
-                    const userId = user.userId || user.email.replace(ID_DOMAIN, "");
-
-                    const displayName = user.companyName
-                        ? `<div style="font-weight:bold; font-size:15px;">${user.companyName}</div><div style="font-size:12px; color:#666;">ID: ${userId}</div>`
-                        : `<div style="font-weight:bold; font-size:15px;">${userId}</div>`;
-
                     const row = document.createElement('tr');
+                    const userId = user.userId || user.email.split('@')[0];
+                    const companyName = user.companyName || '미등록 업체';
 
+                    // 1. 업체명 (클릭 시 상세페이지 이동)
+                    const nameCell = `
+                    <div class="user-link" style="cursor:pointer; color:#337ab7; font-weight:bold;" 
+                         onclick="AdminManager.viewUserDetail('${docSnap.id}')">
+                        ${companyName} <span style="font-weight:normal; color:#888; font-size:12px;">(${userId})</span>
+                    </div>
+                `;
+
+                    // 2. 상태 뱃지
                     const statusBadge = user.isLocked
                         ? `<span class="admin-badge badge-locked">🔒 잠김</span>`
                         : `<span class="admin-badge badge-active">✅ 활성</span>`;
 
-                    const lastScan = user.lastScanDate
-                        ? new Date(user.lastScanDate.toDate()).toLocaleDateString()
-                        : '<span style="color:#ccc;">기록 없음</span>';
+                    // 3. 횟수
+                    const quota = user.quota || 0;
 
-                    const userQuota = (user.quota !== undefined && user.quota !== null) ? user.quota : 0;
-
-                    // ★ 삭제 버튼에서 사용할 이름 (따옴표 문제 방지)
-                    const safeName = (user.companyName || userId).replace(/'/g, "");
-
-                    // ★ [수정] 마지막 td에 삭제 버튼 추가 (style로 빨간색 강조)
-                    row.innerHTML = `
-                    <td>${displayName}</td>
-                    <td>${statusBadge}</td>
-                    <td><strong style="font-size:16px; color:#3A539B;">${userQuota}</strong> 회</td>
-                    <td>${lastScan}</td>
-                    <td>
-                        <button class="control-btn btn-quota" onclick="window.changeQuota('${docSnap.id}', ${userQuota})">횟수</button>
-                        ${user.isLocked
-                            ? `<button class="control-btn btn-unlock" onclick="window.toggleLock('${docSnap.id}', false)">해제</button>`
-                            : `<button class="control-btn btn-lock" onclick="window.toggleLock('${docSnap.id}', true)">잠금</button>`
+                    // 4. 기능 제어 (기록 버튼 삭제, 디자인 개선)
+                    const controls = `
+                    <button class="admin-btn btn-quota" title="횟수 조정" onclick="window.changeQuota('${docSnap.id}', ${quota})">🔢 횟수</button>
+                    ${user.isLocked
+                            ? `<button class="admin-btn btn-unlock" title="차단 해제" onclick="window.toggleLock('${docSnap.id}', false)">🔓 해제</button>`
+                            : `<button class="admin-btn btn-lock" title="접속 차단" onclick="window.toggleLock('${docSnap.id}', true)">🔒 잠금</button>`
                         }
-                        <button class="control-btn" onclick="window.viewHistory('${docSnap.id}')">기록</button>
-                        <button class="control-btn" style="background-color:#d9534f; color:white; margin-left:4px;" onclick="window.deleteUser('${docSnap.id}', '${safeName}')">삭제</button>
-                    </td>
+                    <button class="admin-btn btn-delete" title="업체 삭제" onclick="window.deleteUser('${docSnap.id}', '${companyName}')">🗑️ 삭제</button>
+                `;
+
+                    row.innerHTML = `
+                    <td>${nameCell}</td>
+                    <td>${statusBadge}</td>
+                    <td><strong style="font-size:15px;">${quota}</strong> 회</td>
+                    <td>${controls}</td>
                 `;
                     tbody.appendChild(row);
                 });
-            } catch (error) {
-                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 에러: ${error.message}</td></tr>`;
+
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="4" style="color:red;">로드 에러: ${e.message}</td></tr>`;
+            }
+        },
+
+        async viewUserDetail(uid) {
+            this.currentUserUid = uid;
+
+            // 1. 목록 숨기고 상세 뷰 보이기
+            document.getElementById('admin-tab-list').classList.remove('active'); // 탭 내용 숨김
+            document.getElementById('admin-tab-list').classList.add('hidden');    // 확실히 숨김
+
+            const detailView = document.getElementById('admin-user-detail-view');
+            detailView.classList.remove('hidden');
+            const contentDiv = document.getElementById('user-detail-content');
+
+            contentDiv.innerHTML = '<p>데이터 분석 중...</p>';
+
+            try {
+                // 2. 유저 정보 가져오기
+                const userDoc = await getDoc(doc(db, "users", uid));
+                if (!userDoc.exists()) throw new Error("유저 정보 없음");
+                const userData = userDoc.data();
+
+                // 3. 로그 데이터 가져오기 (통계용)
+                // scan_logs 컬렉션에서 해당 userId로 된 것들 모두 조회
+                const logsQ = query(collection(db, "scan_logs"), where("userId", "==", uid), orderBy("startTime", "desc"));
+                const logsSnap = await getDocs(logsQ);
+
+                // 4. 통계 계산
+                const stats = this.calculateScanStats(logsSnap.docs);
+
+                // 5. 제출된 리포트 가져오기 (reported_logs) - 업체 ID 매칭 필요
+                // (업체 ID가 userId 필드와 같다고 가정)
+                const reportsQ = query(collection(db, "reported_logs"), where("agencyId", "==", userData.userId), orderBy("reportedAt", "desc"));
+                const reportsSnap = await getDocs(reportsQ);
+
+                // 6. HTML 렌더링
+                contentDiv.innerHTML = `
+                <div class="user-detail-header">
+                    <div>
+                        <h2 style="margin:0;">${userData.companyName || '업체명 없음'}</h2>
+                        <div style="color:#666; margin-top:5px;">
+                            ID: ${userData.userId} | 가입: ${userData.createdAt ? new Date(userData.createdAt.toDate()).toLocaleDateString() : '-'}
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:24px; font-weight:bold; color:#3A539B;">${userData.quota || 0}회</div>
+                        <div style="font-size:12px; color:#888;">잔여 횟수</div>
+                    </div>
+                </div>
+
+                <h3>📊 검사 통계</h3>
+                <div class="stat-container">
+                    <div class="stat-box">
+                        <span>금일 검사</span>
+                        <span class="stat-number">${stats.today}</span>
+                    </div>
+                    <div class="stat-box">
+                        <span>이번 달 검사</span>
+                        <span class="stat-number">${stats.month}</span>
+                    </div>
+                    <div class="stat-box">
+                        <span>올해 검사</span>
+                        <span class="stat-number">${stats.year}</span>
+                    </div>
+                    <div class="stat-box">
+                        <span>누적 총 검사</span>
+                        <span class="stat-number">${stats.total}</span>
+                    </div>
+                </div>
+
+                <h3>🛠️ 업체 관리</h3>
+                <div style="background:#eee; padding:15px; border-radius:8px; margin-bottom:30px;">
+                    <button class="admin-btn btn-quota" onclick="window.changeQuota('${uid}', ${userData.quota || 0})">➕/➖ 횟수 조정</button>
+                    ${userData.isLocked
+                        ? `<button class="admin-btn btn-unlock" onclick="window.toggleLock('${uid}', false)">🔓 차단 해제</button>`
+                        : `<button class="admin-btn btn-lock" onclick="window.toggleLock('${uid}', true)">🚫 접속 차단(잠금)</button>`
+                    }
+                    <button class="admin-btn btn-delete" style="float:right;" onclick="window.deleteUser('${uid}', '${userData.companyName}')">⚠️ 업체 영구 삭제</button>
+                </div>
+
+                <h3>📨 제출된 결과 리포트 (${reportsSnap.size}건)</h3>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>제출일시</th>
+                            <th>메시지</th>
+                            <th>탐지결과</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-report-body">
+                        ${this.renderDetailReports(reportsSnap)}
+                    </tbody>
+                </table>
+            `;
+
+            } catch (e) {
+                console.error(e);
+                contentDiv.innerHTML = `<p style="color:red;">정보 로드 실패: ${e.message}</p>`;
+            }
+        },
+
+        // 통계 계산 도우미 함수
+        calculateScanStats(docs) {
+            const now = new Date();
+            const stats = { today: 0, month: 0, year: 0, total: 0 };
+
+            docs.forEach(doc => {
+                const data = doc.data();
+                if (!data.startTime) return;
+                const date = data.startTime.toDate();
+
+                stats.total++;
+
+                // 같은 연도인지 확인
+                if (date.getFullYear() === now.getFullYear()) {
+                    stats.year++;
+                    // 같은 달인지 확인
+                    if (date.getMonth() === now.getMonth()) {
+                        stats.month++;
+                        // 같은 날인지 확인
+                        if (date.getDate() === now.getDate()) {
+                            stats.today++;
+                        }
+                    }
+                }
+            });
+            return stats;
+        },
+
+        // 상세페이지 내 리포트 렌더링
+        renderDetailReports(snapshot) {
+            if (snapshot.empty) return '<tr><td colspan="3" style="text-align:center;">제출된 리포트가 없습니다.</td></tr>';
+
+            let html = '';
+            snapshot.forEach(doc => {
+                const r = doc.data();
+                const date = r.reportedAt ? new Date(r.reportedAt.toDate()).toLocaleString() : '-';
+                const threat = r.threatCount > 0 ? `<b style="color:red;">위협 ${r.threatCount}건</b>` : '<span style="color:green;">안전</span>';
+
+                html += `
+                <tr>
+                    <td>${date}</td>
+                    <td>${r.message || '-'}</td>
+                    <td>${threat}</td>
+                </tr>
+            `;
+            });
+            return html;
+        },
+
+        // ----------------------------------------------------
+        // [NEW] 비정상 로그 (에러, 튕김) 모아보기
+        // ----------------------------------------------------
+        async loadAbnormalLogs() {
+            const tbody = document.getElementById('abnormal-log-body');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">로그 검색 중...</td></tr>';
+
+            try {
+                // 모든 로그를 긁어서 JS로 필터링 (Firestore 복합 쿼리 제한 때문)
+                // 최적화: 최근 100~200개만 가져오거나 날짜 제한을 두는 것이 좋음
+                const q = query(collection(db, "scan_logs"), orderBy("startTime", "desc"), limit(200));
+                const snapshot = await getDocs(q);
+
+                let html = '';
+                let count = 0;
+
+                snapshot.forEach(doc => {
+                    const log = doc.data();
+
+                    let type = null;
+                    // 1. 상태가 error인 경우
+                    if (log.status === 'error') type = 'ERROR';
+                    // 2. 상태가 started인데 endTime이 없는 경우 (진행중일수도 있으나 오래된거면 튕긴것)
+                    else if (log.status === 'started' && !log.endTime) {
+                        // 시작한지 1시간 지났는데 안 끝난거면 튕긴걸로 간주
+                        const startTime = log.startTime ? log.startTime.toDate() : new Date();
+                        const diff = (new Date() - startTime) / 1000 / 60; // 분
+                        if (diff > 60) type = 'INCOMPLETE';
+                    }
+
+                    if (type) {
+                        count++;
+                        const date = log.startTime ? new Date(log.startTime.toDate()).toLocaleString() : '-';
+                        const badgeClass = type === 'ERROR' ? 'badge-error' : 'badge-incomplete';
+                        const msg = type === 'ERROR' ? (log.errorMessage || '원인 불명 에러') : '종료 기록 없음(강제종료 의심)';
+
+                        html += `
+                        <tr>
+                            <td>${date}</td>
+                            <td>${log.companyName || 'Unknown'} (${log.userId})</td>
+                            <td>${log.deviceMode || '-'}</td>
+                            <td><span class="abnormal-badge ${badgeClass}">${type}</span></td>
+                            <td style="color:#d9534f; font-size:13px;">${msg}</td>
+                        </tr>
+                    `;
+                    }
+                });
+
+                if (count === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:green;">🎉 최근 발견된 비정상 로그가 없습니다.</td></tr>';
+                } else {
+                    tbody.innerHTML = html;
+                }
+
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로그 로드 실패: ${e.message}</td></tr>`;
             }
         },
         // [탭 3] 전송된 리포트 로딩 (신규 기능)
@@ -1549,6 +1900,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     };
+    
+    // ★★★ [수정 2] AdminManager를 전역 window 객체에 등록 (HTML onclick에서 접근 가능하게) ★★★
+    window.AdminManager = AdminManager;
 
     // [전역 함수] 전송된 리포트 상세보기 (임시)
     window.viewReportDetail = async (reportId) => {
@@ -1574,24 +1928,58 @@ document.addEventListener('DOMContentLoaded', () => {
     window.toggleLock = async (uid, shouldLock) => {
         if (!await CustomUI.confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return; try {
             await updateDoc(doc(db, "users", uid), { isLocked: shouldLock });
-            AdminManager.loadUsers(); // 새로고침
+            if (AdminManager.currentUserUid === uid) AdminManager.viewUserDetail(uid);
+            else AdminManager.loadUsers();
         } catch (e) { await CustomUI.alert("처리 실패: " + e.message); }
     };
 
     window.changeQuota = async (uid, currentQuota) => {
-        const input = prompt(`현재 횟수: ${currentQuota}\n\n추가하거나 뺄 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
-        if (!input) return;
+        console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`); // 디버깅용 로그
+
+        // CustomUI가 아직 로드되지 않았을 경우를 대비한 안전장치
+        if (typeof CustomUI === 'undefined') {
+            alert("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.");
+            return;
+        }
+
+        const input = await CustomUI.prompt(`[횟수 조정]\n현재 횟수: ${currentQuota}회\n\n추가(+)하거나 차감(-)할 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
+        
+        if (!input) return; // 취소 누름
         const change = parseInt(input, 10);
-        if (isNaN(change)) return CustomUI.alert("숫자만 입력하세요.");
+        
+        if (isNaN(change)) {
+            await CustomUI.alert("❌ 숫자만 입력해주세요.");
+            return;
+        }
+        if (change === 0) return;
 
         try {
-            const newQuota = currentQuota + change;
-            if (newQuota < 0) return alert("횟수는 0보다 작을 수 없습니다.");
+            // 결과값 미리 계산
+            const newQuota = parseInt(currentQuota) + change;
+            if (newQuota < 0) {
+                await CustomUI.alert("❌ 횟수는 0보다 작을 수 없습니다.");
+                return;
+            }
 
-            await updateDoc(doc(db, "users", uid), { quota: newQuota });
-            await CustomUI.alert(`✅ 변경 완료! (총 ${newQuota}회)`);
-            AdminManager.loadUsers();
-        } catch (e) { await CustomUI.alert("변경 실패: " + e.message); }
+            // DB 업데이트 (increment 사용)
+            const userRef = doc(db, "users", uid);
+            await updateDoc(userRef, { 
+                quota: increment(change) 
+            });
+
+            await CustomUI.alert(`✅ 변경 완료!\n${currentQuota}회 -> ${newQuota}회`);
+
+            // 화면 새로고침 (상세페이지 보고 있으면 상세페이지 갱신, 아니면 목록 갱신)
+            if (AdminManager.currentUserUid === uid) {
+                AdminManager.viewUserDetail(uid);
+            } else {
+                AdminManager.loadUsers();
+            }
+
+        } catch (e) {
+            console.error(e);
+            await CustomUI.alert("변경 실패: " + e.message);
+        }
     };
 
     window.viewHistory = async (uid) => {
@@ -1647,6 +2035,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 2. 알림 및 새로고침
             await CustomUI.alert("🗑️ 업체가 삭제되었습니다.");
+            // 상세페이지 보고 있었다면 목록으로 강제 이동
+            document.getElementById('admin-user-detail-view').classList.add('hidden');
+            document.getElementById('admin-tab-list').classList.remove('hidden');
             AdminManager.loadUsers();
 
         } catch (e) {
@@ -1654,25 +2045,4 @@ document.addEventListener('DOMContentLoaded', () => {
             await CustomUI.alert("삭제 실패: " + e.message);
         }
     };
-
-    signInWithEmailAndPassword(auth, email, password)
-    .then(async (userCredential) => {
-        const user = userCredential.user;
-        
-        // ★ DB에 유저 정보가 있는지 확인
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        
-        if (!userDoc.exists()) {
-            // DB에 정보가 없으면 (삭제된 업체면)
-            CustomUI.alert("존재하지 않거나 삭제된 계정입니다.");
-            auth.signOut(); // 즉시 로그아웃 시킴
-            return;
-        }
-
-        // 정상 로그인 처리...
-        console.log("로그인 성공");
-    })
-    .catch((error) => {
-        alert("로그인 실패: " + error.message);
-    });
 });

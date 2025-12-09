@@ -1022,10 +1022,65 @@ p {
     background-color: #fcfcfc;
 }
 
-.control-btn:hover { background: #f5f5f5; }
-.btn-lock { color: #e74c3c; border-color: #e74c3c; }
-.btn-unlock { color: #5CB85C; border-color: #5CB85C; }
-.btn-quota { color: #3A539B; border-color: #3A539B; }
+.admin-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 4px;
+    color: white;
+}
+.btn-quota { background-color: #3A539B; } /* 남색 */
+.btn-lock { background-color: #f0ad4e; }   /* 주황색 */
+.btn-unlock { background-color: #5cb85c; } /* 초록색 */
+.btn-delete { background-color: #d9534f; } /* 빨간색 */
+
+.admin-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+/* 상세 페이지 스타일 */
+.user-detail-header {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.stat-container {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+.stat-box {
+    flex: 1;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    text-align: center;
+    border: 1px solid #eee;
+}
+.stat-number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+    display: block;
+    margin-top: 5px;
+}
+.abnormal-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: white;
+    font-weight: bold;
+}
+.badge-error { background-color: #d9534f; }
+.badge-incomplete { background-color: #f0ad4e; }
 
 /* 1. 폼 그룹 간격 */
 #admin-create-user-form .form-group {
