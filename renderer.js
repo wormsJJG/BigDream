@@ -631,6 +631,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (realStartScanBtn) {
         realStartScanBtn.addEventListener('click', async () => {
 
+            // 버튼을 즉시 비활성화하여 중복 클릭 방지
+            realStartScanBtn.disabled = true;
+            realStartScanBtn.textContent = '검사 준비 중...';
 
             const hasQuota = await ScanController.checkQuota();
 
@@ -638,6 +641,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 횟수 부족 시: 기기 연결 화면 유지 및 폴링 중단
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'device-connection-screen');
+                // 횟수 부족 시 버튼 상태 복구
+                realStartScanBtn.disabled = false;
+                realStartScanBtn.textContent = '검사 시작하기';
                 return; // ★ 절대 넘어가지 않음
             }
 
@@ -647,6 +653,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isLogged) {
 
                 CustomUI.alert('서버 통신 오류로 검사를 시작할 수 없습니다. 네트워크를 연결해주세요.');
+                // 로그 기록 실패 시 버튼 상태 복구
+                realStartScanBtn.disabled = false;
+                realStartScanBtn.textContent = '검사 시작하기';
                 return;
             }
 
