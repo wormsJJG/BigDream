@@ -2076,24 +2076,127 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // [전역 함수] 전송된 리포트 상세보기 (임시)
     window.viewReportDetail = async (reportId) => {
-        // 실제로는 DB에서 해당 리포트의 상세 데이터를 가져와서 모달에 띄워야 함
-        // 여기서는 간단히 알림으로 대체하거나 기존 결과 모달을 재활용할 수 있음
-        const docRef = doc(db, "reported_logs", reportId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        // 1. 상세 화면 요소 가져오기
+        const detailScreen = document.getElementById('admin-report-detail-screen');
+        const adminScreen = document.getElementById('admin-screen'); // 기존 목록 화면
+
+        if (!detailScreen || !adminScreen) return;
+
+        // 로딩 표시 (선택 사항)
+        // CustomUI.showLoading(); 
+
+        try {
+            const docRef = doc(db, "reported_logs", reportId);
+            const docSnap = await getDoc(docRef);
+
+            if (!docSnap.exists()) {
+                alert("삭제된 리포트입니다.");
+                return;
+            }
+
             const data = docSnap.data();
-            // 데이터를 가공해서 admin-result-modal에 띄워주면 됩니다.
-            const modal = document.getElementById('admin-result-modal');
-            const content = document.getElementById('admin-result-content');
-            modal.classList.remove('hidden');
-            content.innerHTML = `
-                <h4>[${data.agencyId}] 님이 전송한 리포트</h4>
-                <p><b>메시지:</b> ${data.message}</p>
-                <hr>
-                <p><b>탐지된 위협:</b> ${JSON.stringify(data.suspiciousApps, null, 2)}</p>
-            `;
+
+            // -------------------------------------------------
+            // [데이터 바인딩] 화면의 각 요소에 값 채워넣기
+            // -------------------------------------------------
+            
+            // 1. 헤더 (ID, 날짜)
+            const dateStr = data.reportedAt ? new Date(data.reportedAt.toDate()).toLocaleString() : '-';
+            document.getElementById('view-report-id').textContent = reportId.substring(0, 8).toUpperCase(); // ID 짧게 보여주기
+            document.getElementById('view-report-date').textContent = dateStr;
+
+            // 2. 업체 정보
+            // agencyName이 있으면 쓰고, 없으면 agencyId(UID)를 보여줌
+            document.getElementById('view-agency-name').textContent = data.agencyName || '알 수 없음';
+            document.getElementById('view-agency-id').textContent = data.agencyId || '-';
+            document.getElementById('view-agency-email').textContent = data.agencyEmail || '-';
+
+            // 3. 고객 정보
+            const client = data.clientInfo || {};
+            document.getElementById('view-client-name').textContent = client.name || '익명';
+            document.getElementById('view-client-dob').textContent = client.dob || '-';
+            document.getElementById('view-client-phone').textContent = client.phone || '-';
+
+            // 4. 디바이스 정보
+            const device = data.deviceInfo || {};
+            document.getElementById('view-device-model').textContent = device.model || '-';
+            document.getElementById('view-device-serial').textContent = device.serial || '-';
+            document.getElementById('view-device-os').textContent = (device.os || '-').toUpperCase();
+
+            // 5. 메시지
+            const msgBox = document.getElementById('view-message-box');
+            msgBox.textContent = data.message || '메시지 없음';
+
+            // 6. 위협 탐지 목록 (Table)
+            const threatBody = document.getElementById('view-threat-body');
+            const threatBadge = document.getElementById('view-threat-badge');
+            
+            threatBody.innerHTML = ''; // 초기화
+
+            if (data.suspiciousApps && data.suspiciousApps.length > 0) {
+                // 위협 있음
+                threatBadge.textContent = `위협 ${data.suspiciousApps.length}건 감지`;
+                threatBadge.className = 'status-badge danger';
+
+                data.suspiciousApps.forEach(app => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="width: 15%; color:#d9534f; font-weight:bold;">
+                            ${app.appName}
+                        </td>
+                        <td style="width: 25%; font-size: 12px; color:#555;">
+                            ${app.packageName}
+                        </td>
+                        <td style="width: 20%; font-size: 12px;">
+                            ${app.reason}
+                        </td>
+                        <td style="width: 40%; font-family:monospace; font-size: 12px; color:#333; line-height: 1.4;">
+                            ${app.hash || '-'}
+                        </td>
+                    `;
+                    threatBody.appendChild(tr);
+                });
+            } else {
+                // 위협 없음
+                threatBadge.textContent = '안전 (Clean)';
+                threatBadge.className = 'status-badge safe';
+                threatBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#28a745;">✅ 탐지된 위협이 없습니다.</td></tr>`;
+            }
+
+            // -------------------------------------------------
+            // [화면 전환] 목록 숨기고 -> 상세 보이기
+            // -------------------------------------------------
+            adminScreen.classList.remove('active'); // active 클래스로 제어한다면
+            adminScreen.style.display = 'none';     // display로 제어한다면
+            
+            detailScreen.classList.add('active');
+            detailScreen.classList.remove('hidden'); // hidden 클래스 제거
+            detailScreen.style.display = 'block';
+
+            // 스크롤 맨 위로
+            detailScreen.scrollTop = 0;
+
+        } catch (e) {
+            console.error(e);
+            alert("불러오기 실패: " + e.message);
         }
     };
+
+    // [뒤로가기 버튼 이벤트]
+    const detailBackBtn = document.getElementById('admin-detail-back-btn');
+    if (detailBackBtn) {
+        detailBackBtn.addEventListener('click', () => {
+            // 상세 숨기고 -> 목록 보이기
+            const detailScreen = document.getElementById('admin-report-detail-screen');
+            const adminScreen = document.getElementById('admin-screen');
+
+            detailScreen.style.display = 'none';
+            detailScreen.classList.remove('active');
+            
+            adminScreen.style.display = 'block';
+            adminScreen.classList.add('active');
+        });
+    }
     // [전역 함수 노출] HTML onclick에서 호출하기 위해 window에 등록
     window.toggleLock = async (uid, shouldLock) => {
         if (!await CustomUI.confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return; try {
