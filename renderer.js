@@ -38,7 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
         lastScanData: null,      // 인쇄용 데이터 백업
         androidTargetMinutes: 0, // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
         agencyName: 'BD SCANNER', // 회사 정보 상태
-        quota: -1 // -1은 로딩 중 또는 알 수 없음
+        quota: -1, // -1은 로딩 중 또는 알 수 없음
+        scrollPostion: 0
     };
 
     // =========================================================
@@ -1029,9 +1030,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // [8] 앱 상세 화면 (APP DETAIL MANAGER)
     // =========================================================
     const AppDetailManager = {
+        lastScrollY: 0,
+
         show(app, displayName) {
+
+            const scrollContainer = document.querySelector('#logged-in-view .main-content'); // 스크롤이 생기는 박스
+            const permissionsDetailList = document.querySelector('.permission-list-container');
+
+            if (scrollContainer) {
+
+                console.log("실행됌?")
+                this.lastScrollY = scrollContainer.scrollTop;
+            }
+
+            console.log(this.lastScrollY)
             document.getElementById('results-dashboard-view').classList.add('hidden');
             document.getElementById('app-detail-view').classList.remove('hidden');
+
+            if (scrollContainer) {
+                
+                scrollContainer.scrollTop = 0;
+                permissionsDetailList.scrollTop = 0;
+            }
 
             // 1. 이름 표시 (캐시된 타이틀 우선, 없으면 넘겨받은 이름)
             const finalName = app.cachedTitle || displayName;
@@ -1106,6 +1126,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 list.innerHTML = '<p style="color:#999; padding:5px;">요청된 권한이 없습니다.</p>';
             }
+
+            document.getElementById('app-detail-view').scrollTo({top:0});
         },
 
         setupActionButton(btnId, text, app, appName) {
@@ -1117,12 +1139,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.textContent = text;
             }
         }
+
     };
 
     // 뒤로가기 버튼
     document.getElementById('back-to-dashboard-btn')?.addEventListener('click', () => {
         document.getElementById('app-detail-view').classList.add('hidden');
         document.getElementById('results-dashboard-view').classList.remove('hidden');
+
+        const scrollContainer = document.querySelector('#logged-in-view .main-content');
+            if (scrollContainer) {
+                // 약간의 딜레이를 주어야 화면 렌더링 후 정확히 이동함 (없어도 되면 빼도 됨)
+                // scrollContainer.scrollTop = AppDetailManager.lastScrollY; 
+                
+                // 부드럽게 말고 '즉시' 이동하는게 UX상 더 자연스러울 때가 많음
+                scrollContainer.scrollTo(0, AppDetailManager.lastScrollY);
+            }
     });
 
     // =========================================================
@@ -1187,65 +1219,119 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function formatAppName(packageName) {
+        if (!packageName) return "Unknown";
+        const parts = packageName.split('.');
+        let name = parts[parts.length - 1];
+        if ((name === 'android' || name === 'app') && parts.length > 1) {
+            name = parts[parts.length - 2];
+        }
+        return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+
     // 3. 인쇄
     const printResultsBtn = document.getElementById('print-results-btn');
     if (printResultsBtn) {
         printResultsBtn.addEventListener('click', () => {
-            if (!State.lastScanData) return alert("인쇄할 데이터가 없습니다.");
-            const data = State.lastScanData;
+            if (!window.lastScanData) {
+                alert("인쇄할 검사 결과가 없습니다.");
+                return;
+            }
+            const data = window.lastScanData;
 
-            // 인쇄용 DOM 채우기
+            // 1. 헤더 정보
             const now = new Date();
-            document.getElementById('print-date').textContent = now.toLocaleString('ko-KR');
-            document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+            const dateStr = now.toLocaleString('ko-KR');
+            document.getElementById('print-date').textContent = dateStr;
+            document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}-${Math.floor(1000+Math.random()*9000)}`;
 
-            // 정보
+            // 2. 기기 정보
             document.getElementById('print-model').textContent = data.deviceInfo.model;
             document.getElementById('print-serial').textContent = data.deviceInfo.serial;
             document.getElementById('print-root').textContent = data.deviceInfo.isRooted ? '발견됨 (위험)' : '안전함';
             document.getElementById('print-phone').textContent = data.deviceInfo.phoneNumber;
 
-            // 통계
+            // 3. 종합 판정 및 통계
             const threatCount = data.suspiciousApps.length;
             const summaryBox = document.getElementById('print-summary-box');
-            summaryBox.className = `summary-box status-${threatCount > 0 ? 'danger' : 'safe'}`;
-            summaryBox.innerHTML = threatCount > 0 ? `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.` : `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
+            
+            if (threatCount > 0) {
+                summaryBox.className = 'summary-box status-danger';
+                summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}건의 위협이 탐지되었습니다.`;
+            } else {
+                summaryBox.className = 'summary-box status-safe';
+                summaryBox.innerHTML = `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
+            }
 
             document.getElementById('print-total-count').textContent = data.allApps.length;
             document.getElementById('print-threat-count').textContent = threatCount;
             document.getElementById('print-file-count').textContent = data.apkFiles.length;
 
-            // 위협 테이블
+            // 4. 위협 탐지 내역 (표)
             const threatContainer = document.getElementById('print-threat-container');
             if (threatCount > 0) {
                 let html = `<table class="detail-table"><thead><tr><th>탐지된 앱</th><th>패키지명</th><th>위협 사유</th></tr></thead><tbody>`;
                 data.suspiciousApps.forEach(app => {
-                    let vtInfo = app.vtResult && app.vtResult.malicious > 0 ? `<br><span style="color:red; font-size:9px;">[VT: ${app.vtResult.malicious}]</span>` : '';
-                    html += `<tr><td class="text-danger"><b>${Utils.formatAppName(app.packageName)}</b></td><td>${app.packageName}</td><td>${app.reason || '불명확'}${vtInfo}</td></tr>`;
+                    let vtInfo = '';
+                    if (app.vtResult && app.vtResult.malicious > 0) {
+                        vtInfo = `<br><span style="color:red; font-size:9px;">[VT 탐지: ${app.vtResult.malicious}/${app.vtResult.total}]</span>`;
+                    }
+                    html += `<tr>
+                        <td class="text-danger" style="font-weight:bold;">${formatAppName(app.packageName)}</td>
+                        <td>${app.packageName}</td>
+                        <td>${app.reason || '불명확'}${vtInfo}</td>
+                    </tr>`;
                 });
-                threatContainer.innerHTML = html + `</tbody></table>`;
+                html += `</tbody></table>`;
+                threatContainer.innerHTML = html;
             } else {
                 threatContainer.innerHTML = `<div style="padding:10px; border:1px solid #ccc; text-align:center; color:#5CB85C;">탐지된 위협 없음</div>`;
             }
 
-            // 파일 테이블
+            // 5. APK 파일 리스트
             const fileBody = document.getElementById('print-file-body');
-            fileBody.innerHTML = data.apkFiles.length > 0
-                ? data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('')
-                : `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
+            if (data.apkFiles.length > 0) {
+                fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i+1}</td><td>${f}</td></tr>`).join('');
+            } else {
+                fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
+            }
 
-            // 전체 목록 (콤팩트)
+            // 6. [부록] 전체 앱 목록 (3단 콤팩트 그리드)
             const appGrid = document.getElementById('print-all-apps-grid');
             appGrid.innerHTML = '';
-            [...data.allApps].sort((a, b) => a.packageName.localeCompare(b.packageName)).forEach(app => {
+            
+            // 이름순 정렬
+            const sortedApps = [...data.allApps].sort((a, b) => a.packageName.localeCompare(b.packageName));
+            
+            sortedApps.forEach(app => {
+
                 const div = document.createElement('div');
-                div.className = app.reason ? 'compact-item compact-threat' : (app.isSideloaded ? 'compact-item compact-sideload' : 'compact-item');
+
+                 if (app.reason) {
+                    // 1순위: 위협 앱 (빨간색)
+                    div.className = 'compact-item compact-threat';
+                } else if (app.isSideloaded) {
+                    // 2순위: 사이드로딩 앱 (회색)
+                    div.className = 'compact-item compact-sideload';
+                } else {
+                    // 3순위: 일반 앱 (흰색)
+                    div.className = 'compact-item';
+                }
+                
+                // 앱 이름 표시 (위협이면 앞에 [위협] 표시)
                 const prefix = app.reason ? '[위협] ' : (app.isSideloaded ? '[외부] ' : '');
-                div.textContent = `${prefix}${Utils.formatAppName(app.packageName)} (${app.packageName})`;
+                div.textContent = `${prefix}${formatAppName(app.packageName)} (${app.packageName})`;
+                
                 appGrid.appendChild(div);
             });
 
-            setTimeout(() => window.print(), 200);
+            const printArea = document.getElementById('printable-report');
+            printArea.style.display = 'block'; // ★ 이 줄이 있어야 CSS가 작동함
+
+            setTimeout(() => {
+                window.print();
+                printArea.style.display = 'none'; // 인쇄 후 다시 숨김
+            }, 500); // 렌더링 시간 확보
         });
     }
 

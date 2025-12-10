@@ -1,4 +1,5 @@
 /* style.css 맨 아래 - 인쇄 스타일 전체 교체 */
+/* 1. 화면에서는 리포트 영역을 확실히 숨김 (HTML 인라인 스타일이 있지만 이중 안전장치) */
 
 @media print {
     @page { 
@@ -7,19 +8,29 @@
     }
     
     /* 1. 기본 설정 및 초기화 (빈 페이지 방지 핵심) */
-    html, body {
-        width: 100%;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background-color: #fff !important;
-        overflow: visible !important;
+    body {
+        visibility: hidden;
+        background-color: #fff;
     }
 
-    /* 화면 UI 숨기기 */
-    body > *:not(#printable-report) { display: none !important; }
-    #printable-report { display: block !important; width: 100%; font-family: 'Malgun Gothic', serif; color: #000; }
+    /* 2. 리포트 영역만 보이게 설정 */
+    #printable-report {
+        display: block !important; /* display:none 해제 */
+        visibility: visible;       /* 보이게 설정 */
+        position: absolute;        /* 절대 위치로 띄움 */
+        top: 0;
+        left: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        z-index: 9999;            /* 제일 위로 */
+        background-color: #fff;   /* 배경 흰색 */
+    }
 
+    /* 3. 리포트 내부의 모든 자식 요소들도 보이게 상속 */
+    #printable-report * {
+        visibility: visible;
+    }
     /* --- 레이아웃 --- */
     .print-page {
         /* min-height 제거 (빈 페이지 원인) */
