@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (userSnap.exists()) {
                 const userData = userSnap.data();
-                
+
                 if (userData.isLocked) {
                     throw new Error("LOCKED_ACCOUNT"); // 에러 발생시킴
                 }
@@ -655,6 +655,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 return; // ★ 절대 넘어가지 않음
             }
 
+            //횟수 차감 및 UI 업데이트 로직
+            try {
+                // 1. Firebase에서 Quota 차감 요청 (increment(-1) 사용)
+                const user = auth.currentUser;
+                if (user) {
+                    await updateDoc(doc(db, "users", user.uid), {
+                        quota: increment(-1) // 1회 차감
+                    });
+
+                    // 2. 로컬 상태와 UI 즉시 업데이트
+                    State.quota -= 1;
+                    updateAgencyDisplay();
+                }
+
+            } catch (quotaError) {
+                console.error("❌ Quota 차감 중 오류 발생:", quotaError);
+                CustomUI.alert('검사 횟수 차감에 실패했습니다. (서버 오류)');
+                // 횟수 차감 실패 시, 검사 진행을 막고 버튼 복구
+                realStartScanBtn.disabled = false;
+                realStartScanBtn.textContent = '검사 시작하기';
+                return;
+            }
 
             const isLogged = await ScanController.startLogTransaction(State.currentDeviceMode);
 
@@ -781,10 +803,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 2. 쿼터 차감 & 로그 생성 병렬 처리
                 // (batch를 쓰면 더 안전하지만, 편의상 순차 처리)
-                await updateDoc(userRef, {
+                /*await updateDoc(userRef, {
                     quota: increment(-1)
                 });
-
+                */
                 const newLogRef = await addDoc(collection(db, "scan_logs"), {
                     userId: user.uid,
                     companyName: companyName,     // ★ 요청하신 업체명
@@ -2017,11 +2039,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 querySnapshot.forEach((docSnap) => {
                     const report = docSnap.data();
                     const date = report.reportedAt ? new Date(report.reportedAt.toDate()).toLocaleString() : '-';
-                    
+
                     // ★ [핵심] 저장된 이름을 바로 씀 (없으면 기존 방식대로 ID 표시)
                     // 예전 로그(이름 저장 안 된 것)를 위해 OR(||) 연산자 사용
-                    const displayName = report.agencyName || report.agencyId; 
-                    
+                    const displayName = report.agencyName || report.agencyId;
+
                     const row = document.createElement('tr');
 
                     row.innerHTML = `
@@ -2200,7 +2222,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reportResultsBtn = document.getElementById('report-results-btn');
     if (reportResultsBtn) {
         reportResultsBtn.addEventListener('click', async () => {
-            
+
             // 1. 데이터 유효성 검사
             if (!State.lastScanData) {
                 await CustomUI.alert("전송할 검사 결과 데이터가 없습니다.");
@@ -2223,7 +2245,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // ★★★ [추가] 업체명 가져오기 (DB에서 조회) ★★★
                 let currentCompanyName = "알 수 없는 업체";
                 let currentAgencyEmail = "-";
-                
+
                 if (user) {
                     currentAgencyEmail = user.email;
                     try {
@@ -2263,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     agencyId: user ? user.uid : 'anonymous_agent', // 보낸 업체 ID
                     agencyName: currentCompanyName,
                     agencyEmail: user ? user.email : '-',          // 보낸 업체 이메일
-                    
+
                     // --- 요청하신 핵심 데이터 ---
                     clientInfo: {
                         name: clientName,
@@ -2272,7 +2294,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     deviceInfo: deviceInfo,
                     suspiciousApps: detectedApps,
-                    
+
                     // --- 관리용 메타 데이터 ---
                     threatCount: detectedApps.length,
                     message: message, // 아까 입력받은 메모
