@@ -2076,16 +2076,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // [전역 함수] 전송된 리포트 상세보기 (임시)
     window.viewReportDetail = async (reportId) => {
-        // 1. 상세 화면 요소 가져오기
+        // 1. 화면 요소 가져오기
         const detailScreen = document.getElementById('admin-report-detail-screen');
-        const adminScreen = document.getElementById('admin-screen'); // 기존 목록 화면
+        const adminScreen = document.getElementById('admin-screen');
 
         if (!detailScreen || !adminScreen) return;
 
-        // 로딩 표시 (선택 사항)
-        // CustomUI.showLoading(); 
-
         try {
+            // DB에서 데이터 가져오기
             const docRef = doc(db, "reported_logs", reportId);
             const docSnap = await getDoc(docRef);
 
@@ -2095,90 +2093,122 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = docSnap.data();
-
-            // -------------------------------------------------
-            // [데이터 바인딩] 화면의 각 요소에 값 채워넣기
-            // -------------------------------------------------
             
-            // 1. 헤더 (ID, 날짜)
-            const dateStr = data.reportedAt ? new Date(data.reportedAt.toDate()).toLocaleString() : '-';
-            document.getElementById('view-report-id').textContent = reportId.substring(0, 8).toUpperCase(); // ID 짧게 보여주기
-            document.getElementById('view-report-date').textContent = dateStr;
+            // --- [1] 헤더 및 기본 정보 바인딩 ---
+            // 날짜 변환 (Firestore Timestamp -> Date)
+            let dateStr = '-';
+            if (data.reportedAt) {
+                // Timestamp 객체면 toDate(), 아니면 그대로 사용
+                const dateObj = data.reportedAt.toDate ? data.reportedAt.toDate() : new Date(data.reportedAt);
+                dateStr = dateObj.toLocaleString('ko-KR');
+            }
+            
+            document.getElementById('view-doc-id').textContent = reportId.substring(0, 8).toUpperCase();
+            document.getElementById('view-report-time').textContent = dateStr;
 
-            // 2. 업체 정보
-            // agencyName이 있으면 쓰고, 없으면 agencyId(UID)를 보여줌
-            document.getElementById('view-agency-name').textContent = data.agencyName || '알 수 없음';
+            // --- [2] 요약 정보 카드 (데이터 구조 직접 접근) ---
+            // Agency Info
+            document.getElementById('view-agency-name').textContent = data.agencyName || '-';
             document.getElementById('view-agency-id').textContent = data.agencyId || '-';
             document.getElementById('view-agency-email').textContent = data.agencyEmail || '-';
 
-            // 3. 고객 정보
+            // Client Info
             const client = data.clientInfo || {};
             document.getElementById('view-client-name').textContent = client.name || '익명';
-            document.getElementById('view-client-dob').textContent = client.dob || '-';
             document.getElementById('view-client-phone').textContent = client.phone || '-';
+            document.getElementById('view-client-dob').textContent = client.dob || '-';
 
-            // 4. 디바이스 정보
+            // Device Info
             const device = data.deviceInfo || {};
             document.getElementById('view-device-model').textContent = device.model || '-';
-            document.getElementById('view-device-serial').textContent = device.serial || '-';
             document.getElementById('view-device-os').textContent = (device.os || '-').toUpperCase();
+            document.getElementById('view-device-serial').textContent = device.serial || '-';
 
-            // 5. 메시지
-            const msgBox = document.getElementById('view-message-box');
-            msgBox.textContent = data.message || '메시지 없음';
+            // Message
+            document.getElementById('view-message-text').textContent = data.message || '특이사항 없음';
 
-            // 6. 위협 탐지 목록 (Table)
-            const threatBody = document.getElementById('view-threat-body');
-            const threatBadge = document.getElementById('view-threat-badge');
+            // --- [3] 위협 앱 상세 리스트 생성 (핵심) ---
+            const apps = data.suspiciousApps || [];
+            const threatListEl = document.getElementById('view-threat-list');
+            document.getElementById('view-threat-count').textContent = apps.length;
             
-            threatBody.innerHTML = ''; // 초기화
+            threatListEl.innerHTML = ''; // 초기화
 
-            if (data.suspiciousApps && data.suspiciousApps.length > 0) {
-                // 위협 있음
-                threatBadge.textContent = `위협 ${data.suspiciousApps.length}건 감지`;
-                threatBadge.className = 'status-badge danger';
-
-                data.suspiciousApps.forEach(app => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td style="width: 15%; color:#d9534f; font-weight:bold;">
-                            ${app.appName}
-                        </td>
-                        <td style="width: 25%; font-size: 12px; color:#555;">
-                            ${app.packageName}
-                        </td>
-                        <td style="width: 20%; font-size: 12px;">
-                            ${app.reason}
-                        </td>
-                        <td style="width: 40%; font-family:monospace; font-size: 12px; color:#333; line-height: 1.4;">
-                            ${app.hash || '-'}
-                        </td>
-                    `;
-                    threatBody.appendChild(tr);
-                });
+            if (apps.length === 0) {
+                threatListEl.innerHTML = `<div style="text-align:center; padding:30px; color:#28a745; background:white; border-radius:8px;">✅ 탐지된 위협이 없습니다. (Clean Device)</div>`;
             } else {
-                // 위협 없음
-                threatBadge.textContent = '안전 (Clean)';
-                threatBadge.className = 'status-badge safe';
-                threatBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#28a745;">✅ 탐지된 위협이 없습니다.</td></tr>`;
+                apps.forEach((app, index) => {
+                    // 앱 이름 포맷팅 (패키지명에서 추출)
+                    let appName = "Unknown App";
+                    if (app.packageName) {
+                        const parts = app.packageName.split('.');
+                        appName = parts.length > 1 ? parts[parts.length - 1] : app.packageName;
+                        appName = appName.charAt(0).toUpperCase() + appName.slice(1);
+                    }
+
+                    // 권한 리스트 생성 (HTML)
+                    let permissionHtml = '';
+                    if (app.grantedList && app.grantedList.length > 0) {
+                        permissionHtml = app.grantedList.map(perm => {
+                            const shortPerm = perm.replace('android.permission.', '');
+                            return `<span class="perm-badge granted">✔ ${shortPerm}</span>`;
+                        }).join('');
+                    } else {
+                        permissionHtml = '<span style="font-size:11px; color:#999;">허용된 중요 권한 없음</span>';
+                    }
+
+                    // 상세 정보 카드 생성
+                    const card = document.createElement('div');
+                    card.className = 'threat-card';
+                    card.innerHTML = `
+                        <div class="threat-header">
+                            <div>
+                                <span style="font-weight:bold; color:#555;">#${index + 1}</span>
+                                <span class="app-title-lg">${appName}</span>
+                                <span class="pkg-name">${app.packageName}</span>
+                                <br>
+                                <div class="threat-reason">${app.reason || '사유 불명'}</div>
+                            </div>
+                            <div style="text-align:right;">
+                                ${app.isSideloaded ? '<span style="background:#fff3e0; color:#e65100; font-size:11px; padding:3px 6px; border-radius:4px; font-weight:bold;">⚠️ 외부설치(Sideload)</span>' : ''}
+                                ${app.isRunningBg ? '<span style="background:#e3f2fd; color:#1565c0; font-size:11px; padding:3px 6px; border-radius:4px; font-weight:bold; margin-left:5px;">🚀 실행중</span>' : ''}
+                            </div>
+                        </div>
+
+                        <div class="threat-details-grid">
+                            <div class="detail-box">
+                                <label>📂 설치 경로 (APK Path)</label>
+                                <div class="path-box">${app.apkPath || '경로 정보 없음'}</div>
+                                <div style="margin-top:10px;">
+                                    <label>📦 설치 관리자 (Installer)</label>
+                                    <span style="font-size:12px;">${app.installer || '알 수 없음'}</span>
+                                </div>
+                            </div>
+
+                            <div class="detail-box">
+                                <label>🔑 허용된 주요 권한 (${app.grantedCount || 0}개)</label>
+                                <div class="perm-container">
+                                    ${permissionHtml}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    threatListEl.appendChild(card);
+                });
             }
 
-            // -------------------------------------------------
-            // [화면 전환] 목록 숨기고 -> 상세 보이기
-            // -------------------------------------------------
-            adminScreen.classList.remove('active'); // active 클래스로 제어한다면
-            adminScreen.style.display = 'none';     // display로 제어한다면
+            // --- [4] 화면 전환 ---
+            adminScreen.style.display = 'none';
+            adminScreen.classList.remove('active');
             
-            detailScreen.classList.add('active');
-            detailScreen.classList.remove('hidden'); // hidden 클래스 제거
             detailScreen.style.display = 'block';
-
-            // 스크롤 맨 위로
-            detailScreen.scrollTop = 0;
+            detailScreen.classList.add('active');
+            detailScreen.classList.remove('hidden');
+            detailScreen.scrollTop = 0; // 스크롤 맨 위로
 
         } catch (e) {
-            console.error(e);
-            alert("불러오기 실패: " + e.message);
+            console.error("상세보기 오류:", e);
+            alert("정보를 불러오는 중 오류가 발생했습니다: " + e.message);
         }
     };
 
@@ -2186,7 +2216,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailBackBtn = document.getElementById('admin-detail-back-btn');
     if (detailBackBtn) {
         detailBackBtn.addEventListener('click', () => {
-            // 상세 숨기고 -> 목록 보이기
             const detailScreen = document.getElementById('admin-report-detail-screen');
             const adminScreen = document.getElementById('admin-screen');
 
@@ -2366,6 +2395,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const clientName = document.getElementById('client-name').value || "익명";
                 const clientDob = document.getElementById('client-dob').value || "0000-00-00";
                 const clientPhone = document.getElementById('client-phone').value || "000-0000-0000";
+                
+                // 발견앱 목록
+                const detectedApps = scanData.suspiciousApps
 
                 // (2) 기기 정보
                 const deviceInfo = {
@@ -2373,16 +2405,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     serial: scanData.deviceInfo.serial,
                     os: State.currentDeviceMode // 'android' or 'ios'
                 };
-
-                // (3) 발견된 스파이앱 정보 (요청하신 이름, 패키지, 해시값 포함)
-                // 해시값은 스캔 엔진에서 app.hash로 준다고 가정 (없으면 'N/A')
-                const detectedApps = scanData.suspiciousApps.map(app => ({
-                    appName: app.cachedTitle || Utils.formatAppName(app.packageName),
-                    packageName: app.packageName,
-                    hash: app.hash || 'N/A', // ★ 해시값 (없으면 N/A)
-                    reason: app.reason || 'Unknown Threat'
-                }));
-
+        
                 // 4. Firestore 전송
                 await addDoc(collection(db, "reported_logs"), {
                     agencyId: user ? user.uid : 'anonymous_agent', // 보낸 업체 ID

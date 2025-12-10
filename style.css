@@ -1186,131 +1186,132 @@ p {
     transform: translateY(0); /* 눌리는 효과 */
 }
 
+/* 관리자 상세 화면 스타일 */
 #admin-report-detail-screen {
+    background-color: #f4f6f9;
     padding: 20px;
-    background-color: #f5f7fa; /* 연한 회색 배경 */
     height: 100%;
     overflow-y: auto;
     box-sizing: border-box;
 }
 
+/* 상단 바 */
 .detail-top-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid #ddd;
+    background: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
+.page-title { font-size: 18px; font-weight: bold; margin-left: 15px; vertical-align: middle; }
+.badge-id { background: #e3f2fd; color: #1976d2; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-right: 5px;}
+.badge-date { color: #666; font-size: 13px; }
 
-.detail-header-info span {
-    font-size: 14px;
-    font-weight: bold;
-    padding: 5px 10px;
-    border-radius: 4px;
-    margin-left: 5px;
+/* 요약 정보 카드 그리드 */
+.summary-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
 }
-.report-id-badge { background: #e3f2fd; color: #1565c0; }
-.report-date-badge { background: #eee; color: #555; }
-
-/* 그리드 레이아웃 */
-.report-detail-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.detail-row {
-    display: flex;
-    gap: 20px;
-}
-
-.detail-card {
+.info-card {
     background: white;
     border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    flex: 1; /* 공간 균등 분배 */
     border: 1px solid #e0e0e0;
+    overflow: hidden;
 }
-
-.detail-card h3 {
-    margin-top: 0;
-    margin-bottom: 15px;
-    font-size: 16px;
-    color: #333;
-    border-bottom: 2px solid #f0f0f0;
-    padding-bottom: 8px;
+.card-head {
+    background: #f8f9fa;
+    padding: 10px 15px;
+    font-weight: bold;
+    color: #444;
+    border-bottom: 1px solid #eee;
 }
-
-/* 정보 그룹 스타일 */
-.info-group {
+.card-body { padding: 15px; }
+.field-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 10px;
-    font-size: 14px;
-    border-bottom: 1px dashed #eee;
-    padding-bottom: 5px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    border-bottom: 1px dashed #f0f0f0;
+    padding-bottom: 4px;
 }
-.info-group label { color: #888; font-weight: 500; }
-.info-group span { color: #333; font-weight: bold; }
-
-/* 디바이스 스펙 */
-.device-specs {
-    display: flex;
-    gap: 15px;
-}
-.spec-item {
-    background: #f8f9fa;
-    padding: 10px;
-    border-radius: 6px;
-    text-align: center;
-    flex: 1;
-}
-.spec-label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
-.spec-val { display: block; font-size: 14px; font-weight: bold; color: #333; }
+.field-row:last-child { border-bottom: none; margin-bottom: 0; }
+.field-row label { color: #888; }
+.field-row span { color: #333; font-weight: 500; }
 
 /* 메시지 박스 */
+.message-section { margin-bottom: 20px; }
+.message-section label { font-weight: bold; display: block; margin-bottom: 5px; color: #555; }
 .message-box {
     background: #fff3cd;
-    padding: 15px;
-    border-radius: 4px;
+    border: 1px solid #ffeeba;
     color: #856404;
+    padding: 15px;
+    border-radius: 6px;
     font-size: 14px;
-    line-height: 1.5;
-    min-height: 50px;
 }
 
-/* 위협 테이블 */
-.full-width { width: 100%; flex: none; }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+/* 위협 리스트 컨테이너 */
+.threat-section { margin-top: 30px; }
+.section-header h3 { margin: 0 0 15px 0; color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 10px; display: inline-block;}
 
-.status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; color: white; font-weight: bold; }
-.status-badge.safe { background-color: #28a745; }
-.status-badge.danger { background-color: #dc3545; }
+/* 개별 위협 카드 디자인 */
+.threat-card {
+    background: white;
+    border-left: 5px solid #d9534f;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+    padding: 20px;
+}
+.threat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+.app-title-lg { font-size: 18px; font-weight: bold; color: #d9534f; }
+.pkg-name { color: #888; font-size: 13px; margin-left: 10px; }
+.threat-reason { background: #ffebee; color: #c62828; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-top: 5px; display: inline-block;}
 
-.table-responsive { overflow-x: auto; }
-
-.detail-card {
-    min-width: 0; /* ★ 이게 없으면 테이블이 안 줄어듭니다! */
-    width: 100%;
-    box-sizing: border-box;
+.threat-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+.detail-box label { font-size: 12px; color: #888; font-weight: bold; display: block; margin-bottom: 5px; }
+.path-box { 
+    font-family: monospace; font-size: 11px; background: #f5f5f5; padding: 8px; border-radius: 4px; color: #333; word-break: break-all; 
 }
 
-/* 2. 테이블 레이아웃 강제 고정 */
-#admin-report-detail-screen .admin-table {
-    table-layout: fixed !important; /* 무조건 고정 레이아웃 */
-    width: 100% !important;         /* 부모 꽉 채우기 */
-    max-width: 100%;                /* 튀어나가지 않기 */
-    border-collapse: collapse;
+/* 권한 배지 스타일 */
+.perm-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 100px;
+    overflow-y: auto;
+    background: #fafafa;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #eee;
 }
-
-/* 3. 셀 내용 줄바꿈 강제 처리 */
-#admin-report-detail-screen .admin-table th, 
-#admin-report-detail-screen .admin-table td {
-    white-space: normal !important;    /* 줄바꿈 허용 */
-    word-break: break-all !important;  /* 긴 영단어/해시 강제 줄바꿈 */
-    overflow-wrap: anywhere !important; /* 최신 브라우저용 강제 줄바꿈 */
-    vertical-align: middle;
-    padding: 8px 5px; /* 좌우 여백을 조금 줄여서 공간 확보 */
+.perm-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+    color: #555;
+    background: white;
+}
+.perm-badge.granted {
+    border-color: #a5d6a7;
+    background-color: #e8f5e9;
+    color: #2e7d32;
 }

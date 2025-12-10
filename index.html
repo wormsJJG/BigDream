@@ -429,99 +429,78 @@
                 </div>
             </div>
 
-            <section id="admin-report-detail-screen" class="screen">
+ <section id="admin-report-detail-screen" class="screen">
     <div class="detail-top-bar">
-        <button id="admin-detail-back-btn" class="secondary-button">⬅ 목록으로 돌아가기</button>
-        <div class="detail-header-info">
-            <span class="report-id-badge" id="view-report-id">DOC-ID</span>
-            <span class="report-date-badge" id="view-report-date">2024.01.01</span>
+        <div class="left">
+            <button id="admin-detail-back-btn" class="secondary-button">⬅ 목록으로</button>
+            <span class="page-title">검사 결과 상세 리포트</span>
+        </div>
+        <div class="right">
+            <span class="badge-id" id="view-doc-id">DOC-ID</span>
+            <span class="badge-date" id="view-report-time">-</span>
         </div>
     </div>
 
-    <div class="report-detail-container">
-        
-        <div class="detail-row">
-            <div class="detail-card">
-                <h3>🏢 전송 업체 정보</h3>
-                <div class="info-group">
-                    <label>업체명</label>
-                    <span id="view-agency-name">-</span>
-                </div>
-                <div class="info-group">
-                    <label>담당자 ID</label>
-                    <span id="view-agency-id">-</span>
-                </div>
-                <div class="info-group">
-                    <label>이메일</label>
-                    <span id="view-agency-email">-</span>
-                </div>
-            </div>
-
-            <div class="detail-card">
-                <h3>👤 검사 대상자 (고객)</h3>
-                <div class="info-group">
-                    <label>이름</label>
-                    <span id="view-client-name">-</span>
-                </div>
-                <div class="info-group">
-                    <label>생년월일</label>
-                    <span id="view-client-dob">-</span>
-                </div>
-                <div class="info-group">
-                    <label>연락처</label>
-                    <span id="view-client-phone">-</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="detail-row">
-            <div class="detail-card">
-                <h3>📱 디바이스 정보</h3>
-                <div class="device-specs">
-                    <div class="spec-item">
-                        <span class="spec-label">모델명</span>
-                        <span class="spec-val" id="view-device-model">-</span>
+    <div class="report-container">
+        <div class="summary-row">
+            <div class="info-card">
+                <div class="card-head">🏢 전송 업체</div>
+                <div class="card-body">
+                    <div class="field-row">
+                        <label>업체명</label> <span id="view-agency-name">-</span>
                     </div>
-                    <div class="spec-item">
-                        <span class="spec-label">Serial</span>
-                        <span class="spec-val" id="view-device-serial">-</span>
+                    <div class="field-row">
+                        <label>아이디</label> <span id="view-agency-id">-</span>
                     </div>
-                    <div class="spec-item">
-                        <span class="spec-label">OS</span>
-                        <span class="spec-val" id="view-device-os">-</span>
+                    <div class="field-row">
+                        <label>이메일</label> <span id="view-agency-email">-</span>
                     </div>
                 </div>
             </div>
 
-            <div class="detail-card">
-                <h3>💬 전달 메시지 / 메모</h3>
-                <div id="view-message-box" class="message-box">
-                    내용 없음
+            <div class="info-card">
+                <div class="card-head">👤 고객 정보</div>
+                <div class="card-body">
+                    <div class="field-row">
+                        <label>이름</label> <span id="view-client-name">-</span>
+                    </div>
+                    <div class="field-row">
+                        <label>연락처</label> <span id="view-client-phone">-</span>
+                    </div>
+                    <div class="field-row">
+                        <label>생년월일</label> <span id="view-client-dob">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="card-head">📱 디바이스</div>
+                <div class="card-body">
+                    <div class="field-row">
+                        <label>모델명</label> <span id="view-device-model" style="font-weight:bold; color:#3A539B;">-</span>
+                    </div>
+                    <div class="field-row">
+                        <label>OS</label> <span id="view-device-os">-</span>
+                    </div>
+                    <div class="field-row">
+                        <label>Serial</label> <span id="view-device-serial">-</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="detail-card full-width">
-            <div class="card-header">
-                <h3>🚨 위협 탐지 내역</h3>
-                <span id="view-threat-badge" class="status-badge safe">안전</span>
-            </div>
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>앱 이름</th>
-                            <th>패키지명</th>
-                            <th>탐지 사유</th>
-                            <th>해시값 (Hash)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="view-threat-body">
-                        </tbody>
-                </table>
-            </div>
+        <div class="message-section">
+            <label>💬 전달 메시지</label>
+            <div id="view-message-text" class="message-box">내용 없음</div>
         </div>
 
+        <div class="threat-section">
+            <div class="section-header">
+                <h3>🚨 탐지된 위협 애플리케이션 (<span id="view-threat-count">0</span>건)</h3>
+            </div>
+            <div id="view-threat-list" class="threat-list-container">
+            </div>
+        </div>
     </div>
 </section>
 

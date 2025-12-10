@@ -145,7 +145,7 @@ ipcMain.handle('run-scan', async () => {
         const suspiciousApps = AndroidService.filterSuspiciousApps(processedApps);
 
         // [Step E] VirusTotal 2차 정밀 검사
-        if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY !== 'YOUR_KEY') {
+        if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY !== '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96') {
             console.log(`🔍 VT 정밀 검사 대상: ${suspiciousApps.length}개`);
             await AndroidService.runVirusTotalCheck(serial, suspiciousApps);
         }
