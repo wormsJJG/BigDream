@@ -977,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. 로컬 파일 경로 매핑 함수
             const getLocalIconPath = (appData) => {
                 if (appData.reason) {
-                    return './assets/SpyAppLogo.png'; 
+                    return './assets/SpyAppLogo.png';
                 }
                 // Play Store URL이 없거나 시스템 앱으로 간주될 때 (API 실패 또는 정보 부족)
                 return './assets/systemAppLogo.png';
@@ -991,23 +991,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     spanTag.style.display = 'flex';
                     return;
                 }
-                
+
                 // Play Store 이미지 로딩 실패 시: 로컬 대체 이미지 시도
                 const localPath = getLocalIconPath(app);
-                
+
                 if (localPath) {
                     imgTag.src = localPath;
                     imgTag.style.display = 'block';
                     spanTag.style.display = 'none';
-                    
+
                     // 로컬 이미지 로딩 실패 시: 최종 fallback으로 연결
-                    imgTag.onerror = () => handleImageError(true); 
+                    imgTag.onerror = () => handleImageError(true);
                 } else {
                     // 로컬 대체 경로가 없는 경우, 최종 fallback 실행
                     handleImageError(true);
                 }
             };
-            
+
             // 모든 이미지 로딩 실패에 대해 로컬 대체 시도 로직을 걸어둡니다.
             imgTag.onerror = () => handleImageError(false);
 
@@ -1024,30 +1024,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.electronAPI.getAppData(app.packageName).then(result => {
                     if (!result || !result.icon) {
                         // API에서 아이콘 URL을 못 가져온 경우 로컬 대체 시도
-                        handleImageError(false); 
+                        handleImageError(false);
                         return;
-                    } 
-                    
+                    }
+
                     // API에서 성공적으로 URL을 받은 경우:
                     app.cachedIconUrl = result.icon; // 캐싱
-                    
+
                     // imgTag.src를 설정하여 로딩 시작. 실패하면 onerror 핸들러가 처리합니다.
                     imgTag.src = result.icon;
                     imgTag.onload = () => {
                         imgTag.style.display = 'block';
                         spanTag.style.display = 'none';
                     };
-                    
+
                     // [B] 타이틀 처리
                     if (result.title) {
                         app.cachedTitle = result.title;
                         div.querySelector('.app-display-name').textContent = result.title;
                     }
-                    
-                }).catch(() => { 
+
+                }).catch(() => {
                     // API 요청 자체 실패 시 로컬 대체 시도
                     handleImageError(false);
-                 });
+                });
             }
 
             // 클릭 이벤트
@@ -1106,7 +1106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('app-detail-view').classList.remove('hidden');
 
             if (scrollContainer) {
-                
+
                 scrollContainer.scrollTop = 0;
                 permissionsDetailList.scrollTop = 0;
             }
@@ -1185,7 +1185,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 list.innerHTML = '<p style="color:#999; padding:5px;">요청된 권한이 없습니다.</p>';
             }
 
-            document.getElementById('app-detail-view').scrollTo({top:0});
+            document.getElementById('app-detail-view').scrollTo({ top: 0 });
         },
 
         setupActionButton(btnId, text, app, appName) {
@@ -1206,13 +1206,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('results-dashboard-view').classList.remove('hidden');
 
         const scrollContainer = document.querySelector('#logged-in-view .main-content');
-            if (scrollContainer) {
-                // 약간의 딜레이를 주어야 화면 렌더링 후 정확히 이동함 (없어도 되면 빼도 됨)
-                // scrollContainer.scrollTop = AppDetailManager.lastScrollY; 
-                
-                // 부드럽게 말고 '즉시' 이동하는게 UX상 더 자연스러울 때가 많음
-                scrollContainer.scrollTo(0, AppDetailManager.lastScrollY);
-            }
+        if (scrollContainer) {
+            // 약간의 딜레이를 주어야 화면 렌더링 후 정확히 이동함 (없어도 되면 빼도 됨)
+            // scrollContainer.scrollTop = AppDetailManager.lastScrollY; 
+
+            // 부드럽게 말고 '즉시' 이동하는게 UX상 더 자연스러울 때가 많음
+            scrollContainer.scrollTo(0, AppDetailManager.lastScrollY);
+        }
     });
 
     // =========================================================
@@ -1301,7 +1301,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
             const dateStr = now.toLocaleString('ko-KR');
             document.getElementById('print-date').textContent = dateStr;
-            document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}-${Math.floor(1000+Math.random()*9000)}`;
+            document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
             // 2. 기기 정보
             document.getElementById('print-model').textContent = data.deviceInfo.model;
@@ -1312,7 +1312,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 3. 종합 판정 및 통계
             const threatCount = data.suspiciousApps.length;
             const summaryBox = document.getElementById('print-summary-box');
-            
+
             if (threatCount > 0) {
                 summaryBox.className = 'summary-box status-danger';
                 summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}건의 위협이 탐지되었습니다.`;
@@ -1349,7 +1349,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 5. APK 파일 리스트
             const fileBody = document.getElementById('print-file-body');
             if (data.apkFiles.length > 0) {
-                fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i+1}</td><td>${f}</td></tr>`).join('');
+                fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('');
             } else {
                 fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
             }
@@ -1357,15 +1357,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // 6. [부록] 전체 앱 목록 (3단 콤팩트 그리드)
             const appGrid = document.getElementById('print-all-apps-grid');
             appGrid.innerHTML = '';
-            
+
             // 이름순 정렬
             const sortedApps = [...data.allApps].sort((a, b) => a.packageName.localeCompare(b.packageName));
-            
+
             sortedApps.forEach(app => {
 
                 const div = document.createElement('div');
 
-                 if (app.reason) {
+                if (app.reason) {
                     // 1순위: 위협 앱 (빨간색)
                     div.className = 'compact-item compact-threat';
                 } else if (app.isSideloaded) {
@@ -1375,11 +1375,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // 3순위: 일반 앱 (흰색)
                     div.className = 'compact-item';
                 }
-                
+
                 // 앱 이름 표시 (위협이면 앞에 [위협] 표시)
                 const prefix = app.reason ? '[위협] ' : (app.isSideloaded ? '[외부] ' : '');
                 div.textContent = `${prefix}${formatAppName(app.packageName)} (${app.packageName})`;
-                
+
                 appGrid.appendChild(div);
             });
 
@@ -1640,6 +1640,31 @@ document.addEventListener('DOMContentLoaded', () => {
             detailDiv.innerHTML = `
             <button id="detail-back-btn" class="admin-btn" style="background:#666; margin-bottom:15px;">⬅️ 목록으로 돌아가기</button>
             <div id="user-detail-content"></div>
+            
+            <h3 style="margin-top: 30px;">📅 검사 기록 조회</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+                
+                <label for="log-date-start" style="font-weight: 500;">기간 선택:</label>
+                <input type="date" id="log-date-start" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                <span>~</span>
+                <input type="date" id="log-date-end" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                <button id="filter-logs-btn" class="admin-btn btn-quota">조회</button>
+                <button id="reset-logs-btn" class="admin-btn secondary-button">전체 보기</button>
+            </div>
+            
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>검사 일시 (시작)</th>
+                        <th>기기</th>
+                        <th>상태</th>
+                        <th>소요 시간</th>
+                        <th>에러 메시지</th>
+                    </tr>
+                </thead>
+                <tbody id="user-scan-logs-body">
+                    </tbody>
+            </table>
         `;
             screen.appendChild(detailDiv);
 
@@ -1661,7 +1686,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ★ 탭 전환 함수
         switchTab(tabId) {
-            document.getElementById('admin-user-detail-view').classList.add('hidden');
+            const detailView = document.getElementById('admin-user-detail-view');
+            if (detailView) {
+                detailView.classList.add('hidden');
+            }
             this.currentUserUid = null;
 
             // 탭 버튼 스타일
@@ -1673,7 +1701,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // 콘텐츠 표시
             document.querySelectorAll('.admin-tab-content').forEach(content => {
                 content.classList.remove('active'); // 일단 다 숨김
-                if (content.id === tabId) content.classList.add('active'); // 타겟만 표시
+                if (content.id === tabId) {
+                    // 선택된 탭: active 클래스를 부여하여 표시하고 hidden은 제거
+                    content.classList.remove('hidden');
+                    content.classList.add('active');
+                } else {
+                    // 나머지 탭: active를 제거하고 hidden을 부여하여 확실히 숨김
+                    content.classList.remove('active');
+                    content.classList.add('hidden');
+                }
             });
 
             // 동적으로 생성된 탭(비정상 로그) 처리
@@ -1705,7 +1741,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                     document.querySelector('.admin-content-area').appendChild(abContent);
                 } else {
-                    abContent.classList.add('active');
+
                 }
                 this.loadAbnormalLogs();
             }
@@ -1941,6 +1977,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     </tbody>
                 </table>
             `;
+                // 검사 로그 렌더링 호출 및 필터링 이벤트 등록
+                this.loadScanLogs(uid); // 기본적으로 모든 로그를 로드
+
+                // 필터링 버튼 이벤트 등록 (시작일, 종료일 사용)
+                document.getElementById('filter-logs-btn').onclick = () => {
+                    const startDate = document.getElementById('log-date-start').value;
+                    const endDate = document.getElementById('log-date-end').value;
+                    this.loadScanLogs(uid, startDate, endDate); // 함수 호출 인자 변경
+                };
+                document.getElementById('reset-logs-btn').onclick = () => {
+                    document.getElementById('log-date-start').value = ''; // 필드 리셋
+                    document.getElementById('log-date-end').value = ''; // 필드 리셋
+                    this.loadScanLogs(uid);
+                };
+
+                //'목록으로 돌아가기' 버튼 이벤트 핸들러 등록
+                // createDetailViewContainer에서 등록된 'detail-back-btn'에 이벤트를 연결합니다.
+                document.getElementById('detail-back-btn').onclick = () => {
+                    // 1. 상세 뷰 숨기기
+                    document.getElementById('admin-user-detail-view').classList.add('hidden');
+
+                    // 2. 메인 탭 뷰를 다시 표시 (AdminManager.switchTab 호출을 통해 메인 목록을 로드)
+                    this.switchTab('admin-tab-list'); // 'admin-tab-list'는 메인 목록 뷰 ID입니다.
+                };
 
             } catch (e) {
                 console.error(e);
@@ -1974,6 +2034,99 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             return stats;
+        },
+        // 특정 업체의 검사 로그를 불러와 렌더링 (loadScanLogs)
+        async loadScanLogs(uid, startDate = null, endDate = null) {
+            const tbody = document.getElementById('user-scan-logs-body');
+            if (!tbody) return;
+
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">로그를 불러오는 중...</td></tr>';
+
+            try {
+                let logsQ = query(
+                    collection(db, "scan_logs"),
+                    where("userId", "==", uid),
+                    orderBy("startTime", "desc")
+                );
+
+                // 기간 필터링 적용 로직
+                if (startDate && endDate) {
+                    const startTimestamp = new Date(startDate);
+                    const endTimestamp = new Date(endDate);
+
+                    // 종료일은 해당 날짜의 끝(다음 날 00:00:00)까지 포함하도록 하루를 더합니다.
+                    endTimestamp.setDate(endTimestamp.getDate() + 1);
+
+                    // Firebase 쿼리 재구성
+                    logsQ = query(
+                        collection(db, "scan_logs"),
+                        where("userId", "==", uid),
+                        where("startTime", ">=", startTimestamp),
+                        where("startTime", "<", endTimestamp), // 종료일의 다음 날 0시 미만
+                        orderBy("startTime", "desc")
+                    );
+
+                    // 유효성 검사
+                    if (startTimestamp.getTime() >= endTimestamp.getTime()) {
+                        throw new Error("검색 시작일은 종료일보다 이전이어야 합니다.");
+                    }
+                } else if (startDate || endDate) {
+                    // 날짜가 하나만 입력된 경우 경고
+                    throw new Error("기간 검색을 위해 시작일과 종료일을 모두 입력해야 합니다.");
+                }
+
+                const logsSnap = await getDocs(logsQ);
+
+                console.log(`[Admin Log] ${uid} 업체의 로그 ${logsSnap.size}건 발견됨.`);
+
+                if (logsSnap.empty) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">검사 기록이 없습니다.</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                logsSnap.forEach(doc => {
+
+                    const log = doc.data();
+
+                    const startTime = log.startTime && typeof log.startTime.toDate === 'function' ?
+                        new Date(log.startTime.toDate()) : null;
+
+                    const endTime = log.endTime && typeof log.endTime.toDate === 'function' ?
+                        new Date(log.endTime.toDate()) : null;
+
+                    const dateStr = startTime ? startTime.toLocaleString('ko-KR') : '-';
+                    const statusClass = log.status === 'completed' ? 'color:green' : (log.status === 'error' ? 'color:red' : 'color:orange');
+
+                    let durationStr = '-';
+                    if (startTime && endTime) {
+                        const diffMs = endTime - startTime;
+                        const seconds = Math.floor(diffMs / 1000);
+                        if (seconds > 60) {
+                            durationStr = `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
+                        } else {
+                            durationStr = `${seconds}초`;
+                        }
+                    }
+
+                    html += `
+                        <tr>
+                            <td>${dateStr}</td>
+                            <td>${log.deviceMode || '-'}</td>
+                            <td style="${statusClass}; font-weight:bold;">${log.status.toUpperCase()}</td>
+                            <td>${durationStr}</td>
+                            <td style="font-size:12px; color:#d9534f;">${log.errorMessage || '-'}</td>
+                        </tr>
+                        `;
+                });
+
+                tbody.innerHTML = html;
+
+            } catch (e) {
+                if (e.message.includes("시작일")) {
+                    alert(e.message);
+                }
+            }
         },
 
         // 상세페이지 내 리포트 렌더링
@@ -2129,7 +2282,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = docSnap.data();
-            
+
             // --- [1] 헤더 및 기본 정보 바인딩 ---
             // 날짜 변환 (Firestore Timestamp -> Date)
             let dateStr = '-';
@@ -2138,7 +2291,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dateObj = data.reportedAt.toDate ? data.reportedAt.toDate() : new Date(data.reportedAt);
                 dateStr = dateObj.toLocaleString('ko-KR');
             }
-            
+
             document.getElementById('view-doc-id').textContent = reportId.substring(0, 8).toUpperCase();
             document.getElementById('view-report-time').textContent = dateStr;
 
@@ -2167,7 +2320,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const apps = data.suspiciousApps || [];
             const threatListEl = document.getElementById('view-threat-list');
             document.getElementById('view-threat-count').textContent = apps.length;
-            
+
             threatListEl.innerHTML = ''; // 초기화
 
             if (apps.length === 0) {
@@ -2236,7 +2389,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- [4] 화면 전환 ---
             adminScreen.style.display = 'none';
             adminScreen.classList.remove('active');
-            
+
             detailScreen.style.display = 'block';
             detailScreen.classList.add('active');
             detailScreen.classList.remove('hidden');
@@ -2257,7 +2410,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             detailScreen.style.display = 'none';
             detailScreen.classList.remove('active');
-            
+
             adminScreen.style.display = 'block';
             adminScreen.classList.add('active');
         });
@@ -2431,7 +2584,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const clientName = document.getElementById('client-name').value || "익명";
                 const clientDob = document.getElementById('client-dob').value || "0000-00-00";
                 const clientPhone = document.getElementById('client-phone').value || "000-0000-0000";
-                
+
                 // 발견앱 목록
                 const detectedApps = scanData.suspiciousApps
 
@@ -2441,7 +2594,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     serial: scanData.deviceInfo.serial,
                     os: State.currentDeviceMode // 'android' or 'ios'
                 };
-        
+
                 // 4. Firestore 전송
                 await addDoc(collection(db, "reported_logs"), {
                     agencyId: user ? user.uid : 'anonymous_agent', // 보낸 업체 ID
