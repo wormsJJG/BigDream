@@ -970,48 +970,84 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="app-package-sub">${app.packageName}</div>
     `;
 
-            // 1. [캐시 확인] 이미 정보가 있는 경우
+            // 1. 엘리먼트 참조
+            const imgTag = div.querySelector('.app-real-icon');
+            const spanTag = div.querySelector('.app-fallback-icon');
+
+            // 2. 로컬 파일 경로 매핑 함수
+            const getLocalIconPath = (appData) => {
+                if (appData.reason) {
+                    return './assets/SpyAppLogo.png'; 
+                }
+                // Play Store URL이 없거나 시스템 앱으로 간주될 때 (API 실패 또는 정보 부족)
+                return './assets/systemAppLogo.png';
+            };
+
+            // 3. 이미지 로딩 실패/폴백 핸들러 (재사용 가능)
+            const handleImageError = (isLocalFallback = false) => {
+                if (isLocalFallback) {
+                    // 로컬 이미지까지 실패한 경우: 최종 📱 아이콘 표시
+                    imgTag.style.display = 'none';
+                    spanTag.style.display = 'flex';
+                    return;
+                }
+                
+                // Play Store 이미지 로딩 실패 시: 로컬 대체 이미지 시도
+                const localPath = getLocalIconPath(app);
+                
+                if (localPath) {
+                    imgTag.src = localPath;
+                    imgTag.style.display = 'block';
+                    spanTag.style.display = 'none';
+                    
+                    // 로컬 이미지 로딩 실패 시: 최종 fallback으로 연결
+                    imgTag.onerror = () => handleImageError(true); 
+                } else {
+                    // 로컬 대체 경로가 없는 경우, 최종 fallback 실행
+                    handleImageError(true);
+                }
+            };
+            
+            // 모든 이미지 로딩 실패에 대해 로컬 대체 시도 로직을 걸어둡니다.
+            imgTag.onerror = () => handleImageError(false);
+
+
+            // 4. [캐시 및 API 로드 시작]
             if (app.cachedIconUrl) {
-                const imgTag = div.querySelector('.app-real-icon');
-                const spanTag = div.querySelector('.app-fallback-icon');
+                // 캐시된 URL로 로딩 시작 (실패하면 onerror 핸들러가 처리)
                 imgTag.src = app.cachedIconUrl;
                 imgTag.style.display = 'block';
                 spanTag.style.display = 'none';
-            }
 
-            // 2. [API 요청] 정보가 부족하고 외부 앱이 아니면 요청
-            // (캐시된 아이콘이 없거나, 캐시된 타이틀이 없으면 시도해볼 가치가 있음)
-            if ((!app.cachedIconUrl || !app.cachedTitle)) {
+            } else if (!app.cachedIconUrl || !app.cachedTitle) {
+                // API 요청 (정보 부족 시)
                 window.electronAPI.getAppData(app.packageName).then(result => {
-                    if (!result) return; // 결과가 아예 없으면 종료
-                    // [A] 아이콘 처리 (독립적)
-                    if (result.icon) {
-                        app.cachedIconUrl = result.icon; // 캐싱
-                        const imgTag = div.querySelector('.app-real-icon');
-                        const spanTag = div.querySelector('.app-fallback-icon');
-
-                        if (imgTag && spanTag) {
-                            imgTag.src = result.icon;
-                            imgTag.onload = () => {
-                                imgTag.style.display = 'block';
-                                spanTag.style.display = 'none';
-                            };
-                            imgTag.onerror = () => {
-                                imgTag.style.display = 'none';
-                                spanTag.style.display = 'flex';
-                            };
-                        }
-                    }
-
-                    // [B] 타이틀 처리 (독립적)
+                    if (!result || !result.icon) {
+                        // API에서 아이콘 URL을 못 가져온 경우 로컬 대체 시도
+                        handleImageError(false); 
+                        return;
+                    } 
+                    
+                    // API에서 성공적으로 URL을 받은 경우:
+                    app.cachedIconUrl = result.icon; // 캐싱
+                    
+                    // imgTag.src를 설정하여 로딩 시작. 실패하면 onerror 핸들러가 처리합니다.
+                    imgTag.src = result.icon;
+                    imgTag.onload = () => {
+                        imgTag.style.display = 'block';
+                        spanTag.style.display = 'none';
+                    };
+                    
+                    // [B] 타이틀 처리
                     if (result.title) {
-                        app.cachedTitle = result.title; // 캐싱
-                        const nameTag = div.querySelector('.app-display-name');
-                        if (nameTag) {
-                            nameTag.textContent = result.title;
-                        }
+                        app.cachedTitle = result.title;
+                        div.querySelector('.app-display-name').textContent = result.title;
                     }
-                }).catch(() => { });
+                    
+                }).catch(() => { 
+                    // API 요청 자체 실패 시 로컬 대체 시도
+                    handleImageError(false);
+                 });
             }
 
             // 클릭 이벤트
