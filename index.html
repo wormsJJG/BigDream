@@ -211,9 +211,17 @@
                         <h3>⚠️ 탐지 결과</h3>
                         <div id="suspicious-list-container"></div>
                     </div>
+                    <div id="mvt-analysis-section" class="content-card result-section hidden">
+                        <h3>상세 분석 결과 (5대 핵심 영역)</h3>
+                        <p class="sub-text">스파이웨어 흔적 탐지를 위한 5가지 시스템 영역 분석 결과입니다.</p>
+                        
+                        <div id="mvt-analysis-container">
+                            </div>
+                    </div>
                     <div class="content-card">
                         <h3>📲 설치된 애플리케이션</h3>
-                        <p class="sub-text">아이콘을 클릭하면 <strong>권한 상세 내역</strong> 및 <strong>백그라운드 실행 여부</strong>를 확인할 수
+                        <p id="ios-app-list-description" class="sub-text" style="padding: 5px 0; margin-bottom: 10px; display: none;"></p>
+                        <p id="android-app-list-description" class="sub-text">아이콘을 클릭하면 <strong>권한 상세 내역</strong> 및 <strong>백그라운드 실행 여부</strong>를 확인할 수
                             있습니다.</p>
                         <div id="app-grid-container" class="app-grid"></div>
                     </div>

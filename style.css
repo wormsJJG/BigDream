@@ -1315,3 +1315,120 @@ p {
     background-color: #e8f5e9;
     color: #2e7d32;
 }
+
+#mvt-analysis-section {
+    padding: 20px;
+    background-color: #f7fbff; /* 연한 파란색 배경으로 전문성 강조 */
+    border: 1px solid #e0f2ff;
+}
+
+/* 개별 분석 항목 (아코디언 바깥 박스) */
+.analysis-section { 
+    margin-bottom: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    transition: all 0.2s;
+}
+
+/* 아코디언 헤더 (클릭 가능 영역) */
+.analysis-header { 
+    padding: 15px; 
+    cursor: pointer; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* 상태 뱃지 (안전 / 경고) */
+.analysis-status { 
+    padding: 3px 8px; 
+    border-radius: 4px; 
+    font-size: 0.8em; 
+    font-weight: bold;
+}
+
+.status-safe { 
+    background-color: #e8f5e9; /* Green 100 */
+    color: #388e3c;           /* Green 700 */
+}
+
+.status-warning { 
+    background-color: #fff3e0; /* Amber 100 */
+    color: #f57c00;            /* Amber 700 */
+}
+
+/* 아코디언 내용 영역 */
+.analysis-content { 
+    padding: 15px; 
+    border-top: 1px solid #eee; 
+    /* JS에 의해 display: block/none이 제어됨 */
+}
+
+/* MVT 경고 목록 스타일 */
+.analysis-content ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin-top: 10px;
+    margin-bottom: 0;
+}
+.analysis-content ul li {
+    color: #d32f2f; /* Red */
+    margin-bottom: 5px;
+}
+
+
+/* ========================================================
+   [B] iOS 설치된 앱 목록 그리드 (.ios-app-list-grid)
+   ======================================================== */
+
+.ios-app-list-grid {
+    /* 찌그러짐 방지 핵심: 3열 레이아웃을 명확히 정의하고, 
+       minmax(0, 1fr)로 항목이 컨테이너를 벗어나지 않게 보장 */
+    display: grid !important; 
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important; 
+    gap: 10px !important; 
+    width: 100% !important; 
+    box-sizing: border-box !important;
+    overflow-x: hidden !important; 
+    
+    /* 혹시 모를 기존 .app-grid의 영향을 최소화 */
+    padding: 0;
+    margin: 0;
+}
+
+.ios-app-item {
+    background: #f8f9fa; 
+    padding: 10px; 
+    border-radius: 4px; 
+    border: 1px solid #eee; 
+    box-sizing: border-box; 
+    min-width: 0; 
+    
+    /* 항목 자체는 줄 바꿈을 허용하지 않고 오버플로우를 자름 */
+    white-space: nowrap; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block; /* 내부 콘텐츠가 블록 요소임을 보장 */
+}
+
+.ios-app-item .app-title {
+    display: block; 
+    font-size: 14px; 
+    font-weight: bold;
+    color: #333; 
+    overflow: hidden;
+    text-overflow: ellipsis; 
+    white-space: nowrap;
+}
+
+.ios-app-item .app-package {
+    display: block; 
+    font-size: 11px; 
+    color: #777; 
+    overflow: hidden;
+    text-overflow: ellipsis; 
+    white-space: nowrap;
+}
