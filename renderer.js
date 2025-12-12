@@ -56,9 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // 내부 스크린 전환 (로그인 후 콘텐츠)
         showScreen(parentView, screenId) {
             if (!parentView) return;
-            parentView.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            // 모든 스크린을 숨김
+            parentView.querySelectorAll('.screen').forEach(s => {
+                s.classList.remove('active');
+                s.classList.add('hidden'); // 추가: hidden 클래스도 확실히 추가
+            });
+
             const screenToShow = parentView.querySelector(`#${screenId}`);
-            if (screenToShow) screenToShow.classList.add('active');
+            if (screenToShow) {
+                // 선택된 스크린을 표시
+                screenToShow.classList.remove('hidden'); // 추가: hidden 제거
+                screenToShow.classList.add('active');
+            }
         },
 
         // 사이드바 메뉴 활성화
