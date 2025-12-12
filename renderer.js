@@ -1987,6 +1987,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 1. 상세뷰 숨기기
                 document.getElementById('admin-user-detail-view').classList.add('hidden');
 
+                // 날짜 필터 필드 초기화
+                document.getElementById('log-date-start').value = '';
+                document.getElementById('log-date-end').value = '';
+
                 // 2. 목록뷰 보이기 (hidden 제거 + active 추가)
                 const listTab = document.getElementById('admin-tab-list');
                 listTab.classList.remove('hidden');
@@ -2228,9 +2232,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 4. 통계 계산
                 const stats = this.calculateScanStats(logsSnap.docs);
 
-                // 5. 제출된 리포트 가져오기 (reported_logs) - 업체 ID 매칭 필요
-                // (업체 ID가 userId 필드와 같다고 가정)
-                const reportsQ = query(collection(db, "reported_logs"), where("agencyId", "==", userData.userId), orderBy("reportedAt", "desc"));
+                // 5. 제출된 리포트 가져오기 (reported_logs) - 업체 ID 매칭 필요 
+                // UID를 사용하도록 변경합니다.
+                const reportsQ = query(
+                    collection(db, "reported_logs"), 
+                    where("agencyId", "==", uid), // 'uid' 변수 사용 (users 문서 ID)
+                    orderBy("reportedAt", "desc")
+                );
                 const reportsSnap = await getDocs(reportsQ);
 
                 // 6. HTML 렌더링
@@ -2285,6 +2293,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <th>제출일시</th>
                             <th>메시지</th>
                             <th>탐지결과</th>
+                            <th>상세</th>
                         </tr>
                     </thead>
                     <tbody id="detail-report-body">
@@ -2292,8 +2301,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     </tbody>
                 </table>
             `;
-                // 검사 로그 렌더링 호출 및 필터링 이벤트 등록
-                this.loadScanLogs(uid); // 기본적으로 모든 로그를 로드
+                const now = new Date();
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(now.getDate() - 7); // 현재 날짜에서 7일 전으로 설정
+
+                // YYYY-MM-DD 형식으로 변환 (input[type=date]와 호환되도록)
+                // KST 기준 포맷팅 (날짜만 필요)
+                const defaultStartDate = sevenDaysAgo.toISOString().split('T')[0];
+                const defaultEndDate = now.toISOString().split('T')[0];
+                
+                // 1. 날짜 입력 필드에 기본 기간 설정 (UI 업데이트)
+                const startDateEl = document.getElementById('log-date-start');
+                const endDateEl = document.getElementById('log-date-end');
+                
+                if (startDateEl) startDateEl.value = defaultStartDate;
+                if (endDateEl) endDateEl.value = defaultEndDate;
+                
+                // 2. loadScanLogs를 계산된 기본 기간을 포함하여 호출
+                this.loadScanLogs(uid, defaultStartDate, defaultEndDate);
 
                 // 필터링 버튼 이벤트 등록 (시작일, 종료일 사용)
                 document.getElementById('filter-logs-btn').onclick = () => {
@@ -2444,23 +2469,38 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        // 상세페이지 내 리포트 렌더링
         renderDetailReports(snapshot) {
-            if (snapshot.empty) return '<tr><td colspan="3" style="text-align:center;">제출된 리포트가 없습니다.</td></tr>';
+            // 테이블 컬럼이 4개이므로 colspan도 4로 설정
+            if (snapshot.empty) return '<tr><td colspan="4" style="text-align:center;">제출된 리포트가 없습니다.</td></tr>';
 
             let html = '';
             snapshot.forEach(doc => {
                 const r = doc.data();
-                const date = r.reportedAt ? new Date(r.reportedAt.toDate()).toLocaleString() : '-';
+                
+                // Firestore Timestamp 객체 안전 체크 및 날짜 문자열 변환
+                let dateStr = '-';
+                if (r.reportedAt && typeof r.reportedAt.toDate === 'function') {
+                    const dateObj = r.reportedAt.toDate();
+                    dateStr = dateObj.toLocaleString('ko-KR');
+                } else if (r.reportedAt) {
+                    // Timestamp 객체가 아닐 경우
+                    const dateObj = new Date(r.reportedAt);
+                    dateStr = dateObj.toLocaleString('ko-KR');
+                }
+                
+                // 탐지 결과 표시
                 const threat = r.threatCount > 0 ? `<b style="color:red;">위협 ${r.threatCount}건</b>` : '<span style="color:green;">안전</span>';
 
                 html += `
                 <tr>
-                    <td>${date}</td>
-                    <td>${r.message || '-'}</td>
+                    <td>${dateStr}</td> <td>${r.message || '-'}</td>
                     <td>${threat}</td>
+                    <td>
+                        <button class="control-btn" style="background:#555; color:white; border:none; padding: 5px 10px; border-radius: 4px;"
+                                onclick="window.viewReportDetail('${doc.id}')">상세보기</button>
+                    </td>
                 </tr>
-            `;
+                `;
             });
             return html;
         },
