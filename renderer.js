@@ -1350,11 +1350,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = iconWrapper.querySelector('.detail-real-img');
             const span = iconWrapper.querySelector('.detail-fallback-span');
 
+            const setLocalFallbackIcon = () => {
+    // 💡 assets/systemAppLogo.png 경로를 사용하여 이미지 설정
+    img.src = './assets/systemAppLogo.png'; 
+    img.style.display = 'block';
+    span.style.display = 'none';
+    
+    // 로컬 폴백 이미지 로드 실패 시, 최종적으로 '📱' 이모지로 전환
+    img.onerror = () => {
+        img.style.display = 'none';
+        span.style.display = 'flex';
+    };
+};
+
             // [Case A] 캐시된 아이콘이 있으면 즉시 표시
             if (app.cachedIconUrl) {
                 img.src = app.cachedIconUrl;
                 img.style.display = 'block';
                 span.style.display = 'none';
+            } else {
+
+                setLocalFallbackIcon();
             }
 
             // [Case B] 정보가 부족하면 API 요청
