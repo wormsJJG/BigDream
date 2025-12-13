@@ -19,7 +19,7 @@ const { exec, spawn } = require('child_process');
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
 const CONFIG = {
-    IS_DEV_MODE: true,
+    IS_DEV_MODE: false,
     VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
     PATHS: {
         ADB: path.join(__dirname, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),

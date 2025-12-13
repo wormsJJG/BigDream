@@ -594,18 +594,18 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             // 1. Android 확인
-            // try {
-            //     const android = await window.electronAPI.checkDeviceConnection();
-            //     if (android.status === 'connected') {
-            //         State.currentDeviceMode = 'android';
-            //         this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
-            //         return;
-            //     } else if (android.status === 'unauthorized') {
-            //         State.currentDeviceMode = null;
-            //         this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
-            //         return;
-            //     }
-            // } catch (e) { }
+            try {
+                const android = await window.electronAPI.checkDeviceConnection();
+                if (android.status === 'connected') {
+                    State.currentDeviceMode = 'android';
+                    this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
+                    return;
+                } else if (android.status === 'unauthorized') {
+                    State.currentDeviceMode = null;
+                    this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
+                    return;
+                }
+            } catch (e) { }
 
             // 2. iOS 확인
             try {
