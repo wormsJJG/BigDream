@@ -594,18 +594,18 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             // 1. Android 확인
-            try {
-                const android = await window.electronAPI.checkDeviceConnection();
-                if (android.status === 'connected') {
-                    State.currentDeviceMode = 'android';
-                    this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
-                    return;
-                } else if (android.status === 'unauthorized') {
-                    State.currentDeviceMode = null;
-                    this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
-                    return;
-                }
-            } catch (e) { }
+            // try {
+            //     const android = await window.electronAPI.checkDeviceConnection();
+            //     if (android.status === 'connected') {
+            //         State.currentDeviceMode = 'android';
+            //         this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
+            //         return;
+            //     } else if (android.status === 'unauthorized') {
+            //         State.currentDeviceMode = null;
+            //         this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
+            //         return;
+            //     }
+            // } catch (e) { }
 
             // 2. iOS 확인
             try {
@@ -941,108 +941,99 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('res-phone').textContent = data.deviceInfo.phoneNumber || '-';
 
             const rootEl = document.getElementById('res-root');
+
+            // DOM 요소 참조 (지역 변수)
             const appGrid = document.getElementById('app-grid-container');
             const bgGrid = document.getElementById('bg-app-grid-container');
             const apkList = document.getElementById('res-apk-list');
-            const mvtSection = document.getElementById('mvt-analysis-section'); // MVT 섹션 참조
+            const mvtSection = document.getElementById('mvt-analysis-section');
             const androidDescEl = document.getElementById('android-app-list-description');
-            const iosDescEl = document.getElementById('ios-app-list-description'); // iOS 멘트 요소
+            const iosDescEl = document.getElementById('ios-app-list-description');
 
-
+            // 2. 루팅/탈옥 상태 및 Android 멘트 가시성 제어
             if (isIos) {
-                // iOS는 루팅(탈옥) 여부를 MVT 결과만으로 판단하기 어려우므로 안전 문구 표시
-                rootEl.textContent = '✅ 안전함';
-                rootEl.style.color = '#5CB85C';
+                this.renderMvtAnalysis(data.mvtResults || {}, isIos);
+                // MVT 경고가 renderMvtAnalysis 내에서 rootEl을 갱신합니다. (기본값: 안전함)
                 if (androidDescEl) androidDescEl.classList.add('hidden');
+                if (iosDescEl) iosDescEl.style.display = 'block';
+
             } else {
+                // Android 모드일 때 루팅 체크
                 rootEl.textContent = data.deviceInfo.isRooted ? '⚠️ 발견됨 (ROOTED)' : '✅ 안전함';
                 rootEl.style.color = data.deviceInfo.isRooted ? '#D9534F' : '#5CB85C';
+
+                // MVT 섹션 숨기기
+                if (mvtSection) mvtSection.classList.add('hidden');
                 if (androidDescEl) androidDescEl.classList.remove('hidden');
+                if (iosDescEl) iosDescEl.style.display = 'none';
             }
 
-            // DOM 요소 참조
-            
+            if (isIos) {
+                // [iOS 모드]
 
+                // 1. Android 전용 섹션들 숨기기
+                if (bgGrid) bgGrid.closest('.content-card').style.display = 'none';
+                if (apkList) apkList.closest('.content-card').style.display = 'none';
 
-           this.renderMvtAnalysis(data.mvtResults || {}, isIos); 
+                // 2. '설치된 애플리케이션' 섹션 재활용 및 iOS용 렌더링
+                if (appGrid) {
+                    const appGridParent = appGrid.closest('.content-card');
+                    if (appGridParent) appGridParent.style.display = 'block';
 
-        if (isIos) {
-            // -------------------------------------------------
-            // [iOS 모드]
-            // -------------------------------------------------
-            
-            // 1. Android 전용 섹션들 숨기기
-            if (bgGrid) bgGrid.closest('.content-card').style.display = 'none';
-            if (apkList) apkList.closest('.content-card').style.display = 'none';
-            
-            // 2. Android 멘트 숨기고 iOS 멘트 표시
-            if (androidDescEl) androidDescEl.classList.add('hidden');
-            if (iosDescEl) iosDescEl.style.display = 'block';
+                    // 💡 [클래스 토글] Android 그리드 클래스 제거 (찌그러짐 방지)
+                    appGrid.classList.remove('app-grid');
 
-            // 3. '설치된 애플리케이션' 섹션 (appGrid)을 MVT 앱 목록으로 재활용
-            if (appGrid) {
-                const appGridParent = appGrid.closest('.content-card');
-                if (appGridParent) appGridParent.style.display = 'block';
-                
-                // 앱 목록 렌더링 (compact list)
-                this.renderIosInstalledApps(data.allApps || [], appGrid); 
+                    this.renderIosInstalledApps(data.allApps || [], appGrid);
+                }
+
+            } else {
+                // [Android 모드]
+
+                // 1. Android 전용 섹션들 표시
+                if (bgGrid) bgGrid.closest('.content-card').style.display = 'block';
+                if (apkList) apkList.closest('.content-card').style.display = 'block';
+
+                // 2. '설치된 애플리케이션' 섹션 복구
+                if (appGrid) {
+                    const appGridParent = appGrid.closest('.content-card');
+                    if (appGridParent) {
+                        appGridParent.style.display = 'block';
+                        appGridParent.querySelector('h3').innerHTML = `📲 설치된 애플리케이션`;
+                    }
+
+                    // 💡 [클래스 토글] iOS 그리드 클래스가 있었다면 제거하고, Android 그리드 클래스 추가
+                    appGrid.classList.remove('ios-app-list-grid');
+                    appGrid.classList.add('app-grid');
+
+                    // 3. 앱 목록 렌더링
+                    appGrid.innerHTML = '';
+                    data.allApps.forEach(app => this.createAppIcon(app, appGrid));
+                }
+
+                // 4. 백그라운드 앱 목록 렌더링 (bgGrid)
+                if (bgGrid) {
+                    bgGrid.innerHTML = '';
+                    // 💡 data.allApps에서 필터링
+                    const runningApps = data.allApps ? data.allApps.filter(app => app.isRunningBg) : [];
+
+                    if (runningApps.length > 0) {
+                        runningApps.forEach(app => this.createAppIcon(app, bgGrid));
+                    } else {
+                        bgGrid.innerHTML = '<p class="sub-text" style="padding: 10px;">백그라운드에서 실행 중인 의심스러운 애플리케이션이 탐지되지 않았습니다.</p>';
+                    }
+                }
+
+                // 5. APK 파일 목록 렌더링 (apkList)
+                if (apkList) {
+                    apkList.innerHTML = data.apkFiles && data.apkFiles.length > 0
+                        ? data.apkFiles.map(f => `<li>${f}</li>`).join('')
+                        : '<li>없음</li>';
+                }
             }
-        } else {
-            // -------------------------------------------------
-            // [Android 모드]
-            // -------------------------------------------------
-            
-            // 1. MVT 섹션 및 iOS 멘트 숨기기
-            if (mvtSection) mvtSection.classList.add('hidden');
-            if (iosDescEl) iosDescEl.style.display = 'none';
-            
-            // 2. Android 설명 멘트 표시
-            if (androidDescEl) androidDescEl.classList.remove('hidden');
 
-            // 3. Android 전용 섹션들 표시 및 렌더링
-            
-            // [A] 백그라운드 앱 목록 렌더링 복구
-            if (bgGrid) {
-                 const bgGridParent = bgGrid.closest('.content-card');
-                 if (bgGridParent) bgGridParent.style.display = 'block';
-                 
-                 bgGrid.innerHTML = '';
-                 const runningApps = data.allApps ? data.allApps.filter(app => app.isRunningBg) : [];
-                 
-                 if (runningApps.length > 0) {
-                     runningApps.forEach(app => this.createAppIcon(app, bgGrid));
-                 } else {
-                     bgGrid.innerHTML = '<p class="sub-text" style="padding: 10px;">백그라운드에서 실행 중인 의심스러운 애플리케이션이 탐지되지 않았습니다.</p>';
-                 }
-            }
-
-            // [B] APK 파일 목록 렌더링 복구
-            if (apkList) {
-                const apkListParent = apkList.closest('.content-card');
-                if (apkListParent) apkListParent.style.display = 'block';
-                
-                 apkList.innerHTML = data.apkFiles && data.apkFiles.length > 0
-                     ? data.apkFiles.map(f => `<li>${f}</li>`).join('') 
-                     : '<li>없음</li>';
-            }
-            appGrid.classList.add('app-grid');
-            // [C] 설치된 전체 앱 목록 렌더링 복구 (appGrid)
-            if (appGrid) {
-                 const appGridParent = appGrid.closest('.content-card');
-                 if (appGridParent) {
-                     appGridParent.style.display = 'block';
-                     appGridParent.querySelector('h3').innerHTML = `📲 설치된 애플리케이션`;
-                 }
-                 
-                 // 💡 중요: iOS 렌더링 시 사용했던 HTML 콘텐츠를 지우고, Android용 그리드를 복구해야 합니다.
-                 appGrid.innerHTML = ''; 
-                 data.allApps.forEach(app => this.createAppIcon(app, appGrid));
-            }
-        }
-
-        // 4. 의심 앱 리스트 (MVT 경고 포함된 최종 목록 표시)
-        this.renderSuspiciousList(data.suspiciousApps, isIos);
-    },
+            // 5. 의심 앱 리스트 (MVT 경고 포함된 최종 목록 표시)
+            this.renderSuspiciousList(data.suspiciousApps, isIos);
+        },
 
         // -------------------------------------------------
         // [NEW] MVT 상세 분석 렌더링 함수 (iOS 전용)
@@ -1136,32 +1127,34 @@ document.addEventListener('DOMContentLoaded', () => {
         // -------------------------------------------------
         // [NEW] iOS 설치된 앱 목록 렌더링 (Android 그리드 자리에 표시)
         // -------------------------------------------------
-        renderIosInstalledApps(apps, container) {
+        renderIosInstalledApps(apps, container) { // container는 render 함수에서 받은 appGrid입니다.
         if (!container) return;
 
         const totalApps = apps.length;
 
-if (appGrid) {
-    const appGridParent = appGrid.closest('.content-card');
-    if (appGridParent) appGridParent.style.display = 'block';
-    
-    // 💡 [추가] Android의 그리드 스타일을 제거하여 충돌 방지
-    appGrid.classList.remove('app-grid'); 
-    
-    // 앱 목록 렌더링 (compact list)
-    this.renderIosInstalledApps(data.allApps || [], appGrid); 
-}
-        // ... (1. 제목 업데이트 및 2. iOS 전용 멘트 표시 로직 유지) ...
+        // 1. 제목 업데이트 (container를 기준으로 찾음)
+        const parentHeader = container.closest('.content-card')?.querySelector('h3');
+        if (parentHeader) {
+            parentHeader.innerHTML = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
+        }
         
+        // 2. iOS 전용 멘트 표시 (이미 render 함수에서 display:block 처리됨)
+        const descEl = document.getElementById('ios-app-list-description');
+        if (descEl) {
+            descEl.innerHTML = `MVT 분석은 아래 목록에 포함된 **${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
+        }
+
         container.innerHTML = '';
         
-        if (totalApps === 0) { /* ... */ return; }
+        if (totalApps === 0) {
+            container.innerHTML = '<p style="color:#888; padding:10px;">앱 목록 정보가 확인되지 않았습니다.</p>';
+            return;
+        }
 
-        // 3. 앱 목록 렌더링: 인라인 스타일 제거하고 CSS 클래스만 사용
+        // 3. 앱 목록 렌더링: CSS 클래스만 사용 (찌그러짐 방지용)
         const sortedApps = [...apps].sort((a, b) => (a.cachedTitle || a.packageName).localeCompare(b.cachedTitle || b.packageName));
         
-        // 💡 [수정] 인라인 스타일 제거: CSS 클래스만 사용 (width: 100% 등은 CSS로 이동)
-        let listHtml = '<div class="ios-app-list-grid">'; 
+        let listHtml = '<div class="ios-app-list-grid">'; // CSS 클래스 사용
         
         sortedApps.forEach(app => {
             const displayName = app.cachedTitle || Utils.formatAppName(app.packageName);
@@ -2484,7 +2477,7 @@ if (appGrid) {
                 // 5. 제출된 리포트 가져오기 (reported_logs) - 업체 ID 매칭 필요 
                 // UID를 사용하도록 변경합니다.
                 const reportsQ = query(
-                    collection(db, "reported_logs"), 
+                    collection(db, "reported_logs"),
                     where("agencyId", "==", uid), // 'uid' 변수 사용 (users 문서 ID)
                     orderBy("reportedAt", "desc")
                 );
@@ -2558,14 +2551,14 @@ if (appGrid) {
                 // KST 기준 포맷팅 (날짜만 필요)
                 const defaultStartDate = sevenDaysAgo.toISOString().split('T')[0];
                 const defaultEndDate = now.toISOString().split('T')[0];
-                
+
                 // 1. 날짜 입력 필드에 기본 기간 설정 (UI 업데이트)
                 const startDateEl = document.getElementById('log-date-start');
                 const endDateEl = document.getElementById('log-date-end');
-                
+
                 if (startDateEl) startDateEl.value = defaultStartDate;
                 if (endDateEl) endDateEl.value = defaultEndDate;
-                
+
                 // 2. loadScanLogs를 계산된 기본 기간을 포함하여 호출
                 this.loadScanLogs(uid, defaultStartDate, defaultEndDate);
 
@@ -2725,7 +2718,7 @@ if (appGrid) {
             let html = '';
             snapshot.forEach(doc => {
                 const r = doc.data();
-                
+
                 // Firestore Timestamp 객체 안전 체크 및 날짜 문자열 변환
                 let dateStr = '-';
                 if (r.reportedAt && typeof r.reportedAt.toDate === 'function') {
@@ -2736,7 +2729,7 @@ if (appGrid) {
                     const dateObj = new Date(r.reportedAt);
                     dateStr = dateObj.toLocaleString('ko-KR');
                 }
-                
+
                 // 탐지 결과 표시
                 const threat = r.threatCount > 0 ? `<b style="color:red;">위협 ${r.threatCount}건</b>` : '<span style="color:green;">안전</span>';
 
@@ -3019,6 +3012,16 @@ if (appGrid) {
             adminScreen.classList.add('active');
         });
     }
+
+    window.toggleAnalysis = (header) => {
+        const content = header.nextElementSibling;
+        if (content.style.display === "block") {
+            content.style.display = "none";
+        } else {
+            content.style.display = "block";
+        }
+    };
+
     // [전역 함수 노출] HTML onclick에서 호출하기 위해 window에 등록
     window.toggleLock = async (uid, shouldLock) => {
         if (!await CustomUI.confirm(shouldLock ? "🚫 이 업체의 사용을 막으시겠습니까?" : "✅ 차단을 해제하시겠습니까?")) return; try {

@@ -19,7 +19,7 @@ const { exec, spawn } = require('child_process');
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
 const CONFIG = {
-    IS_DEV_MODE: false,
+    IS_DEV_MODE: true,
     VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
     PATHS: {
         ADB: path.join(__dirname, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
@@ -80,7 +80,7 @@ ipcMain.handle('force-window-reset', () => {
 
 // 3-1. 기기 연결 확인
 ipcMain.handle('check-device-connection', async () => {
-    if (CONFIG.IS_DEV_MODE) return { status: 'connected', model: 'Galaxy S24 (TEST)' };
+    if (CONFIG.IS_DEV_MODE) return  MockData.getIosConnection();
 
     try {
         const devices = await client.listDevices();
@@ -108,7 +108,7 @@ ipcMain.handle('run-scan', async () => {
     console.log('--- [Android] 정밀 분석 시작 ---');
     if (CONFIG.IS_DEV_MODE) {
         await Utils.sleep(1500);
-        return MockData.getAndroid();
+        return MockData.getIosScanResult();
     }
 
     try {
@@ -965,15 +965,43 @@ const MockData = {
     },
 
     getIosScanResult() {
+        const installedApps = [
+            { packageName: 'com.apple.camera', cachedTitle: '카메라' },
+            { packageName: 'com.google.Gmail', cachedTitle: 'Gmail' },
+            { packageName: 'com.lguplus.aicallagent', cachedTitle: '익시오' },
+            { packageName: 'com.apple.weather', cachedTitle: '날씨' },
+            { packageName: 'net.whatsapp.WhatsApp', cachedTitle: 'WhatsApp' },
+            { packageName: 'com.spyware.agent.hidden', cachedTitle: '시스템 서비스' }, // 의도적으로 의심 앱 추가
+        ];
+
         return {
-            deviceInfo: { model: 'iPhone 15 Pro (MOCK)', os: 'iOS 17.4' },
+            deviceInfo: { 
+                model: 'iPhone 16 Pro (MOCK)', 
+                serial: 'IOS-TEST-UDID', 
+                phoneNumber: '+82 10-9999-0000',
+                os: 'iOS 17.4' 
+            },
+            
+            // 💡 1. MVT의 원본 탐지 결과 (findings)
             suspiciousItems: [
-                { source_file: 'sms.json', message: 'Click: http://malware.com', sender: '+123456789' },
-                { source_file: 'suspicious_processes.json', process_name: 'pegasus_agent', reason: 'Spyware' }
+                { module: 'SMS', check_name: 'iMessage Link IOC', description: '악성 도메인 접속 유도 링크 수신', path: '/private/var/mobile/Library/SMS/sms.db', sha256: 'a1b2c3d4...' },
+                { module: 'WebKit', check_name: 'Browser History IOC', description: 'Safari에서 C2 서버 도메인 접속 흔적 발견', path: '/private/var/mobile/Library/WebKit', sha256: 'e5f6g7h8...' },
+                { module: 'Process', check_name: 'Suspicious Process', description: '비정상적인 이름의 백그라운드 프로세스 활동', path: 'com.apple.bh', sha256: 'i9j0k1l2...' },
             ],
-            allApps: [{ bundle_id: 'com.apple.camera', name: 'Camera' }]
+            
+            // 💡 2. MVT 5대 영역 분류 결과 (renderer가 기대하는 구조)
+            mvtResults: {
+                web: { status: 'warning', warnings: ['악성 URL 접속 흔적: hxxp://c2-server.com', 'Safari 캐시에서 비정상 파일 발견'] },
+                messages: { status: 'warning', warnings: ['악성 도메인 접속 유도 링크 수신'] },
+                system: { status: 'warning', warnings: ['비정상적인 이름의 백그라운드 프로세스 활동', '의심스러운 Crash Report 발견'] },
+                apps: { status: 'safe', warnings: [] },
+                artifacts: { status: 'safe', warnings: [] }
+            },
+            
+            // 💡 3. 설치된 앱 목록 (applications.json 파싱 결과)
+            allApps: installedApps,
+            apkFiles: [], // iOS에서는 APK 없음
         };
     },
-
 
 };
