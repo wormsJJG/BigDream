@@ -1128,47 +1128,47 @@ document.addEventListener('DOMContentLoaded', () => {
         // [NEW] iOS 설치된 앱 목록 렌더링 (Android 그리드 자리에 표시)
         // -------------------------------------------------
         renderIosInstalledApps(apps, container) { // container는 render 함수에서 받은 appGrid입니다.
-        if (!container) return;
+            if (!container) return;
 
-        const totalApps = apps.length;
+            const totalApps = apps.length;
 
-        // 1. 제목 업데이트 (container를 기준으로 찾음)
-        const parentHeader = container.closest('.content-card')?.querySelector('h3');
-        if (parentHeader) {
-            parentHeader.innerHTML = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
-        }
-        
-        // 2. iOS 전용 멘트 표시 (이미 render 함수에서 display:block 처리됨)
-        const descEl = document.getElementById('ios-app-list-description');
-        if (descEl) {
-            descEl.innerHTML = `MVT 분석은 아래 목록에 포함된 **${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
-        }
+            // 1. 제목 업데이트 (container를 기준으로 찾음)
+            const parentHeader = container.closest('.content-card')?.querySelector('h3');
+            if (parentHeader) {
+                parentHeader.innerHTML = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
+            }
 
-        container.innerHTML = '';
-        
-        if (totalApps === 0) {
-            container.innerHTML = '<p style="color:#888; padding:10px;">앱 목록 정보가 확인되지 않았습니다.</p>';
-            return;
-        }
+            // 2. iOS 전용 멘트 표시 (이미 render 함수에서 display:block 처리됨)
+            const descEl = document.getElementById('ios-app-list-description');
+            if (descEl) {
+                descEl.innerHTML = `MVT 분석은 아래 목록에 포함된 **${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
+            }
 
-        // 3. 앱 목록 렌더링: CSS 클래스만 사용 (찌그러짐 방지용)
-        const sortedApps = [...apps].sort((a, b) => (a.cachedTitle || a.packageName).localeCompare(b.cachedTitle || b.packageName));
-        
-        let listHtml = '<div class="ios-app-list-grid">'; // CSS 클래스 사용
-        
-        sortedApps.forEach(app => {
-            const displayName = app.cachedTitle || Utils.formatAppName(app.packageName);
-            listHtml += `
+            container.innerHTML = '';
+
+            if (totalApps === 0) {
+                container.innerHTML = '<p style="color:#888; padding:10px;">앱 목록 정보가 확인되지 않았습니다.</p>';
+                return;
+            }
+
+            // 3. 앱 목록 렌더링: CSS 클래스만 사용 (찌그러짐 방지용)
+            const sortedApps = [...apps].sort((a, b) => (a.cachedTitle || a.packageName).localeCompare(b.cachedTitle || b.packageName));
+
+            let listHtml = '<div class="ios-app-list-grid">'; // CSS 클래스 사용
+
+            sortedApps.forEach(app => {
+                const displayName = app.cachedTitle || Utils.formatAppName(app.packageName);
+                listHtml += `
                 <div class="ios-app-item">
                     <strong class="app-title">${displayName}</strong>
                     <span class="app-package">${app.packageName}</span>
                 </div>
             `;
-        });
-        listHtml += '</div>';
+            });
+            listHtml += '</div>';
 
-        container.innerHTML = listHtml;
-    },
+            container.innerHTML = listHtml;
+        },
 
         // 아이콘 생성 로직 (Android 전용 - 기존 코드 유지)
         createAppIcon(app, container) {
@@ -1514,21 +1514,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("인쇄할 검사 결과가 없습니다.");
                 return;
             }
-            const data = window.lastScanData;
 
-            // 1. 헤더 정보
+            const data = window.lastScanData;
+            const isIos = State.currentDeviceMode === 'ios';
+
+            // --- [1] 검사자 및 고객 정보 (Client Info Form에서 가져옴) ---
+            // 익명 처리된 값 가져오기 (폼 값이 익명 처리 값일 경우 그대로 출력)
+            const clientName = document.getElementById('client-name').value || "익명";
+            const clientDob = document.getElementById('client-dob').value || "0000-00-00";
+            const clientPhone = document.getElementById('client-phone').value || "000-0000-0000";
+
+            // 익명/기본값 체크 헬퍼
+            const isAnonName = clientName === '익명 사용자';
+            const isAnonDob = clientDob === '0001-01-01';
+            const isAnonPhone = clientPhone === '000-0000-0000';
+
+            // --- [2] DOM 바인딩 ---
+
+            // 1. 헤더 정보 및 업체명
             const now = new Date();
             const dateStr = now.toLocaleString('ko-KR');
             document.getElementById('print-date').textContent = dateStr;
             document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-            // 2. 기기 정보
+            // 💡 [수정] 검사 업체명 바인딩 (State에서 가져옴)
+            document.getElementById('print-agency-name').textContent = State.agencyName;
+
+            // 💡 [추가] 검사자 정보 테이블 바인딩
+            const examinerTable = document.getElementById('print-examiner-info');
+            if (examinerTable) {
+                examinerTable.innerHTML = `
+                <tr>
+                    <th>검사자 이름</th>
+                    <td>${isAnonName ? '익명 처리' : clientName}</td>
+                    <th>생년월일</th>
+                    <td>${isAnonDob ? '익명 처리' : clientDob}</td>
+                </tr>
+                <tr>
+                    <th>전화번호</th>
+                    <td colspan="3">${isAnonPhone ? '익명 처리' : clientPhone}</td>
+                </tr>
+            `;
+            }
+
+            // 3. 기기 정보
             document.getElementById('print-model').textContent = data.deviceInfo.model;
             document.getElementById('print-serial').textContent = data.deviceInfo.serial;
-            document.getElementById('print-root').textContent = data.deviceInfo.isRooted ? '발견됨 (위험)' : '안전함';
+            document.getElementById('print-root').textContent = isIos ? '판단불가 (MVT)' : (data.deviceInfo.isRooted ? '발견됨 (위험)' : '안전함');
             document.getElementById('print-phone').textContent = data.deviceInfo.phoneNumber;
 
-            // 3. 종합 판정 및 통계
+            // 4. 종합 판정 및 통계
             const threatCount = data.suspiciousApps.length;
             const summaryBox = document.getElementById('print-summary-box');
 
@@ -1544,20 +1579,24 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('print-threat-count').textContent = threatCount;
             document.getElementById('print-file-count').textContent = data.apkFiles.length;
 
-            // 4. 위협 탐지 내역 (표)
+
+            // 5. 위협 탐지 내역 (표)
             const threatContainer = document.getElementById('print-threat-container');
             if (threatCount > 0) {
                 let html = `<table class="detail-table"><thead><tr><th>탐지된 앱</th><th>패키지명</th><th>위협 사유</th></tr></thead><tbody>`;
                 data.suspiciousApps.forEach(app => {
                     let vtInfo = '';
-                    if (app.vtResult && app.vtResult.malicious > 0) {
+                    // iOS MVT 결과도 suspiciousApps에 포함되어 있으므로, isMvt 플래그나 hash 존재 여부로 MVT 결과임을 명시할 수 있습니다.
+                    if (app.hash && app.hash !== 'N/A') {
+                        vtInfo = `<br><span style="color:#0275d8; font-size:9px;">[MVT Artifact]</span>`;
+                    } else if (app.vtResult && app.vtResult.malicious > 0) {
                         vtInfo = `<br><span style="color:red; font-size:9px;">[VT 탐지: ${app.vtResult.malicious}/${app.vtResult.total}]</span>`;
                     }
                     html += `<tr>
-                        <td class="text-danger" style="font-weight:bold;">${formatAppName(app.packageName)}</td>
-                        <td>${app.packageName}</td>
-                        <td>${app.reason || '불명확'}${vtInfo}</td>
-                    </tr>`;
+                    <td class="text-danger" style="font-weight:bold;">${formatAppName(app.packageName)}</td>
+                    <td>${app.packageName}</td>
+                    <td>${app.reason || '불명확'}${vtInfo}</td>
+                </tr>`;
                 });
                 html += `</tbody></table>`;
                 threatContainer.innerHTML = html;
@@ -1565,15 +1604,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 threatContainer.innerHTML = `<div style="padding:10px; border:1px solid #ccc; text-align:center; color:#5CB85C;">탐지된 위협 없음</div>`;
             }
 
-            // 5. APK 파일 리스트
+
+            // 6. APK 파일 리스트 섹션 제어 (iOS 숨김 처리)
+            const fileSection = document.getElementById('print-file-system-section');
             const fileBody = document.getElementById('print-file-body');
-            if (data.apkFiles.length > 0) {
-                fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('');
+
+            if (isIos) {
+                // 💡 [수정] iOS일 경우 파일 시스템 분석 섹션 전체 숨김
+                if (fileSection) fileSection.style.display = 'none';
             } else {
-                fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
+                // Android일 경우 섹션 표시
+                if (fileSection) fileSection.style.display = 'block';
+
+                // APK 목록 바인딩
+                if (data.apkFiles.length > 0) {
+                    fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('');
+                } else {
+                    fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
+                }
             }
 
-            // 6. [부록] 전체 앱 목록 (3단 콤팩트 그리드)
+
+            // 7. [부록] 전체 앱 목록 (Android 전용 앱 목록 표시 로직 유지)
+            const printArea = document.getElementById('printable-report');
+            // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
+            const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
+
+            if (isIos) {
+                // 💡 [수정] iOS일 경우 5번 섹션 숨김 (기존 로직)
+                const fileSection = document.getElementById('print-file-system-section');
+                if (fileSection) fileSection.style.display = 'none';
+
+                // 💡 [수정] iOS일 경우 부록 섹션 번호를 6번에서 5번으로 변경
+                if (appendixHeader) {
+                    appendixHeader.textContent = appendixHeader.textContent.replace(/^6\./, '5.');
+                }
+            } else {
+                // Android일 경우 섹션 표시
+                const fileSection = document.getElementById('print-file-system-section');
+                if (fileSection) fileSection.style.display = 'block';
+
+                // Android일 경우 부록 섹션 번호를 6번으로 유지
+                if (appendixHeader) {
+                    appendixHeader.textContent = appendixHeader.textContent.replace(/^5\./, '6.');
+                }
+                // ... (기존 APK 목록 바인딩 로직 유지) ...
+            }
+
             const appGrid = document.getElementById('print-all-apps-grid');
             appGrid.innerHTML = '';
 
@@ -1602,13 +1679,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 appGrid.appendChild(div);
             });
 
-            const printArea = document.getElementById('printable-report');
-            printArea.style.display = 'block'; // ★ 이 줄이 있어야 CSS가 작동함
-
             setTimeout(() => {
                 window.print();
-                printArea.style.display = 'none'; // 인쇄 후 다시 숨김
-            }, 500); // 렌더링 시간 확보
+                printArea.style.display = 'none';
+
+                // 💡 [복구] 인쇄 후 섹션 번호를 원래대로 복구 (다음 검사를 위해)
+                if (appendixHeader) {
+                    appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
+                }
+                const fileSection = document.getElementById('print-file-system-section');
+                if (fileSection) fileSection.style.display = 'block';
+
+            }, 500);
         });
     }
 

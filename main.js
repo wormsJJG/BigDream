@@ -972,7 +972,15 @@ const MockData = {
             { packageName: 'com.apple.weather', cachedTitle: '날씨' },
             { packageName: 'net.whatsapp.WhatsApp', cachedTitle: 'WhatsApp' },
             { packageName: 'com.spyware.agent.hidden', cachedTitle: '시스템 서비스' }, // 의도적으로 의심 앱 추가
+            { packageName: 'com.naver.map', cachedTitle: '네이버 지도' }, // 앱 목록 보강
+            { packageName: 'com.tistory.blog', cachedTitle: '티스토리' },
+            { packageName: 'com.google.youtube', cachedTitle: 'YouTube' },
+            { packageName: 'com.kakaobank.bank', cachedTitle: '카카오뱅크' },
         ];
+        
+        // MVT 분석 결과 (suspiciousItems)를 렌더러가 기대하는 형식에 맞게 변환해야 합니다.
+        // MVT는 suspiciousItems를 반환하고, renderer는 Utils.transformIosData를 통해
+        // suspiciousApps와 mvtResults를 분리합니다.
 
         return {
             deviceInfo: { 
@@ -982,7 +990,8 @@ const MockData = {
                 os: 'iOS 17.4' 
             },
             
-            // 💡 1. MVT의 원본 탐지 결과 (findings)
+            // 💡 1. MVT의 원본 탐지 결과 (suspiciousItems는 findings에 해당)
+            //    이 데이터가 renderer.js의 Utils.transformIosData에서 suspiciousApps로 매핑됩니다.
             suspiciousItems: [
                 { module: 'SMS', check_name: 'iMessage Link IOC', description: '악성 도메인 접속 유도 링크 수신', path: '/private/var/mobile/Library/SMS/sms.db', sha256: 'a1b2c3d4...' },
                 { module: 'WebKit', check_name: 'Browser History IOC', description: 'Safari에서 C2 서버 도메인 접속 흔적 발견', path: '/private/var/mobile/Library/WebKit', sha256: 'e5f6g7h8...' },
@@ -998,7 +1007,7 @@ const MockData = {
                 artifacts: { status: 'safe', warnings: [] }
             },
             
-            // 💡 3. 설치된 앱 목록 (applications.json 파싱 결과)
+            // 💡 3. 설치된 앱 목록 (renderer.js의 allApps로 최종 전달됨)
             allApps: installedApps,
             apkFiles: [], // iOS에서는 APK 없음
         };
