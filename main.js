@@ -18,17 +18,161 @@ const { exec, spawn } = require('child_process');
 // ============================================================
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
+
+const RESOURCE_DIR = app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked') : __dirname;
+
 const CONFIG = {
     IS_DEV_MODE: false,
     VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
     PATHS: {
-        ADB: path.join(__dirname, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
-        IOS_TOOLS: path.join(__dirname, 'ios-tools'),
-        IOS_ID: path.join(__dirname, 'ios-tools', os.platform() === 'win32' ? 'idevice_id.exe' : 'idevice_id'),
-        IOS_INFO: path.join(__dirname, 'ios-tools', os.platform() === 'win32' ? 'ideviceinfo.exe' : 'ideviceinfo'),
-        IOS_BACKUP: path.join(__dirname, 'ios-tools', os.platform() === 'win32' ? 'idevicebackup2.exe' : 'idevicebackup2'),
+        ADB: path.join(RESOURCE_DIR, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
+        IOS_TOOLS: path.join(RESOURCE_DIR, 'ios-tools'),
+        IOS_ID: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevice_id.exe' : 'idevice_id'),
+        IOS_INFO: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'ideviceinfo.exe' : 'ideviceinfo'),
+        IOS_BACKUP: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevicebackup2.exe' : 'idevicebackup2'),
         TEMP_BACKUP: path.join(app.getPath('temp'), 'bd_ios_backup'),
         MVT_RESULT: path.join(app.getPath('userData'), 'mvt_results')
+    }
+};
+
+const Utils = {
+
+    sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+
+    formatAppName(bundleId) {
+        if (!bundleId) return "Unknown";
+        const parts = bundleId.split('.');
+        let name = parts[parts.length - 1];
+        return name.charAt(0).toUpperCase() + name.slice(1);
+    },
+
+    // VirusTotal API 호출
+    async checkVirusTotal(fileHash) {
+        try {
+            const response = await axios.get(`https://www.virustotal.com/api/v3/files/${fileHash}`, {
+                headers: { 'x-apikey': CONFIG.VIRUSTOTAL_API_KEY }
+            });
+            const stats = response.data.data.attributes.last_analysis_stats;
+            return {
+                malicious: stats.malicious,
+                suspicious: stats.suspicious,
+                total: stats.malicious + stats.suspicious + stats.harmless + stats.undetected
+            };
+        } catch (error) {
+            if (error.response && error.response.status === 404) return { not_found: true };
+            return null;
+        }
+    },
+
+    // 명령어 실행 (Promise 래퍼)
+    runCommand(command) {
+        return new Promise((resolve, reject) => {
+            exec(command, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`명령어 실패: ${command}\n${stderr}`);
+                    reject(error);
+                } else {
+                    resolve(stdout);
+                }
+            });
+        });
+    },
+
+    // 폴더 삭제
+    cleanDirectory(dirPath) {
+        try {
+            if (fs.existsSync(dirPath)) fs.rmSync(dirPath, { recursive: true, force: true });
+        } catch (e) { console.warn(`폴더 삭제 실패 (${dirPath}):`, e.message); }
+    },
+
+    async isMvtInstalled() {
+        try {
+            // mvt-ios 버전 정보를 요청하여 에러가 없으면 설치된 것으로 간주
+            await this.runCommand('mvt-ios version');
+            return true;
+        } catch (e) {
+            console.log(e)
+            return false;
+        }
+    },
+
+    async installMvtIfMissing(mainWindow) {
+        if (await this.isMvtInstalled()) {
+            console.log("✅ MVT 이미 설치되어 있음.");
+            return true;
+        }
+
+        console.log("🔄 MVT 설치 시도 중...");
+        const statusBox = new BrowserWindow({
+            width: 400, height: 150, frame: false, parent: mainWindow, modal: true, show: false
+        });
+        // 상태 창 로드 (별도의 HTML 파일 필요)
+        statusBox.loadFile('loading.html');
+        statusBox.once('ready-to-show', () => statusBox.show());
+
+
+        try {
+            // 1. 필요한 Python 패키지 설치 (MVT 설치 전에 필수적으로 필요한 패키지)
+            await this.runCommand('pip3 install --upgrade pip setuptools wheel');
+
+            // 2. MVT 설치 (이 명령어는 시간이 오래 걸릴 수 있습니다.)
+            // --user 플래그를 사용하여 시스템 권한 없이 현재 사용자 계정에 설치
+            await this.runCommand('pip3 install mvt --user');
+
+            console.log("✅ MVT 설치 성공.");
+            statusBox.close();
+            return true;
+
+        } catch (e) {
+            statusBox.close();
+            dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'MVT 설치 실패',
+                message: `MVT 설치 중 오류가 발생했습니다. 수동 설치가 필요합니다. 오류: ${e.message}`,
+            });
+            return false;
+        }
+    },
+
+    async checkAndInstallPrerequisites(mainWindow) {
+        let pythonInstalled = false;
+
+        // 1. Python 설치 여부 확인
+        try {
+            // 'python3' 명령어가 있는지 확인
+            await this.runCommand('python3 --version');
+            console.log("✅ Python3 설치 확인 완료.");
+            pythonInstalled = true;
+        } catch (e) {
+            // 'python' 명령어로 다시 한번 확인 (일부 환경에서 'python'만 사용)
+            try {
+                await this.runCommand('python --version');
+                console.log("✅ Python 설치 확인 완료.");
+                pythonInstalled = true;
+            } catch (e) {
+                console.log("❌ Python이 시스템에 설치되어 있지 않거나 PATH에 없습니다.");
+            }
+        }
+
+        if (!pythonInstalled) {
+            // 2. Python이 없을 경우, 설치 안내 메시지 박스 표시
+            const dialogResult = await dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                title: '필수 프로그램 설치 안내',
+                message: 'MVT 분석을 위해 Python 3.9 이상이 필요합니다.\n\n[예]를 누르면 공식 다운로드 페이지로 이동합니다.',
+                buttons: ['예 (설치 페이지 열기)', '아니오 (계속 진행)']
+            });
+
+            if (dialogResult.response === 0) {
+                // '예'를 선택한 경우, Python 다운로드 페이지를 엽니다.
+                require('electron').shell.openExternal('https://www.python.org/downloads/windows/');
+            }
+            // Python이 없으면 MVT 설치 단계는 건너뜁니다.
+            return false;
+        }
+
+        // 3. Python이 설치되어 있다면 MVT 설치 단계로 이동
+        return await this.installMvtIfMissing(mainWindow);
     }
 };
 
@@ -44,6 +188,7 @@ function createWindow() {
         width: 1280,
         height: 850,
         webPreferences: {
+            devTools: false,
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false
@@ -52,10 +197,14 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
-app.whenReady().then( () => { 
+app.whenReady().then(async () => {
 
     createWindow();
- });
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    await Utils.checkAndInstallPrerequisites(mainWindow);
+}).catch(err => {
+    console.log(err)
+});
 
 // 창 리셋 (UI 강제 새로고침 효과)
 ipcMain.handle('force-window-reset', () => {
@@ -165,7 +314,7 @@ ipcMain.handle('run-scan', async () => {
                 return app.reason && app.reason.includes('[VT 확진]');
             });
         }
-      
+
         return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
 
     } catch (err) {
@@ -383,8 +532,8 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
         const mvtPathRoaming = path.join(userHome, 'AppData', 'Roaming', 'Python', 'Python311', 'Scripts', 'mvt-ios.exe');
 
         let mvtCmd = `mvt-ios`;
-        if (fs.existsSync(mvtPathLocal)) mvtCmd = `"${mvtPathLocal}"`;
-        else if (fs.existsSync(mvtPathRoaming)) mvtCmd = `"${mvtPathRoaming}"`;
+        // if (fs.existsSync(mvtPathLocal)) mvtCmd = `"${mvtPathLocal}"`;
+        // else if (fs.existsSync(mvtPathRoaming)) mvtCmd = `"${mvtPathRoaming}"`;
 
         const finalCmd = `${mvtCmd} check-backup --output "${MVT_RESULT}" "${specificBackupPath}"`;
 
@@ -418,7 +567,7 @@ ipcMain.handle('saveScanResult', async (event, data) => {
         const { dialog } = require('electron');
         const fs = require('fs');
         const path = require('path');
-        
+
         // 파일명 생성: BD_YYYYMMDD_MODEL.json
         const now = new Date();
         const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
@@ -451,7 +600,7 @@ ipcMain.handle('open-scan-file', async (event) => {
     try {
         const { dialog } = require('electron');
         const fs = require('fs');
-        
+
         const result = await dialog.showOpenDialog({
             title: '검사 결과 열기',
             properties: ['openFile'],
@@ -468,7 +617,7 @@ ipcMain.handle('open-scan-file', async (event) => {
 
         // 💡 [핵심] 저장된 OS 모드 파악 (UI 렌더링에 필요)
         if (!scanData.deviceInfo || !scanData.deviceInfo.os) {
-             throw new Error('파일 구조가 올바르지 않거나 OS 정보가 누락되었습니다.');
+            throw new Error('파일 구조가 올바르지 않거나 OS 정보가 누락되었습니다.');
         }
 
         return { success: true, data: scanData, osMode: scanData.deviceInfo.os };
@@ -482,7 +631,7 @@ ipcMain.handle('open-scan-file', async (event) => {
 ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
     try {
         console.log(`📡 현재 버전: ${currentVersion}. 최신 버전 확인 중...`);
-        
+
         // 1. Firestore에서 최신 버전 정보 문서 가져오기
         const doc = await db.collection('updates').doc('latest').get();
 
@@ -492,10 +641,10 @@ ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
 
         const latestInfo = doc.data(); // { version: '1.0.1', url: 'https://...' }
         const latestVersion = latestInfo.version;
-        
+
         // 2. 버전 비교 (Major.Minor.Patch)
         // 실제 프로젝트에서는 semver 라이브러리(npm install semver)를 사용하는 것이 좋습니다.
-        const isNewVersion = latestVersion > currentVersion; 
+        const isNewVersion = latestVersion > currentVersion;
 
         if (isNewVersion) {
             return {
@@ -1042,58 +1191,11 @@ const IosService = {
     }
 };
 
+
 // ============================================================
 // [7] 유틸리티 함수 (UTILITIES)
 // ============================================================
-const Utils = {
-    sleep: (ms) => new Promise(r => setTimeout(r, ms)),
 
-    formatAppName(bundleId) {
-        if (!bundleId) return "Unknown";
-        const parts = bundleId.split('.');
-        let name = parts[parts.length - 1];
-        return name.charAt(0).toUpperCase() + name.slice(1);
-    },
-
-    // VirusTotal API 호출
-    async checkVirusTotal(fileHash) {
-        try {
-            const response = await axios.get(`https://www.virustotal.com/api/v3/files/${fileHash}`, {
-                headers: { 'x-apikey': CONFIG.VIRUSTOTAL_API_KEY }
-            });
-            const stats = response.data.data.attributes.last_analysis_stats;
-            return {
-                malicious: stats.malicious,
-                suspicious: stats.suspicious,
-                total: stats.malicious + stats.suspicious + stats.harmless + stats.undetected
-            };
-        } catch (error) {
-            if (error.response && error.response.status === 404) return { not_found: true };
-            return null;
-        }
-    },
-
-    // 명령어 실행 (Promise 래퍼)
-    runCommand(command) {
-        return new Promise((resolve, reject) => {
-            exec(command, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`명령어 실패: ${command}\n${stderr}`);
-                    reject(error);
-                } else {
-                    resolve(stdout);
-                }
-            });
-        });
-    },
-
-    // 폴더 삭제
-    cleanDirectory(dirPath) {
-        try {
-            if (fs.existsSync(dirPath)) fs.rmSync(dirPath, { recursive: true, force: true });
-        } catch (e) { console.warn(`폴더 삭제 실패 (${dirPath}):`, e.message); }
-    }
-};
 
 // ============================================================
 // [8] 테스트용 가짜 데이터 (MOCK DATA)
@@ -1241,5 +1343,4 @@ const MockData = {
             apkFiles: [], // iOS에서는 APK 없음
         };
     },
-
 };

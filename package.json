@@ -12,15 +12,32 @@
     "build:linux64": "electron-builder --linux --x64",
     "build:win": "npm run build:win32 && npm run build:win64",
     "build:win32": "electron-builder --win portable --ia32",
-    "build:win64": "electron-builder --win portable --x64"
+    "build:win64": "electron-builder --win portable --x64",
+    "make": "electron-forge make",
+    "package": "electron-forge package"
   },
-  "author": "",
+  "author": "Big Dream Security",
   "license": "ISC",
   "devDependencies": {
+    "@electron-forge/maker-squirrel": "^7.10.2",
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12"
   },
+  "config": {
+    "forge": {
+      "packagerConfig": {},
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "bd_scanner"
+          }
+        }
+      ]
+    }
+  },
   "dependencies": {
+    "@electron-forge/cli": "^7.10.2",
     "adb": "^0.2.0",
     "adbkit": "^2.11.1",
     "app-info-parser": "^1.1.6",
