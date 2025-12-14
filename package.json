@@ -25,18 +25,19 @@
   },
   "config": {
     "forge": {
-      "packagerConfig": {},
+      "packagerConfig": {
+        "icon": "assets/app_icon",
+        "extraResource": [
+                  "ios-tools",
+                  "platform-tools"
+                ]
+      },
       "makers": [
         {
           "name": "@electron-forge/maker-squirrel",
           "config": {
             "name": "BD_Scanner",
-            "forge": {
-              "extraResource": [
-                "ios-tools",
-                "platform-tools"
-              ]
-            }
+            "setupIcon": "assets/setUpIcon.ico"
           }
         }
       ]
@@ -53,20 +54,5 @@
     "firebase-admin": "^13.6.0",
     "google-play-scraper": "^10.1.2",
     "xml2js": "^0.6.2"
-  },
-  "build": {
-    "win": {
-      "icon": "/assets/logo.jpg"
-    },
-    "files": [
-      "**/*",
-      "!node_modules/electron-forge/**",
-      "ios-tools/**/*",
-      "platform-tools/**/*"
-    ],
-    "asarUnpack": [
-      "**/ios-tools/**/*",
-      "**/platform-tools/**/*"
-    ]
   }
 }

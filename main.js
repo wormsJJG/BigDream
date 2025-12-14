@@ -19,7 +19,7 @@ const { exec, spawn } = require('child_process');
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
 
-const RESOURCE_DIR = app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked') : __dirname;
+const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : __dirname;
 
 const CONFIG = {
     IS_DEV_MODE: false,
