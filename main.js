@@ -482,10 +482,12 @@ const AndroidService = {
 
     // 설치된 앱 목록 (시스템 앱 필터링 강화 버전)
     async getInstalledApps(serial) {
+        // 1. 시스템 앱 목록 획득: 'pm list packages -s' 사용 (가장 정확)
         const sysOutput = await client.shell(serial, 'pm list packages -s');
         const sysData = await adb.util.readAll(sysOutput);
         const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
 
+        // 2. 전체 앱 목록 및 설치 정보 획득
         const output = await client.shell(serial, 'pm list packages -i -f -U');
         const data = await adb.util.readAll(output);
         const lines = data.toString().trim().split('\n');
@@ -520,11 +522,22 @@ const AndroidService = {
 
             if (!packageName) return null;
 
+            let origin = '외부 설치'; // 기본값: Sideload
             let isSideloaded = true;
-            if (systemPackages.has(packageName)) isSideloaded = false;
-            else if (installer && TRUSTED_INSTALLERS.includes(installer)) isSideloaded = false;
 
-            return { packageName, apkPath, installer, isSideloaded, uid };
+            // 💡 [시스템 앱 판별] 1순위: 시스템 패키지 목록에 있는지 확인
+            if (systemPackages.has(packageName)) {
+                origin = '시스템 앱';
+                isSideloaded = false;
+            } 
+            // 💡 [공식 스토어 판별] 2순위: 공식 설치 경로(installer)가 있는지 확인 (시스템 앱이 아닐 경우만)
+            else if (installer && TRUSTED_INSTALLERS.includes(installer)) {
+                origin = '공식 스토어';
+                isSideloaded = false;
+            }
+
+            // isSideloaded는 '외부 설치'일 경우에만 true가 됩니다.
+            return { packageName, apkPath, installer, isSideloaded, uid, origin }; // 💡 origin 필드 추가
         }).filter(item => item !== null);
     },
 

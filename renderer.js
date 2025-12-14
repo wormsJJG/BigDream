@@ -1336,7 +1336,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 나머지 텍스트 정보 채우기
             document.getElementById('detail-package-name').textContent = app.packageName;
-            document.getElementById('detail-sideload').textContent = app.isSideloaded ? '외부 설치' : 'Play Store';
+            document.getElementById('detail-sideload').textContent = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
             document.getElementById('detail-bg').textContent = app.isRunningBg ? '실행 중' : '중지됨';
             document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
             document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
