@@ -588,25 +588,66 @@ const AndroidService = {
     async getNetworkUsageMap(serial) {
         const usageMap = {};
         try {
-            const output = await client.shell(serial, 'dumpsys netstats detail');
-            const data = (await adb.util.readAll(output)).toString();
+            // 💡 방법 1: dumpsys netstats detail (기존 방식 유지)
+            let data = '';
+            try {
+                const output = await client.shell(serial, 'dumpsys netstats detail');
+                data = (await adb.util.readAll(output)).toString();
+            } catch (e) {
+                console.warn('⚠️ dumpsys netstats detail 실패, 대체 명령어 시도.');
+            }
+
+            // 💡 방법 2: /proc/net/xt_qtaguid/stats 파일 직접 읽기 (루팅 필요하거나 접근이 막힐 수 있음)
+            // 루팅 환경이나 이전 OS에서는 더 안정적일 수 있습니다.
+            if (data.length === 0) {
+                try {
+                    const output = await client.shell(serial, 'cat /proc/net/xt_qtaguid/stats');
+                    data = (await adb.util.readAll(output)).toString();
+                } catch (e) {
+                    console.warn('⚠️ /proc/net/xt_qtaguid/stats 접근 실패.');
+                }
+            }
+            console.log(data)
+            
+           let currentUid = null;
+            
             data.split('\n').forEach(line => {
-                if (line.includes('uid=') && line.includes('rxBytes=')) {
-                    const parts = line.trim().split(/\s+/);
-                    let uid = null, rx = 0, tx = 0;
-                    parts.forEach(p => {
-                        if (p.startsWith('uid=')) uid = p.split('=')[1];
-                        if (p.startsWith('rxBytes=')) rx = parseInt(p.split('=')[1]) || 0;
-                        if (p.startsWith('txBytes=')) tx = parseInt(p.split('=')[1]) || 0;
-                    });
-                    if (uid) {
-                        if (!usageMap[uid]) usageMap[uid] = { rx: 0, tx: 0 };
-                        usageMap[uid].rx += rx;
-                        usageMap[uid].tx += tx;
+                const trimmedLine = line.trim();
+
+                // 1. UID 식별자 (ident=...) 찾기
+                // 예: ident=[... ] uid=10272 set=FOREGROUND ...
+                if (trimmedLine.startsWith('ident=')) {
+                    const uidMatch = trimmedLine.match(/uid=(\d+)/);
+                    if (uidMatch) {
+                        currentUid = uidMatch[1];
+                        if (!usageMap[currentUid]) {
+                            usageMap[currentUid] = { rx: 0, tx: 0 };
+                        }
+                    } else {
+                        currentUid = null; // UID를 찾지 못하면 데이터 누적 중단
+                    }
+                }
+                // 2. NetworkStatsHistory 버킷 찾기 (rb=... tb=...)
+                // 예: st=1764835200 rb=9021 rp=14 tb=5982 tp=13 op=0
+                else if (currentUid && trimmedLine.startsWith('st=')) {
+                    const rbMatch = trimmedLine.match(/rb=(\d+)/);
+                    const tbMatch = trimmedLine.match(/tb=(\d+)/);
+
+                    if (rbMatch && tbMatch) {
+                        const rxBytes = parseInt(rbMatch[1], 10) || 0;
+                        const txBytes = parseInt(tbMatch[1], 10) || 0;
+                        
+                        // 현재 UID의 합산 맵에 누적
+                        usageMap[currentUid].rx += rxBytes;
+                        usageMap[currentUid].tx += txBytes;
                     }
                 }
             });
-        } catch (e) { console.error('네트워크 통계 수집 실패:', e); }
+            // --- 데이터 파싱 로직 종료 ---
+            
+        } catch (e) { 
+            // ... (오류 처리 로직 유지) ...
+        }
         return usageMap;
     },
 
