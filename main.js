@@ -52,7 +52,10 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
-app.whenReady().then(() => { createWindow(); });
+app.whenReady().then( () => { 
+
+    createWindow();
+ });
 
 // 창 리셋 (UI 강제 새로고침 효과)
 ipcMain.handle('force-window-reset', () => {
@@ -473,6 +476,41 @@ ipcMain.handle('open-scan-file', async (event) => {
     } catch (e) {
         console.error("로컬 파일 열기 오류:", e);
         return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
+    try {
+        console.log(`📡 현재 버전: ${currentVersion}. 최신 버전 확인 중...`);
+        
+        // 1. Firestore에서 최신 버전 정보 문서 가져오기
+        const doc = await db.collection('updates').doc('latest').get();
+
+        if (!doc.exists) {
+            return { available: false, message: '업데이트 정보 없음' };
+        }
+
+        const latestInfo = doc.data(); // { version: '1.0.1', url: 'https://...' }
+        const latestVersion = latestInfo.version;
+        
+        // 2. 버전 비교 (Major.Minor.Patch)
+        // 실제 프로젝트에서는 semver 라이브러리(npm install semver)를 사용하는 것이 좋습니다.
+        const isNewVersion = latestVersion > currentVersion; 
+
+        if (isNewVersion) {
+            return {
+                available: true,
+                latestVersion: latestVersion,
+                downloadUrl: latestInfo.url,
+                message: `${latestVersion} 버전이 출시되었습니다. 수동 업데이트가 필요합니다.`
+            };
+        } else {
+            return { available: false, message: '최신 버전을 사용 중입니다.' };
+        }
+
+    } catch (e) {
+        console.error("업데이트 확인 오류:", e);
+        return { available: false, error: e.message, message: '업데이트 서버 접속 실패' };
     }
 });
 

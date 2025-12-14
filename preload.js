@@ -64,7 +64,8 @@ contextBridge.exposeInMainWorld(
 
             console.log('--- preload.js: saveScanResult 호출됨');
             return ipcRenderer.invoke('saveScanResult', data)
-        }
+        },
+        
     }
 );
 
@@ -80,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     checkIosConnection: () => ipcRenderer.invoke('check-ios-connection'),
     runIosScan: (udid) => ipcRenderer.invoke('run-ios-scan', udid),
     saveScanResult: (data) => ipcRenderer.invoke('saveScanResult', data),
+    checkForUpdate: (currentVersion) => ipcRenderer.invoke('checkForUpdate', currentVersion),
 });
 
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');

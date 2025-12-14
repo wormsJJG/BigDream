@@ -20,11 +20,14 @@ import {
     limit  // ★ [수정 1] 비정상 로그 불러올 때 필요한 limit 추가
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+const CURRENT_APP_VERSION = '1.0.0'
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('--- renderer.js: DOM 로드 완료 ---');
+
+    checkAndUpdateUI();
 
     const ID_DOMAIN = "@bd.com";
     // =========================================================
@@ -3424,4 +3427,75 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    async function checkAndUpdateUI() {
+    console.log("업데이트 확인 로직 실행 (클라이언트 SDK)...");
+    
+    try {
+        // Firestore에서 'updates' 컬렉션의 'latest' 문서를 가져옵니다.
+        const docRef = doc(db, "updates", "latest");
+        const docSnap = await getDoc(docRef);
+
+  
+        if (!docSnap.exists()) {
+            console.log("Firestore에 업데이트 정보 문서가 없습니다.");
+            return;
+        }
+
+        const latestInfo = docSnap.data();
+        const latestVersion = latestInfo.version;
+    const downloadUrl = latestInfo.url;
+    
+    // 💡 [핵심 수정] compareVersions 함수를 사용하여 버전 비교
+    const comparisonResult = compareVersions(latestVersion, CURRENT_APP_VERSION);
+    
+    // latestVersion이 CURRENT_APP_VERSION보다 클 경우 (결과: 1)
+    if (comparisonResult > 0) { 
+        
+        // ... (업데이트 알림 로직 유지) ...
+        const updateMessage = 
+            `🎉 새 버전 ${latestVersion}이 출시되었습니다! 🎉\n` +
+            `현재 버전: ${CURRENT_APP_VERSION}\n\n` +
+            `아래 링크에서 업데이트 파일을 다운로드하세요:\n${downloadUrl}`;
+        
+        await CustomUI.alert(updateMessage);
+        
+    } else {
+        console.log(`최신 버전을 사용 중입니다. (V${CURRENT_APP_VERSION})`);
+    }
+
+    } catch (error) {
+        console.error('업데이트 확인 중 통신 오류:', error);
+        // 사용자에게는 오류를 보여주지 않습니다.
+    }
+}
+
+// renderer.js 파일 내 (주요 함수 영역에 추가)
+
+/**
+ * SemVer(Semantic Versioning) 규칙에 따라 두 버전 문자열을 비교합니다.
+ * @param {string} a - 비교할 첫 번째 버전 (예: '1.0.10')
+ * @param {string} b - 비교할 두 번째 버전 (예: '1.1.0')
+ * @returns {number} 1: a가 더 큼, -1: b가 더 큼, 0: 두 버전이 같음
+ */
+function compareVersions(a, b) {
+    // 버전을 점(.) 기준으로 나눕니다.
+    const partsA = a.split('.').map(Number);
+    const partsB = b.split('.').map(Number);
+
+    // Major, Minor, Patch 순서로 각 부분을 비교합니다.
+    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+        const numA = partsA[i] || 0;
+        const numB = partsB[i] || 0;
+
+        if (numA > numB) {
+            return 1; // A가 B보다 큼
+        }
+        if (numA < numB) {
+            return -1; // B가 A보다 큼
+        }
+    }
+
+    return 0; // 두 버전이 같음
+}
 });
