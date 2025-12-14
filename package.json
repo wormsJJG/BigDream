@@ -14,7 +14,8 @@
     "build:win32": "electron-builder --win portable --ia32",
     "build:win64": "electron-builder --win portable --x64",
     "make": "electron-forge make",
-    "package": "electron-forge package"
+    "package": "electron-forge package",
+    "pack": "electron-builder"
   },
   "author": "Big Dream Security",
   "license": "ISC",
@@ -54,5 +55,10 @@
     "firebase-admin": "^13.6.0",
     "google-play-scraper": "^10.1.2",
     "xml2js": "^0.6.2"
+  },
+  "build": {
+
+    "productName": "BD-Scanner",
+    "appId": "BigDream.BD_Scanner"
   }
 }
