@@ -118,6 +118,7 @@ ipcMain.handle('run-scan', async () => {
 
         // [Step A] 기본 정보 수집
         const deviceInfo = await AndroidService.getDeviceInfo(serial);
+        deviceInfo.os = 'ANDROID'
 
         // [Step B] 앱 및 파일 데이터 수집
         const apkFiles = await AndroidService.findApkFiles(serial);
@@ -161,7 +162,7 @@ ipcMain.handle('run-scan', async () => {
                 return app.reason && app.reason.includes('[VT 확진]');
             });
         }
-        console.log(suspiciousApps)
+      
         return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
 
     } catch (err) {
@@ -404,6 +405,74 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
         }
 
         return { error: userMsg };
+    }
+});
+
+ipcMain.handle('saveScanResult', async (event, data) => {
+    // 💡 data: { deviceInfo: {...}, allApps: [...], ... } 전체 검사 결과 객체
+    try {
+        // Electron dialog 모듈을 사용하여 저장 경로 대화 상자 열기
+        const { dialog } = require('electron');
+        const fs = require('fs');
+        const path = require('path');
+        
+        // 파일명 생성: BD_YYYYMMDD_MODEL.json
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const modelName = data.deviceInfo.model ? data.deviceInfo.model.replace(/\s/g, '_') : 'UnknownDevice';
+        const defaultPath = path.join(os.homedir(), `BD_${dateStr}_${modelName}.json`);
+
+        const result = await dialog.showSaveDialog({
+            title: '검사 결과 저장',
+            defaultPath: defaultPath,
+            filters: [{ name: 'BD Scanner Report', extensions: ['json'] }]
+        });
+
+        if (result.canceled) {
+            return { success: false, message: '저장 취소' };
+        }
+
+        const filePath = result.filePath;
+        const jsonContent = JSON.stringify(data, null, 2);
+        fs.writeFileSync(filePath, jsonContent);
+
+        return { success: true, message: `결과가 성공적으로 저장되었습니다:\n${filePath}` };
+
+    } catch (e) {
+        console.error("로컬 저장 오류:", e);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('open-scan-file', async (event) => {
+    try {
+        const { dialog } = require('electron');
+        const fs = require('fs');
+        
+        const result = await dialog.showOpenDialog({
+            title: '검사 결과 열기',
+            properties: ['openFile'],
+            filters: [{ name: 'BD Scanner Report', extensions: ['json'] }]
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { success: false, message: '열기 취소' };
+        }
+
+        const filePath = result.filePaths[0];
+        const jsonContent = fs.readFileSync(filePath, 'utf-8');
+        const scanData = JSON.parse(jsonContent);
+
+        // 💡 [핵심] 저장된 OS 모드 파악 (UI 렌더링에 필요)
+        if (!scanData.deviceInfo || !scanData.deviceInfo.os) {
+             throw new Error('파일 구조가 올바르지 않거나 OS 정보가 누락되었습니다.');
+        }
+
+        return { success: true, data: scanData, osMode: scanData.deviceInfo.os };
+
+    } catch (e) {
+        console.error("로컬 파일 열기 오류:", e);
+        return { success: false, error: e.message };
     }
 });
 

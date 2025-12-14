@@ -59,7 +59,12 @@ contextBridge.exposeInMainWorld(
              console.log('--- preload.js: runIosScan 호출됨');
 
             return ipcRenderer.invoke('run-ios-scan', udid);
-        }   
+        },
+        saveScanResult: (data) => {
+
+            console.log('--- preload.js: saveScanResult 호출됨');
+            return ipcRenderer.invoke('saveScanResult', data)
+        }
     }
 );
 
@@ -73,7 +78,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     neutralizeApp: (pkg) => ipcRenderer.invoke('neutralize-app', pkg),
     getAppData: (packageName) => ipcRenderer.invoke('get-app-data', packageName),
     checkIosConnection: () => ipcRenderer.invoke('check-ios-connection'),
-    runIosScan: (udid) => ipcRenderer.invoke('run-ios-scan', udid)
+    runIosScan: (udid) => ipcRenderer.invoke('run-ios-scan', udid),
+    saveScanResult: (data) => ipcRenderer.invoke('saveScanResult', data),
 });
 
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');

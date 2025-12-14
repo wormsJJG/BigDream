@@ -720,6 +720,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 파일열기
+    const openScanFileBtn = document.getElementById('select-file-btn');
+    if (openScanFileBtn) {
+        openScanFileBtn.addEventListener('click', async () => {
+            
+            openScanFileBtn.disabled = true;
+            openScanFileBtn.textContent = "파일 여는 중...";
+
+            try {
+                const result = await window.electronAPI.openScanFile();
+                
+                if (result.success) {
+                    const data = result.data;
+                    const osMode = result.osMode; // 저장된 데이터에서 OS 모드를 가져옴
+
+                    // 1. 상태 업데이트 (렌더링에 OS 모드가 필요하므로)
+                    State.currentDeviceMode = osMode; 
+                    State.lastScanData = data;
+                    window.lastScanData = data;
+                    
+                    // 2. UI 전환
+                    ViewManager.activateMenu('nav-result');
+                    ResultsRenderer.render(data);
+                    ViewManager.showScreen(loggedInView, 'scan-results-screen');
+                    
+                    // 3. 네비게이션 버튼 표시
+                    document.getElementById('nav-create').classList.add('hidden');
+                    document.getElementById('nav-open').classList.add('hidden');
+                    document.getElementById('nav-result').classList.remove('hidden');
+
+                    await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo.model}`);
+                    
+                } else if (result.message !== '열기 취소') {
+                    await CustomUI.alert(`❌ 파일 열기 실패: ${result.error || result.message}`);
+                }
+            } catch (error) {
+                 await CustomUI.alert(`시스템 오류: ${error.message}`);
+            } finally {
+                openScanFileBtn.disabled = false;
+                openScanFileBtn.textContent = "📁 로컬 파일 열기";
+            }
+        });
+    }
+
     const ScanController = {
 
         currentLogId: null,
@@ -1520,6 +1564,33 @@ document.addEventListener('DOMContentLoaded', () => {
             name = parts[parts.length - 2];
         }
         return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+
+    const saveResultsBtn = document.getElementById('save-results-btn');
+    if (saveResultsBtn) {
+        saveResultsBtn.addEventListener('click', async () => {
+            if (!State.lastScanData) {
+                await CustomUI.alert("저장할 데이터가 없습니다.");
+                return;
+            }
+            
+            saveResultsBtn.disabled = true;
+            saveResultsBtn.textContent = "저장 중...";
+            
+            try {
+                const result = await window.electronAPI.saveScanResult(State.lastScanData);
+                if (result.success) {
+                    await CustomUI.alert(result.message);
+                } else {
+                    await CustomUI.alert(`저장 실패: ${result.error || result.message}`);
+                }
+            } catch (error) {
+                 await CustomUI.alert(`로컬 저장 오류: ${error.message}`);
+            } finally {
+                saveResultsBtn.disabled = false;
+                saveResultsBtn.textContent = "💾 로컬 저장";
+            }
+        });
     }
 
     // 3. 인쇄
