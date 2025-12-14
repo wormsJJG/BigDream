@@ -584,62 +584,89 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         async checkDevice() {
-            const screen = document.getElementById('device-connection-screen');
-            if (!screen.classList.contains('active')) {
-                this.stopPolling();
+        const screen = document.getElementById('device-connection-screen');
+        if (!screen.classList.contains('active')) {
+            this.stopPolling();
+            return;
+        }
+
+        const ui = {
+            icon: document.getElementById('connection-status-icon'),
+            title: document.getElementById('connection-status-title'),
+            desc: document.getElementById('connection-status-desc')
+        };
+
+        // 1. Android 확인
+        try {
+            const android = await window.electronAPI.checkDeviceConnection();
+            
+            if (android.status === 'connected') {
+                State.currentDeviceMode = 'android';
+                this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
+                return;
+            } else if (android.status === 'unauthorized') {
+                State.currentDeviceMode = null;
+                this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
+                return;
+            } 
+            // 💡 [추가] ADB 연결 시 오류 상태(error, offline) 처리
+            else if (android.status === 'error' || android.status === 'offline') {
+                State.currentDeviceMode = null;
+                // error.error에는 main.js에서 전달한 상세 오류 메시지가 담겨 있습니다.
+                const errorMessage = android.error || 'ADB 도구 실행 오류. 프로그램 재시작 필요.';
+                this.setUI(ui, '⚠️', 'Android 도구 오류', errorMessage, '#D9534F', false); 
                 return;
             }
 
-            const ui = {
-                icon: document.getElementById('connection-status-icon'),
-                title: document.getElementById('connection-status-title'),
-                desc: document.getElementById('connection-status-desc')
-            };
-
-            // 1. Android 확인
-            try {
-                const android = await window.electronAPI.checkDeviceConnection();
-                if (android.status === 'connected') {
-                    State.currentDeviceMode = 'android';
-                    this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
-                    return;
-                } else if (android.status === 'unauthorized') {
-                    State.currentDeviceMode = null;
-                    this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
-                    return;
-                }
-            } catch (e) { }
-
-            // 2. iOS 확인
-            try {
-                const ios = await window.electronAPI.checkIosConnection();
-                if (ios.status === 'connected') {
-                    State.currentDeviceMode = 'ios';
-                    State.currentUdid = ios.udid;
-                    this.setUI(ui, '🍎', 'iPhone 연결됨', ios.model, '#5CB85C');
-                    return;
-                }
-            } catch (e) { }
-
-            // 3. 연결 없음
-            State.currentDeviceMode = null;
-            this.setUI(ui, '🔌', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
-        },
-
-        setUI(ui, iconText, titleText, descText, color, showBtn = true) {
-            ui.icon.textContent = iconText;
-            ui.title.textContent = titleText;
-            ui.title.style.color = color;
-            ui.desc.innerHTML = descText.includes('연결') || descText.includes('허용') ? descText : `모델: <strong>${descText}</strong>`;
-
-            const btnContainer = document.getElementById('start-scan-container');
-            btnContainer.style.display = showBtn ? 'block' : 'none';
-
-            // 잔상 방지 리셋
-            if (showBtn && !btnContainer.dataset.visible) {
-                btnContainer.dataset.visible = "true";
-            }
+        } catch (e) { 
+            // 통신 API 자체의 예외 (매우 드묾)
+            this.setUI(ui, '❌', '통신 오류', 'Android 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
+            return;
         }
+
+        // 2. iOS 확인
+        try {
+            const ios = await window.electronAPI.checkIosConnection();
+            
+            if (ios.status === 'connected') {
+                State.currentDeviceMode = 'ios';
+                State.currentUdid = ios.udid;
+                this.setUI(ui, '🍎', 'iPhone 연결됨', ios.model, '#5CB85C');
+                return;
+            } 
+            // 💡 [추가] iOS 연결 시 오류 상태(error) 처리
+            else if (ios.status === 'error') {
+                State.currentDeviceMode = null;
+                const errorMessage = ios.error || 'iOS 도구 실행 오류. iTunes 설치 상태 확인 필요.';
+                this.setUI(ui, '⚠️', 'iOS 도구 오류', errorMessage, '#D9534F', false);
+                return;
+            }
+
+        } catch (e) { 
+            // 통신 API 자체의 예외 (매우 드묾)
+            this.setUI(ui, '❌', '통신 오류', 'iOS 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
+            return;
+        }
+
+        // 3. 연결 없음 (기존 로직 유지)
+        State.currentDeviceMode = null;
+        this.setUI(ui, '🔌', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
+    },
+
+    setUI(ui, iconText, titleText, descText, color, showBtn = true) {
+        // ... (setUI 함수는 변경 없음)
+        ui.icon.textContent = iconText;
+        ui.title.textContent = titleText;
+        ui.title.style.color = color;
+        ui.desc.innerHTML = descText.includes('연결') || descText.includes('허용') || descText.includes('오류') ? `<span style="color:${color};">${descText}</span>` : `모델: <strong>${descText}</strong>`;
+        
+        const btnContainer = document.getElementById('start-scan-container');
+        btnContainer.style.display = showBtn ? 'block' : 'none';
+
+        if (showBtn && !btnContainer.dataset.visible) {
+            btnContainer.dataset.visible = "true";
+        }
+    }
     };
 
     // =========================================================

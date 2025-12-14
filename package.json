@@ -30,7 +30,13 @@
         {
           "name": "@electron-forge/maker-squirrel",
           "config": {
-            "name": "bd_scanner"
+            "name": "BD_Scanner",
+            "forge": {
+              "extraResource": [
+                "ios-tools",
+                "platform-tools"
+              ]
+            }
           }
         }
       ]
@@ -51,6 +57,16 @@
   "build": {
     "win": {
       "icon": "/assets/logo.jpg"
-    }
+    },
+    "files": [
+      "**/*",
+      "!node_modules/electron-forge/**",
+      "ios-tools/**/*",
+      "platform-tools/**/*"
+    ],
+    "asarUnpack": [
+      "**/ios-tools/**/*",
+      "**/platform-tools/**/*"
+    ]
   }
 }

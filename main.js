@@ -237,7 +237,7 @@ ipcMain.handle('check-device-connection', async () => {
     try {
         const devices = await client.listDevices();
         if (devices.length === 0) return { status: 'disconnected' };
-
+        
         const device = devices[0];
         if (device.type === 'unauthorized') return { status: 'unauthorized' };
         if (device.type === 'offline') return { status: 'offline' };
@@ -382,33 +382,53 @@ ipcMain.handle('get-app-data', async (event, packageName) => {
 // ============================================================
 
 // 4-1. iOS 연결 확인
+// 4-1. iOS 연결 확인
 ipcMain.handle('check-ios-connection', async () => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosConnection();
 
-    return new Promise((resolve) => {
-        const cmd = `"${CONFIG.PATHS.IOS_ID}" -l`;
-        console.log(`[iOS] 연결 확인 실행: ${cmd}`);
+    console.log(`[iOS] 연결 확인 시작: ${CONFIG.PATHS.IOS_ID}`);
 
-        exec(cmd, (error, stdout) => {
-            if (error) {
-                if (!fs.existsSync(CONFIG.PATHS.IOS_ID)) {
-                    resolve({ status: 'error', error: `도구 없음: ${CONFIG.PATHS.IOS_ID}` });
-                } else {
-                    resolve({ status: 'error', error: "iOS 도구 실행 오류" });
-                }
-                return;
-            }
-            const udid = stdout.trim();
-            if (udid.length > 0) {
-                exec(`"${CONFIG.PATHS.IOS_INFO}" -k DeviceName`, (err, nameOut) => {
-                    const modelName = nameOut ? nameOut.trim() : 'iPhone Device';
-                    resolve({ status: 'connected', model: modelName, udid: udid, type: 'ios' });
-                });
-            } else {
-                resolve({ status: 'disconnected' });
-            }
-        });
-    });
+    try {
+        // 1. idevice_id.exe 실행 (UDID 가져오기)
+        const cmdId = `"${CONFIG.PATHS.IOS_ID}" -l`;
+        const udidOutput = await Utils.runCommand(cmdId);
+        
+        const udid = udidOutput.trim();
+
+        if (udid.length === 0) {
+            return { status: 'disconnected' };
+        }
+
+        // 2. ideviceinfo.exe 실행 (모델명 가져오기)
+        const cmdInfo = `"${CONFIG.PATHS.IOS_INFO}" -k DeviceName`;
+        const nameOutput = await Utils.runCommand(cmdInfo);
+        
+        const modelName = nameOutput ? nameOutput.trim() : 'iPhone Device';
+
+        // 성공
+        return { status: 'connected', model: modelName, udid: udid, type: 'ios' };
+
+    } catch (error) {
+        // Utils.runCommand에서 reject를 던지면 여기서 잡힙니다.
+        
+        const detailedError = error.message || "iOS 도구 실행 중 알 수 없는 오류";
+        
+        // 도구 파일이 실제로 없는지 확인
+        if (!fs.existsSync(CONFIG.PATHS.IOS_ID)) {
+            return { status: 'error', error: `필수 도구 파일 없음: ${CONFIG.PATHS.IOS_ID}` };
+        } 
+        
+        // 실행 권한 또는 드라이버(iTunes) 문제일 가능성이 높음
+        console.error(`❌ [iOS] 연결 확인 실패 상세: ${detailedError}`);
+        let userMsg = "iOS 기기 연결 오류. iTunes/Apple 드라이버가 설치되었는지 확인하세요.";
+        
+        if (detailedError.includes('command failed')) {
+             userMsg = "iOS 도구 실행 실패. 기기가 잠금 해제되었는지, '이 컴퓨터 신뢰'를 수락했는지 확인하세요.";
+        }
+
+
+        return { status: 'error', error: userMsg };
+    }
 });
 
 // =========================================================
