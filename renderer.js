@@ -1585,10 +1585,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (threatCount > 0) {
                 summaryBox.className = 'summary-box status-danger';
-                summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}건의 위협이 탐지되었습니다.`;
+                summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.`;
             } else {
                 summaryBox.className = 'summary-box status-safe';
-                summaryBox.innerHTML = `✅ 안전 (SAFE): 특이사항이 발견되지 않았습니다.`;
+                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않앗습니다.`;
             }
 
             document.getElementById('print-total-count').textContent = data.allApps.length;
@@ -1599,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 5. 위협 탐지 내역 (표)
             const threatContainer = document.getElementById('print-threat-container');
             if (threatCount > 0) {
-                let html = `<table class="detail-table"><thead><tr><th>탐지된 앱</th><th>패키지명</th><th>위협 사유</th></tr></thead><tbody>`;
+                let html = `<table class="detail-table"><thead><tr><th>탐지된 앱</th><th>패키지명</th><th>탐지 사유</th></tr></thead><tbody>`;
                 data.suspiciousApps.forEach(app => {
                     let vtInfo = '';
                     // iOS MVT 결과도 suspiciousApps에 포함되어 있으므로, isMvt 플래그나 hash 존재 여부로 MVT 결과임을 명시할 수 있습니다.
@@ -1617,7 +1617,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `</tbody></table>`;
                 threatContainer.innerHTML = html;
             } else {
-                threatContainer.innerHTML = `<div style="padding:10px; border:1px solid #ccc; text-align:center; color:#5CB85C;">탐지된 위협 없음</div>`;
+                threatContainer.innerHTML = `<div style="padding:10px; border:1px solid #ccc; text-align:center; color:#5CB85C;">탐지된 스파이앱 없음</div>`;
             }
 
 
@@ -1850,6 +1850,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals < 0 ? 0 : decimals))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
         },
+
+        transformAndroidData: (scanData) => {
+            const transformedApps = scanData.allApps || [];
+            
+            // 💡 [핵심 수정] VT 확진 앱만 위협 목록으로 분류
+            // app.reason 필드에 "[VT 확진]"이 포함된 앱만 필터링합니다.
+            const suspiciousApps = transformedApps.filter(app => {
+                // reason 필드가 있고, 그 안에 "[VT 확진]" 문자열이 포함된 경우만 true
+                return app.reason && app.reason.includes('[VT 확진]');
+            });
+
+
+            return {
+                deviceInfo: scanData.deviceInfo,
+                allApps: transformedApps,
+                apkFiles: scanData.apkFiles || [],
+                suspiciousApps: suspiciousApps
+                // networkUsageMap 등 다른 필드는 필요에 따라 추가
+            };
+        },
+
 
         // iOS 데이터를 안드로이드 포맷으로 변환
         transformIosData(iosData) {

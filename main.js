@@ -80,7 +80,7 @@ ipcMain.handle('force-window-reset', () => {
 
 // 3-1. 기기 연결 확인
 ipcMain.handle('check-device-connection', async () => {
-    if (CONFIG.IS_DEV_MODE) return  MockData.getIosConnection();
+    if (CONFIG.IS_DEV_MODE) return MockData.getAndroidConnection();
 
     try {
         const devices = await client.listDevices();
@@ -108,7 +108,7 @@ ipcMain.handle('run-scan', async () => {
     console.log('--- [Android] 정밀 분석 시작 ---');
     if (CONFIG.IS_DEV_MODE) {
         await Utils.sleep(1500);
-        return MockData.getIosScanResult();
+        return MockData.getAndroidScanResult();
     }
 
     try {
@@ -142,14 +142,26 @@ ipcMain.handle('run-scan', async () => {
         }
 
         // [Step D] 의심 앱 1차 필터링
-        const suspiciousApps = AndroidService.filterSuspiciousApps(processedApps);
+        let suspiciousApps = AndroidService.filterSuspiciousApps(processedApps);
+
+        processedApps.forEach(app => {
+            // app.reason이 있지만, "[VT 확진]" 태그가 없는 경우 (행동 탐지 실패 앱)
+            if (app.reason && !app.reason.includes('[VT 확진]')) {
+                app.reason = null; // UI에 표시되지 않도록 reason 속성을 제거
+            }
+        });
 
         // [Step E] VirusTotal 2차 정밀 검사
         if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
+
             console.log(`🔍 VT 정밀 검사 대상: ${suspiciousApps.length}개`);
             await AndroidService.runVirusTotalCheck(serial, suspiciousApps);
+            suspiciousApps = suspiciousApps.filter(app => {
+                // app.reason 필드가 존재하고, "[VT 확진]" 문자열을 포함하는 경우만 통과
+                return app.reason && app.reason.includes('[VT 확진]');
+            });
         }
-
+        console.log(suspiciousApps)
         return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
 
     } catch (err) {
@@ -529,7 +541,7 @@ const AndroidService = {
             if (systemPackages.has(packageName)) {
                 origin = '시스템 앱';
                 isSideloaded = false;
-            } 
+            }
             // 💡 [공식 스토어 판별] 2순위: 공식 설치 경로(installer)가 있는지 확인 (시스템 앱이 아닐 경우만)
             else if (installer && TRUSTED_INSTALLERS.includes(installer)) {
                 origin = '공식 스토어';
@@ -607,10 +619,9 @@ const AndroidService = {
                     console.warn('⚠️ /proc/net/xt_qtaguid/stats 접근 실패.');
                 }
             }
-            console.log(data)
-            
-           let currentUid = null;
-            
+
+            let currentUid = null;
+
             data.split('\n').forEach(line => {
                 const trimmedLine = line.trim();
 
@@ -636,7 +647,7 @@ const AndroidService = {
                     if (rbMatch && tbMatch) {
                         const rxBytes = parseInt(rbMatch[1], 10) || 0;
                         const txBytes = parseInt(tbMatch[1], 10) || 0;
-                        
+
                         // 현재 UID의 합산 맵에 누적
                         usageMap[currentUid].rx += rxBytes;
                         usageMap[currentUid].tx += txBytes;
@@ -644,8 +655,8 @@ const AndroidService = {
                 }
             });
             // --- 데이터 파싱 로직 종료 ---
-            
-        } catch (e) { 
+
+        } catch (e) {
             // ... (오류 처리 로직 유지) ...
         }
         return usageMap;
@@ -669,14 +680,21 @@ const AndroidService = {
             'android.permission.READ_CALL_LOG', 'android.permission.READ_SMS',
             'android.permission.RECEIVE_SMS', 'android.permission.SEND_SMS',
             'android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.BIND_DEVICE_ADMIN',
-            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
+            'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+            'android.permission.ACCESS_BACKGROUND_LOCATION', // Android 10+ 백그라운드 위치 추적
+            'android.permission.FOREGROUND_SERVICE',         // 백그라운드 작업 위장
+            'android.permission.WAKE_LOCK',                  // 절전 모드 방지
+            'android.permission.SYSTEM_ALERT_WINDOW',        // 오버레이 공격
+            'android.permission.QUERY_ALL_PACKAGES',         // 앱 목록 감지 우회
+            'android.permission.GET_TASKS'                   // 실행 앱 모니터링
         ];
         const ALARM = ['android.permission.SCHEDULE_EXACT_ALARM', 'android.permission.USE_EXACT_ALARM', 'com.android.alarm.permission.SET_ALARM'];
         const SAFE_PREFIX = ['com.samsung.', 'com.sec.', 'com.qualcomm.', 'com.sktelecom.', 'com.kt.', 'com.lgu.', 'uplus.', 'lgt.', 'com.facebook.', 'com.instagram.', 'com.twitter.', 'com.kakao.', 'jp.naver.'];
 
         return apps.filter(app => {
             if (SAFE_PREFIX.some(p => app.packageName.startsWith(p))) return false;
-            if (!app.isSideloaded) return false;
+            if (!app.isSideloaded) return false; //외부설치
+            if (!app.isRunningBg) return false; //백그라운드
 
             const perms = app.requestedList || [];
             const hasSensitive = perms.some(p => SENSITIVE.includes(p));
@@ -974,43 +992,93 @@ const Utils = {
 // [8] 테스트용 가짜 데이터 (MOCK DATA)
 // ============================================================
 const MockData = {
-    getAndroid() {
-        const SENSITIVE_PERMISSIONS = [
-            'android.permission.RECORD_AUDIO', 'android.permission.READ_CONTACTS',
-            'android.permission.ACCESS_FINE_LOCATION', 'android.permission.READ_SMS',
-            'android.permission.SEND_SMS', 'android.permission.CAMERA', 'android.permission.BIND_DEVICE_ADMIN',
-            'android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
-        ];
-        const ALARM_PERMISSIONS = ['android.permission.SCHEDULE_EXACT_ALARM', 'android.permission.USE_EXACT_ALARM'];
 
-        const mockApps = [
+    getAndroidConnection() {
+        return { status: 'connected', model: 'SM-TEST' };
+    },
+
+    getAndroidScanResult() {
+        // --- 1. 앱 목록 정의: isSideloaded, origin, uid 설정 ---
+        const allApps = [
+            // [시나리오 1: 공식 스토어 & 안전] (기준 앱)
+            { packageName: 'com.google.android.youtube', cachedTitle: 'YouTube', installer: 'com.android.vending', isSideloaded: false, uid: '10100', origin: '공식 스토어', dataUsage: { rx: 50000000, tx: 3000000 } },
+            // [시나리오 2: 시스템 앱 위장] (정상 시스템 앱)
+            { packageName: 'com.android.systemui', cachedTitle: 'System UI', installer: null, isSideloaded: false, uid: '1000', origin: '시스템 앱', dataUsage: { rx: 1000000, tx: 500000 } },
+            // [시나리오 3: 외부 설치 & 위치 추적 스파이앱 위장] (WAF-001)
             {
-                packageName: 'com.kakao.talk', isSideloaded: false, isRunningBg: true,
-                dataUsage: { rx: 1024 * 1024 * 150, tx: 1024 * 1024 * 50 },
-                allPermissionsGranted: true, requestedCount: 25, grantedCount: 25,
-                requestedList: ['android.permission.INTERNET'], grantedList: ['android.permission.INTERNET']
+                packageName: 'com.android.settings.daemon',
+                cachedTitle: 'Wi-Fi Assistant',
+                installer: null,
+                isSideloaded: true,
+                uid: '10272',
+                origin: '외부 설치',
+                dataUsage: { rx: 50000, tx: 85000000 }, // 수신은 적고, 송신(tx)이 비정상적으로 높음
+                permissions: ['ACCESS_FINE_LOCATION', 'READ_SMS', 'RECEIVE_BOOT_COMPLETED']
             },
+            // [시나리오 4: 알려진 악성 패턴] (IOC 탐지 대상)
             {
-                packageName: 'com.android.system.service.update', isSideloaded: true, isRunningBg: true,
-                dataUsage: { rx: 1024 * 100, tx: 1024 * 1024 * 500 },
-                allPermissionsGranted: true, requestedCount: 50, grantedCount: 50,
-                requestedList: [...SENSITIVE_PERMISSIONS], grantedList: [...SENSITIVE_PERMISSIONS]
-            }
+                packageName: 'com.fp.backup', // 기존 위협 탐지 앱
+                cachedTitle: 'Backup Service',
+                installer: 'com.sideload.browser',
+                isSideloaded: true,
+                uid: '10273',
+                origin: '외부 설치',
+                dataUsage: { rx: 10000000, tx: 10000000 },
+                reason: '[VT 확진] 악성(22/68) + READ_SMS, READ_CALL_LOG 권한 다수'
+            },
+            // [시나리오 5: 익명/데이터 탈취 위장] (아이콘 숨김 시나리오)
+            {
+                packageName: 'com.hidden.syscore',
+                cachedTitle: '', // 이름 숨김 시도
+                installer: null,
+                isSideloaded: true,
+                uid: '10274',
+                origin: '외부 설치',
+                dataUsage: { rx: 10000, tx: 2000000 },
+                permissions: ['SYSTEM_ALERT_WINDOW', 'CAMERA', 'RECORD_AUDIO']
+            },
+            // 나머지 정상 앱 (UID 10275)
+            { packageName: 'com.kakao.talk', cachedTitle: '카카오톡', installer: 'com.android.vending', isSideloaded: false, uid: '10275', origin: '공식 스토어', dataUsage: { rx: 20000000, tx: 5000000 } },
         ];
 
-        const suspiciousApps = mockApps.filter(app => {
-            if (!app.isSideloaded || !app.isRunningBg) return false;
-            const perms = app.requestedList || [];
-            if (perms.some(p => SENSITIVE_PERMISSIONS.includes(p)) && !perms.some(p => ALARM_PERMISSIONS.includes(p))) {
-                app.reason = `탐지: 외부 설치됨 + [Sensitive...]`;
-                return true;
-            }
-            return false;
-        });
+        // --- 2. APK 파일 목록 (5. 파일 시스템 분석 대상) ---
+        const apkFiles = [
+            '/sdcard/Download/system_update_v1.apk',
+            '/sdcard/Android/data/com.hidden.syscore/files/core.apk',
+        ];
 
+        // --- 3. 위협 탐지 목록 (4. 위협 탐지 상세 내역 대상) ---
+        const suspiciousApps = allApps.filter(app => app.reason || (app.uid === '10272' && app.isSideloaded));
+
+        // [추가] 시나리오 3을 강제로 위협 목록에 추가 (외부 설치 + 비정상 데이터 사용 징후)
+        if (!suspiciousApps.some(app => app.packageName === 'com.android.settings.daemon')) {
+            suspiciousApps.push(allApps.find(app => app.packageName === 'com.android.settings.daemon'));
+        }
+
+        // [추가] 시나리오 5를 강제로 위협 목록에 추가 (외부 설치 + 이름 숨김)
+        if (!suspiciousApps.some(app => app.packageName === 'com.hidden.syscore')) {
+            suspiciousApps.push(allApps.find(app => app.packageName === 'com.hidden.syscore'));
+        }
+
+        // --- 4. 최종 결과 반환 ---
         return {
-            deviceInfo: { model: 'Galaxy S24 Ultra (MOCK)', serial: 'TEST-1234', isRooted: true, phoneNumber: '010-1234-5678' },
-            allApps: mockApps, suspiciousApps: suspiciousApps, apkFiles: ['/sdcard/Download/spyware.apk']
+            deviceInfo: {
+                model: 'SM-F966N (MOCK)',
+                serial: 'RFCY71W09GM',
+                phoneNumber: '알 수 없음', // 안드로이드는 획득 불가로 설정 유지
+                os: 'Android 14'
+            },
+            allApps: allApps,
+            apkFiles: apkFiles,
+            suspiciousApps: suspiciousApps.filter(Boolean), // null 값 제거
+            networkUsageMap: {
+                '10100': { rx: 50000000, tx: 3000000 },
+                '1000': { rx: 1000000, tx: 500000 },
+                '10272': { rx: 50000, tx: 85000000 }, // 시나리오 3: 위치/스파이앱 (송신이 과도)
+                '10273': { rx: 10000000, tx: 10000000 }, // 시나리오 4: VT 확진
+                '10274': { rx: 10000, tx: 2000000 }, // 시나리오 5: 은닉 앱 (데이터 송신 존재)
+                '10275': { rx: 20000000, tx: 5000000 }
+            }
         };
     },
 
@@ -1031,19 +1099,19 @@ const MockData = {
             { packageName: 'com.google.youtube', cachedTitle: 'YouTube' },
             { packageName: 'com.kakaobank.bank', cachedTitle: '카카오뱅크' },
         ];
-        
+
         // MVT 분석 결과 (suspiciousItems)를 렌더러가 기대하는 형식에 맞게 변환해야 합니다.
         // MVT는 suspiciousItems를 반환하고, renderer는 Utils.transformIosData를 통해
         // suspiciousApps와 mvtResults를 분리합니다.
 
         return {
-            deviceInfo: { 
-                model: 'iPhone 16 Pro (MOCK)', 
-                serial: 'IOS-TEST-UDID', 
+            deviceInfo: {
+                model: 'iPhone 16 Pro (MOCK)',
+                serial: 'IOS-TEST-UDID',
                 phoneNumber: '+82 10-9999-0000',
-                os: 'iOS 17.4' 
+                os: 'iOS 17.4'
             },
-            
+
             // 💡 1. MVT의 원본 탐지 결과 (suspiciousItems는 findings에 해당)
             //    이 데이터가 renderer.js의 Utils.transformIosData에서 suspiciousApps로 매핑됩니다.
             suspiciousItems: [
@@ -1051,7 +1119,7 @@ const MockData = {
                 { module: 'WebKit', check_name: 'Browser History IOC', description: 'Safari에서 C2 서버 도메인 접속 흔적 발견', path: '/private/var/mobile/Library/WebKit', sha256: 'e5f6g7h8...' },
                 { module: 'Process', check_name: 'Suspicious Process', description: '비정상적인 이름의 백그라운드 프로세스 활동', path: 'com.apple.bh', sha256: 'i9j0k1l2...' },
             ],
-            
+
             // 💡 2. MVT 5대 영역 분류 결과 (renderer가 기대하는 구조)
             mvtResults: {
                 web: { status: 'warning', warnings: ['악성 URL 접속 흔적: hxxp://c2-server.com', 'Safari 캐시에서 비정상 파일 발견'] },
@@ -1060,7 +1128,7 @@ const MockData = {
                 apps: { status: 'safe', warnings: [] },
                 artifacts: { status: 'safe', warnings: [] }
             },
-            
+
             // 💡 3. 설치된 앱 목록 (renderer.js의 allApps로 최종 전달됨)
             allApps: installedApps,
             apkFiles: [], // iOS에서는 APK 없음
