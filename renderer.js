@@ -434,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toConnectionScreenBtn = document.getElementById('to-connection-screen-btn');
     const clientInputs = {
         name: document.getElementById('client-name'),
-        dob: document.getElementById('client-dob'),
+        dob:  document.getElementById('client-dob'),
         phone: document.getElementById('client-phone')
     };
 
@@ -495,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhoneValid = isPhoneAnon || !!clientInputs.phone.value.trim();
 
         // 모든 필드가 유효해야 버튼 활성화
-        const isValid = isNameValid && isDobValid && isPhoneValid;
+        const isValid = isNameValid  && isPhoneValid;
         toConnectionScreenBtn.disabled = !isValid;
     }
 
@@ -522,6 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 폼 제출 -> 연결 화면 이동
         clientInfoForm.addEventListener('submit', (e) => {
+            
             e.preventDefault();
             ViewManager.showScreen(loggedInView, 'device-connection-screen');
             DeviceManager.startPolling();
