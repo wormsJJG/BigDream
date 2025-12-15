@@ -1432,3 +1432,7 @@ p {
     text-overflow: ellipsis; 
     white-space: nowrap;
 }
+
+.hidden-dob {
+    display: none !important;
+}

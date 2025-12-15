@@ -434,17 +434,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const toConnectionScreenBtn = document.getElementById('to-connection-screen-btn');
     const clientInputs = {
         name: document.getElementById('client-name'),
+        dob: document.getElementById('client-dob'),
         phone: document.getElementById('client-phone')
     };
 
     // DOM 참조 캐싱 (익명 기능 추가)
     const anonChecks = {
         name: document.getElementById('anon-name'),
+        dob: document.getElementById('anon-dob'),
         phone: document.getElementById('anon-phone')
     };
 
     const anonValues = {
         name: '익명 사용자',
+        dob: '0001-01-01',
         phone: '000-0000-0000'
     };
 
@@ -476,21 +479,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 모든 필드에 익명 처리 로직 적용
     setupAnonToggle('name');
+    setupAnonToggle('dob');
     setupAnonToggle('phone');
 
 
     // 유효성 검사 함수 (새로 정의)
     function checkFormValidity() {
         const isNameAnon = anonChecks.name && anonChecks.name.checked;
+        const isDobAnon = anonChecks.dob && anonChecks.dob.checked;
         const isPhoneAnon = anonChecks.phone && anonChecks.phone.checked;
 
         // 익명이 아니면서(isAnon=false) 값이 채워지지 않은 필드가 있는지 검사
         const isNameValid = isNameAnon || !!clientInputs.name.value.trim();
-        const isDobCalid = true; 
+        const isDobValid = isDobAnon || !!clientInputs.dob.value.trim();
         const isPhoneValid = isPhoneAnon || !!clientInputs.phone.value.trim();
 
         // 모든 필드가 유효해야 버튼 활성화
-        const isValid = isNameValid && isPhoneValid;
+        const isValid = isNameValid && isDobValid && isPhoneValid;
         toConnectionScreenBtn.disabled = !isValid;
     }
 
@@ -3404,6 +3409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // (1) 고객 정보 (입력폼에서 가져옴)
                 // 익명일 경우 값 처리는 client-info-form 로직을 따름
                 const clientName = document.getElementById('client-name').value || "익명";
+                const clientDob = document.getElementById('client-dob').value || "0000-00-00";
                 const clientPhone = document.getElementById('client-phone').value || "000-0000-0000";
 
                 // 발견앱 목록
@@ -3425,7 +3431,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // --- 요청하신 핵심 데이터 ---
                     clientInfo: {
                         name: clientName,
-                        dob: "제외됨",
+                        dob: clientDob,
                         phone: clientPhone
                     },
                     deviceInfo: deviceInfo,
