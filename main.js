@@ -940,11 +940,44 @@ const AndroidService = {
 
     // APK 파일 검색
     async findApkFiles(serial) {
-        try {
-            const output = await client.shell(serial, 'find /sdcard -name "*.apk"');
-            const data = (await adb.util.readAll(output)).toString();
-            return data.trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
-        } catch (e) { return []; }
+        // APK 파일 검색 경로를 사용자 저장 공간의 주요 경로로 확장합니다.
+        // 이 경로는 SD 카드가 아닌, 내부 저장소(/storage/emulated/0)를 포함합니다.
+        const searchPaths = [
+            '/storage/emulated/0/Download',       // 표준 다운로드 폴더
+            '/storage/emulated/0/Documents',      // 표준 문서 폴더
+            '/storage/emulated/0/Android/data',   // 앱 데이터 폴더
+            '/storage/emulated/0',                // 내부 저장소의 최상위 (광범위 검색)
+            '/data/local/tmp'                     // 임시 파일 경로
+        ];
+        
+        let allApkPaths = new Set();
+        
+        console.log('🔄 [Android] APK 파일 검색 시작: 내부 저장소 주요 경로 검색');
+
+        for (const searchPath of searchPaths) {
+            try {
+                // find 명령을 실행하고, 권한 오류 메시지는 무시합니다 (2>/dev/null).
+                // -type f: 파일만 검색, -iname: 대소문자 구분 없이 *.apk 검색
+                const command = `find "${searchPath}" -type f -iname "*.apk" 2>/dev/null`;
+                const output = await client.shell(serial, command);
+                const data = (await adb.util.readAll(output)).toString();
+                
+                const foundFiles = data.trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
+                
+                foundFiles.forEach(file => {
+                    // 중복 방지를 위해 Set에 추가
+                    allApkPaths.add(file.trim());
+                });
+                
+            } catch (e) {
+                // 이 오류는 ADB 통신 자체의 문제일 가능성이 높습니다.
+                console.warn(`⚠️ [Android] APK 검색 중 통신 오류 (${searchPath}): ${e.message}`);
+                // 계속 진행
+            }
+        }
+        
+        // 검색 결과를 배열로 변환하여 반환
+        return Array.from(allApkPaths);
     },
 
     // 의심 앱 필터링 로직
