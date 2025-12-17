@@ -30,6 +30,34 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAndUpdateUI();
 
     const ID_DOMAIN = "@bd.com";
+
+    // [추가] 로그인 전 사이드바 메뉴 (로그인 / 고객센터)
+    // =========================================================
+    const setupLoggedOutNav = () => {
+        const navLogin = document.getElementById('nav-login');
+        const navSupport = document.getElementById('nav-support');
+
+        if (navLogin) {
+            navLogin.addEventListener('click', () => {
+                // 사이드바 active 클래스 관리
+                document.querySelectorAll('#logged-out-view .nav-item').forEach(li => li.classList.remove('active'));
+                navLogin.classList.add('active');
+                // 화면 전환
+                ViewManager.showScreen(loggedOutView, 'login-screen');
+            });
+        }
+
+        if (navSupport) {
+            navSupport.addEventListener('click', () => {
+                // 사이드바 active 클래스 관리
+                document.querySelectorAll('#logged-out-view .nav-item').forEach(li => li.classList.remove('active'));
+                navSupport.classList.add('active');
+                // 화면 전환
+                ViewManager.showScreen(loggedOutView, 'support-screen');
+            });
+        }
+    };
+
     // =========================================================
     // [1] 상태 관리 (STATE MANAGEMENT)
     // =========================================================
@@ -314,6 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+    setupLoggedOutNav();
 
     // 로그인 처리
     const loginForm = document.getElementById('login-form');
