@@ -63,13 +63,24 @@ contextBridge.exposeInMainWorld(
         saveScanResult: (data) => {
 
             console.log('--- preload.js: saveScanResult 호출됨');
-            return ipcRenderer.invoke('saveScanResult', data)
+            return ipcRenderer.invoke('saveScanResult', data);
         },
-        checkForUpdate: (currentVersion) => ipcRenderer.invoke('checkForUpdate', currentVersion),
-        saveLoginInfo: (data) => ipcRenderer.invoke('save-login-info', data),
-        getLoginInfo: () => ipcRenderer.invoke('get-login-info')
+        checkForUpdate: (currentVersion) => {
 
-        
+            console.log('--- preload.js: checkForUpdate 호출됨');
+            return ipcRenderer.invoke('checkForUpdate', currentVersion)
+        },
+        saveLoginInfo: async (data) => {
+
+            console.log(data)
+            console.log('--- preload.js: save-login-info 호출됨');
+            return ipcRenderer.invoke('saveLoginInfo', data);
+        },
+        getLoginInfo: async () => {
+
+            console.log('--- preload.js: get-login-info 호출됨');
+            return ipcRenderer.invoke('getLogininfo');
+        }
     }
 );
 

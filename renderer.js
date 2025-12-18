@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const saveInfo = await window.electronAPI.getLoginInfo();
 
+
         if( saveInfo && saveInfo.remember) {
 
             document.getElementById('username').value = saveInfo.id;
@@ -73,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('user-id').value = '';
         document.getElementById('user-pw').value = '';
         document.getElementById('remember-me').checked = false;
-    }
+        }
     };
     // =========================================================
     // [1] 상태 관리 (STATE MANAGEMENT)
@@ -368,14 +369,11 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const inputId = document.getElementById('username').value.trim();
             const email = inputId + ID_DOMAIN;
-            const password = document.getElementById('password').value;
+            const password = document.getElementById('password').value.trim();
             const errorMsg = document.getElementById('login-error');
             const remember = document.getElementById('remember-me').checked;
 
-            if (remember) {
-
-                await window.electronAPI.saveLoginInfo( { inputId, password, remember });
-            }
+            const loginData = { id: inputId, pw: password, remember: remember};
             
             errorMsg.textContent = "로그인 중...";
 
@@ -386,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 2. 권한 확인 (DB 조회)
                 const role = await checkUserRole(user.uid);
+                await window.electronAPI.saveLoginInfo(loginData)
                 console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
 
                 // 3. 설정값 불러오기
@@ -1125,7 +1124,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const appGridParent = appGrid.closest('.content-card');
                     if (appGridParent) {
                         appGridParent.style.display = 'block';
-                        appGridParent.querySelector('h3').innerHTML = `📲 설치된 애플리케이션`;
+                        appGridParent.querySelector('h3').innerHTML = `📲 설치된 애플리케이션  (${data.allApps.length}개)`;
                     }
 
                     // 💡 [클래스 토글] iOS 그리드 클래스가 있었다면 제거하고, Android 그리드 클래스 추가
@@ -1143,6 +1142,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // 💡 data.allApps에서 필터링
                     const runningApps = data.allApps ? data.allApps.filter(app => app.isRunningBg) : [];
 
+                    bgGrid.closest('.content-card').querySelector('h3').innerHTML = `🚀 백그라운드 실행 중인 앱  (${runningApps.length}개)`;
                     if (runningApps.length > 0) {
                         runningApps.forEach(app => this.createAppIcon(app, bgGrid));
                     } else {
@@ -1151,6 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // 5. APK 파일 목록 렌더링 (apkList)
+                apkList.closest('.content-card').querySelector('h3').innerHTML = `📂 발견된 설치 파일  (${data.apkFiles.length}개)`;
                 if (apkList) {
                     apkList.innerHTML = data.apkFiles && data.apkFiles.length > 0
                         ? data.apkFiles.map(f => `<li>${f}</li>`).join('')

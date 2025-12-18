@@ -4,7 +4,7 @@
  * Electron Main Process
  */
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -189,7 +189,7 @@ function createWindow() {
         width: 1280,
         height: 850,
         webPreferences: {
-            // devTools: false,
+            devTools: false,
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false
@@ -687,9 +687,18 @@ ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
 // 자동 로그인 관련 로직
 
 // 💡 [IPC 핸들러] 로그인 정보 저장
-ipcMain.handle('save-login-info', async (event, { id, pw, remember }) => {
+ipcMain.handle('saveLoginInfo', async (event, {id, pw, remember}) => {
+
     try {
-        const data = remember ? { id, pw, remember: true } : { remember: false };
+       let savePw = pw;
+        
+        // safeStorage가 사용 가능한 환경인지 확인 후 암호화
+        if (safeStorage.isEncryptionAvailable()) {
+        // 비밀번호를 암호화된 Buffer로 변환 후 base64 문자열로 저장
+        safePw = safeStorage.encryptString(pw).toString('base64');
+        }
+
+        const data = { id, safePw, remember }
         fs.writeFileSync(CONFIG.PATHS.LOGIN_CONFIG_PATH, JSON.stringify(data));
         return { success: true };
     } catch (error) {
@@ -699,24 +708,35 @@ ipcMain.handle('save-login-info', async (event, { id, pw, remember }) => {
 });
 
 // 💡 [IPC 핸들러] 저장된 정보 불러오기
-ipcMain.handle('get-login-info', async () => {
+ipcMain.handle('getLogininfo', async () => {
     try {
         if (fs.existsSync(CONFIG.PATHS.LOGIN_CONFIG_PATH)) {
             const fileContent = fs.readFileSync(CONFIG.PATHS.LOGIN_CONFIG_PATH, 'utf8');
             
             // 파일 내용이 비어있는지 확인
-            if (!fileContent || fileContent.trim() === "") {
+            if (!fileContent || fileContent === "") {
                 return { remember: false, id: '', pw: '' };
             }
 
             const data = JSON.parse(fileContent);
-            
+            if (data.remember && data.safePw && safeStorage.isEncryptionAvailable()) {
+            try {
+                // base64 문자열을 Buffer로 변환 후 복호화
+                const buffer = Buffer.from(data.safePw, 'base64');
+                data.pw = safeStorage.decryptString(buffer);
+            } catch (e) {
+
+                data.pw = ""; // 복호화 실패 시 빈값
+            }
+            }
+            returnData = {
+                id: data.id, 
+                pw: data.pw, 
+                remember: data.remember
+            }
+
             // 데이터가 존재하고 remember가 true인 경우만 반환
-            return {
-                remember: data.remember || false,
-                id: data.id || '',
-                pw: data.pw || ''
-            };
+            return returnData;
         }
     } catch (error) {
         console.error('로그인 정보 로드 실패:', error);
