@@ -65,24 +65,13 @@ contextBridge.exposeInMainWorld(
             console.log('--- preload.js: saveScanResult 호출됨');
             return ipcRenderer.invoke('saveScanResult', data)
         },
+        checkForUpdate: (currentVersion) => ipcRenderer.invoke('checkForUpdate', currentVersion),
+        saveLoginInfo: (data) => ipcRenderer.invoke('save-login-info', data),
+        getLoginInfo: () => ipcRenderer.invoke('get-login-info')
+
         
     }
 );
-
-contextBridge.exposeInMainWorld('electronAPI', {
-
-    runScan: () => ipcRenderer.invoke('run-scan'),
-    openScanFile: () => ipcRenderer.invoke('open-scan-file'),
-    checkDeviceConnection: () => ipcRenderer.invoke('check-device-connection'),
-    forceWindowReset: () => ipcRenderer.invoke('force-window-reset'),
-    uninstallApp: (packageName) => ipcRenderer.invoke('uninstall-app', packageName),
-    neutralizeApp: (pkg) => ipcRenderer.invoke('neutralize-app', pkg),
-    getAppData: (packageName) => ipcRenderer.invoke('get-app-data', packageName),
-    checkIosConnection: () => ipcRenderer.invoke('check-ios-connection'),
-    runIosScan: (udid) => ipcRenderer.invoke('run-ios-scan', udid),
-    saveScanResult: (data) => ipcRenderer.invoke('saveScanResult', data),
-    checkForUpdate: (currentVersion) => ipcRenderer.invoke('checkForUpdate', currentVersion),
-});
 
 console.log('--- preload.js: electronAPI 브릿지 생성 완료 ---');
 

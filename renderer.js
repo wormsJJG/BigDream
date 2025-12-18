@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('--- renderer.js: DOM 로드 완료 ---');
 
     checkAndUpdateUI();
+    getSaveInfo();
 
     const ID_DOMAIN = "@bd.com";
 
@@ -58,6 +59,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    async function getSaveInfo() {
+
+        const saveInfo = await window.electronAPI.getLoginInfo();
+
+        if( saveInfo && saveInfo.remember) {
+
+            document.getElementById('username').value = saveInfo.id;
+            document.getElementById('password').value = saveInfo.pw;
+            document.getElementById('remember-me').checked = saveInfo.remember;
+        }else {
+        // 기억하기가 체크 안 된 상태라면 입력창을 비움
+        document.getElementById('user-id').value = '';
+        document.getElementById('user-pw').value = '';
+        document.getElementById('remember-me').checked = false;
+    }
+    };
     // =========================================================
     // [1] 상태 관리 (STATE MANAGEMENT)
     // =========================================================
@@ -353,7 +370,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const email = inputId + ID_DOMAIN;
             const password = document.getElementById('password').value;
             const errorMsg = document.getElementById('login-error');
+            const remember = document.getElementById('remember-me').checked;
 
+            if (remember) {
+
+                await window.electronAPI.saveLoginInfo( { inputId, password, remember });
+            }
+            
             errorMsg.textContent = "로그인 중...";
 
             try {

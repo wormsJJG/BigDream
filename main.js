@@ -31,7 +31,8 @@ const CONFIG = {
         IOS_INFO: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'ideviceinfo.exe' : 'ideviceinfo'),
         IOS_BACKUP: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevicebackup2.exe' : 'idevicebackup2'),
         TEMP_BACKUP: path.join(app.getPath('temp'), 'bd_ios_backup'),
-        MVT_RESULT: path.join(app.getPath('userData'), 'mvt_results')
+        MVT_RESULT: path.join(app.getPath('userData'), 'mvt_results'),
+        LOGIN_CONFIG_PATH: path.join(app.getPath('userData'), 'login-info.json')
     }
 };
 
@@ -140,8 +141,8 @@ const Utils = {
         // 1. Python 설치 여부 확인
         try {
             // 'python3' 명령어가 있는지 확인
-            await this.runCommand('python3 --version');
-            console.log("✅ Python3 설치 확인 완료.");
+            await this.runCommand('python --version');
+            console.log("✅ Python 설치 확인 완료.");
             pythonInstalled = true;
         } catch (e) {
             // 'python' 명령어로 다시 한번 확인 (일부 환경에서 'python'만 사용)
@@ -681,6 +682,47 @@ ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
         console.error("업데이트 확인 오류:", e);
         return { available: false, error: e.message, message: '업데이트 서버 접속 실패' };
     }
+});
+
+// 자동 로그인 관련 로직
+
+// 💡 [IPC 핸들러] 로그인 정보 저장
+ipcMain.handle('save-login-info', async (event, { id, pw, remember }) => {
+    try {
+        const data = remember ? { id, pw, remember: true } : { remember: false };
+        fs.writeFileSync(CONFIG.PATHS.LOGIN_CONFIG_PATH, JSON.stringify(data));
+        return { success: true };
+    } catch (error) {
+        console.error('로그인 정보 저장 실패:', error);
+        return { success: false };
+    }
+});
+
+// 💡 [IPC 핸들러] 저장된 정보 불러오기
+ipcMain.handle('get-login-info', async () => {
+    try {
+        if (fs.existsSync(CONFIG.PATHS.LOGIN_CONFIG_PATH)) {
+            const fileContent = fs.readFileSync(CONFIG.PATHS.LOGIN_CONFIG_PATH, 'utf8');
+            
+            // 파일 내용이 비어있는지 확인
+            if (!fileContent || fileContent.trim() === "") {
+                return { remember: false, id: '', pw: '' };
+            }
+
+            const data = JSON.parse(fileContent);
+            
+            // 데이터가 존재하고 remember가 true인 경우만 반환
+            return {
+                remember: data.remember || false,
+                id: data.id || '',
+                pw: data.pw || ''
+            };
+        }
+    } catch (error) {
+        console.error('로그인 정보 로드 실패:', error);
+    }
+    // 파일이 없거나 에러 발생 시 기본값 반환
+    return { remember: false, id: '', pw: '' };
 });
 
 // ============================================================

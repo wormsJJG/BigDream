@@ -281,6 +281,30 @@ p {
     padding-left: 5px;
 }
 
+.remember-container {
+    display: flex;
+    align-items: center;
+    margin-top: -4px;      /* 위쪽 input과의 간격 조정 */
+    margin-bottom: 20px;   /* 아래쪽 버튼과의 간격 */
+    padding-left: 4px;     /* 입력창 테두리선과 정렬 맞춤 */
+    text-align: left;
+}
+
+.remember-container input[type="checkbox"] {
+    width: 18px;           /* 기존 input 스타일이 checkbox에 영향을 주지 않도록 크기 고정 */
+    height: 18px;
+    margin: 0 10px 0 0;    /* 우측 텍스트와 간격 */
+    cursor: pointer;
+    accent-color: var(--primary-color); /* 체크박스 색상을 브랜드 컬러로 변경 */
+}
+
+.remember-container label {
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    user-select: none;
+}
+
 /* --- [화면 2] 고객센터 --- */
 .support-card {
     text-align: center;
