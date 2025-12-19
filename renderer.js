@@ -20,7 +20,7 @@ import {
     limit  // ★ [수정 1] 비정상 로그 불러올 때 필요한 limit 추가
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-const CURRENT_APP_VERSION = '1.0.0'
+const CURRENT_APP_VERSION = '1.0.1'
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
