@@ -14,12 +14,16 @@ const axios = require('axios');
 const gplayRaw = require('google-play-scraper');
 const gplay = gplayRaw.default || gplayRaw;
 const { exec, spawn } = require('child_process');
+const { autoUpdater } = require("electron-updater");
+const log = require('electron-log');
 
 // ============================================================
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
 
 const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : __dirname;
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = "info";
 
 const CONFIG = {
     IS_DEV_MODE: false,
@@ -189,7 +193,7 @@ function createWindow() {
         width: 1280,
         height: 850,
         webPreferences: {
-            devTools: false,
+            // devTools: false,
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false
@@ -198,15 +202,36 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
+autoUpdater.on('checking-for-update', () => { log.info('업데이트 확인 중...'); });
+autoUpdater.on('update-available', (info) => { log.info('업데이트 가능'); });
+autoUpdater.on('update-not-available', (info) => { log.info('최신 버전임'); });
+autoUpdater.on('error', (err) => { log.info('에러 발생: ' + err); });
+autoUpdater.on('download-progress', (progressObj) => {
+    log.info(`다운로드 중: ${progressObj.percent}%`);
+});
+autoUpdater.on('update-downloaded', (info) => {
+    log.info('다운로드 완료. 앱을 재시작하여 업데이트를 적용합니다.');
+    // 업데이트 다운로드 완료 후 바로 설치하려면 아래 주석 해제
+    // autoUpdater.quitAndInstall(); 
+});
+
 app.whenReady().then(async () => {
 
     createWindow();
     const mainWindow = BrowserWindow.getAllWindows()[0];
     await Utils.checkAndInstallPrerequisites(mainWindow);
+ 
+
+    // autoUpdater.checkForUpdates();
+    
 }).catch(err => {
     console.log(err)
 });
 
+app.on('window-all-closed', () => {
+
+    app.quit();
+})
 // 창 리셋 (UI 강제 새로고침 효과)
 ipcMain.handle('force-window-reset', () => {
     const mainWindow = BrowserWindow.getAllWindows()[0];
