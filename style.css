@@ -1475,3 +1475,55 @@ p {
     border: 1.5px solid #cc0000 !important;
     background-color: #ffeaea;
 }
+
+.sidebar-support-info {
+    display: flex;
+    align-items: center;
+    padding: 15px 10px;        /* 좌우 패딩을 줄여 공간 확보 */
+    margin-bottom: 15px;
+    background-color: rgba(255, 255, 255, 0.08); 
+    border-radius: 10px;
+    overflow: hidden;          /* 로고가 넘쳐도 레이아웃 유지 */
+}
+
+/* 로고 이미지 크기를 파격적으로 확대 */
+.sidebar-support-logo {
+    width: 65px;               
+    height: 65px;
+    object-fit: contain;       /* 여백이 있어도 비율 유지 */
+    margin-left: -5px;         /* 이미지 자체 여백을 상쇄하기 위해 왼쪽으로 살짝 밀기 */
+    margin-right: 5px;         /* 텍스트와의 간격 */
+    flex-shrink: 0;            /* 로고 크기 절대 보존 */
+}
+
+/* 텍스트 그룹 */
+.support-text-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;              /* 텍스트 생략 방지 */
+}
+
+.sidebar-support-info p {
+    margin: 1px 0 !important;
+    line-height: 1.2;
+    white-space: nowrap;       /* 줄바꿈 방지 */
+}
+
+.support-company {
+    font-size: 13px;
+    font-weight: 800;         
+    color: #ffffff;
+}
+
+.support-title {
+    font-size: 11px;
+    color: #bdc3c7;
+}
+
+.support-phone {
+    font-size: 14px;
+    font-weight: bold;
+    color: #4ECDC4;
+}
+

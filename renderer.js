@@ -64,16 +64,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveInfo = await window.electronAPI.getLoginInfo();
 
 
-        if( saveInfo && saveInfo.remember) {
+        if (saveInfo && saveInfo.remember) {
 
             document.getElementById('username').value = saveInfo.id;
             document.getElementById('password').value = saveInfo.pw;
             document.getElementById('remember-me').checked = saveInfo.remember;
-        }else {
-        // 기억하기가 체크 안 된 상태라면 입력창을 비움
-        document.getElementById('user-id').value = '';
-        document.getElementById('user-pw').value = '';
-        document.getElementById('remember-me').checked = false;
+        } else {
+            // 기억하기가 체크 안 된 상태라면 입력창을 비움
+            document.getElementById('user-id').value = '';
+            document.getElementById('user-pw').value = '';
+            document.getElementById('remember-me').checked = false;
         }
     };
     // =========================================================
@@ -112,12 +112,31 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const screenToShow = parentView.querySelector(`#${screenId}`);
+
             if (screenToShow) {
-                // 선택된 스크린을 표시
-                screenToShow.classList.remove('hidden'); // 추가: hidden 제거
-                screenToShow.classList.add('active');
+            screenToShow.classList.remove('hidden');
+            screenToShow.classList.add('active');
+            console.log(`--- 화면 활성화 완료: ${screenId} ---`);
+        } else {
+            console.error(`--- 화면을 찾을 수 없음: ${screenId} ---`);
+        }
+
+        // =========================================================
+        // [수정된 로직] 하단 안내 문구 노출 제어 (관리자 페이지 방해 금지)
+        // =========================================================
+        const privacyNotice = document.getElementById('privacy-footer-notice');
+        if (privacyNotice) {
+            // 이 문구는 '일반 검사 과정'에서만 보여야 합니다.
+            const allowedScreens = ['create-scan-screen', 'device-connection-screen', 'scan-progress-screen'];
+            
+            if (allowedScreens.includes(screenId)) {
+                privacyNotice.style.display = 'block';
+            } else {
+                // 관리자(admin-screen), 결과보고서(scan-results-screen) 등에서는 절대 안 보이게 함
+                privacyNotice.style.display = 'none';
             }
-        },
+        }
+    },
 
         // 사이드바 메뉴 활성화
         activateMenu(targetId) {
@@ -373,8 +392,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const errorMsg = document.getElementById('login-error');
             const remember = document.getElementById('remember-me').checked;
 
-            const loginData = { id: inputId, pw: password, remember: remember};
-            
+            const loginData = { id: inputId, pw: password, remember: remember };
+
             errorMsg.textContent = "로그인 중...";
 
             try {
@@ -452,6 +471,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (error) {
                     alert("로그아웃 실패: " + error.message);
                 }
+                const privacyNotice = document.getElementById('privacy-footer-notice');
+                if (privacyNotice) privacyNotice.style.display = 'none';
+
+                window.location.reload(); // 페이지 새로고침
             }
         });
     }
@@ -485,7 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toConnectionScreenBtn = document.getElementById('to-connection-screen-btn');
     const clientInputs = {
         name: document.getElementById('client-name'),
-        dob:  document.getElementById('client-dob'),
+        dob: document.getElementById('client-dob'),
         phone: document.getElementById('client-phone')
     };
 
@@ -546,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhoneValid = isPhoneAnon || !!clientInputs.phone.value.trim();
 
         // 모든 필드가 유효해야 버튼 활성화
-        const isValid = isNameValid  && isPhoneValid;
+        const isValid = isNameValid && isPhoneValid;
         toConnectionScreenBtn.disabled = !isValid;
     }
 
@@ -573,7 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 폼 제출 -> 연결 화면 이동
         clientInfoForm.addEventListener('submit', (e) => {
-            
+
             e.preventDefault();
             ViewManager.showScreen(loggedInView, 'device-connection-screen');
             DeviceManager.startPolling();
@@ -636,89 +659,89 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         async checkDevice() {
-        const screen = document.getElementById('device-connection-screen');
-        if (!screen.classList.contains('active')) {
-            this.stopPolling();
-            return;
-        }
-
-        const ui = {
-            icon: document.getElementById('connection-status-icon'),
-            title: document.getElementById('connection-status-title'),
-            desc: document.getElementById('connection-status-desc')
-        };
-
-        // 1. Android 확인
-        try {
-            const android = await window.electronAPI.checkDeviceConnection();
-            
-            if (android.status === 'connected') {
-                State.currentDeviceMode = 'android';
-                this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
-                return;
-            } else if (android.status === 'unauthorized') {
-                State.currentDeviceMode = null;
-                this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
-                return;
-            } 
-            // 💡 [추가] ADB 연결 시 오류 상태(error, offline) 처리
-            else if (android.status === 'error' || android.status === 'offline') {
-                State.currentDeviceMode = null;
-                // error.error에는 main.js에서 전달한 상세 오류 메시지가 담겨 있습니다.
-                const errorMessage = android.error || 'ADB 도구 실행 오류. 프로그램 재시작 필요.';
-                this.setUI(ui, '⚠️', 'Android 도구 오류', errorMessage, '#D9534F', false); 
+            const screen = document.getElementById('device-connection-screen');
+            if (!screen.classList.contains('active')) {
+                this.stopPolling();
                 return;
             }
 
-        } catch (e) { 
-            // 통신 API 자체의 예외 (매우 드묾)
-            this.setUI(ui, '❌', '통신 오류', 'Android 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
-            return;
-        }
+            const ui = {
+                icon: document.getElementById('connection-status-icon'),
+                title: document.getElementById('connection-status-title'),
+                desc: document.getElementById('connection-status-desc')
+            };
 
-        // 2. iOS 확인
-        try {
-            const ios = await window.electronAPI.checkIosConnection();
-            
-            if (ios.status === 'connected') {
-                State.currentDeviceMode = 'ios';
-                State.currentUdid = ios.udid;
-                this.setUI(ui, '🍎', 'iPhone 연결됨', ios.model, '#5CB85C');
-                return;
-            } 
-            // 💡 [추가] iOS 연결 시 오류 상태(error) 처리
-            else if (ios.status === 'error') {
-                State.currentDeviceMode = null;
-                const errorMessage = ios.error || 'iOS 도구 실행 오류. iTunes 설치 상태 확인 필요.';
-                this.setUI(ui, '⚠️', 'iOS 도구 오류', errorMessage, '#D9534F', false);
+            // 1. Android 확인
+            try {
+                const android = await window.electronAPI.checkDeviceConnection();
+
+                if (android.status === 'connected') {
+                    State.currentDeviceMode = 'android';
+                    this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
+                    return;
+                } else if (android.status === 'unauthorized') {
+                    State.currentDeviceMode = null;
+                    this.setUI(ui, '🔒', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
+                    return;
+                }
+                // 💡 [추가] ADB 연결 시 오류 상태(error, offline) 처리
+                else if (android.status === 'error' || android.status === 'offline') {
+                    State.currentDeviceMode = null;
+                    // error.error에는 main.js에서 전달한 상세 오류 메시지가 담겨 있습니다.
+                    const errorMessage = android.error || 'ADB 도구 실행 오류. 프로그램 재시작 필요.';
+                    this.setUI(ui, '⚠️', 'Android 도구 오류', errorMessage, '#D9534F', false);
+                    return;
+                }
+
+            } catch (e) {
+                // 통신 API 자체의 예외 (매우 드묾)
+                this.setUI(ui, '❌', '통신 오류', 'Android 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
                 return;
             }
 
-        } catch (e) { 
-            // 통신 API 자체의 예외 (매우 드묾)
-            this.setUI(ui, '❌', '통신 오류', 'iOS 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
-            return;
+            // 2. iOS 확인
+            try {
+                const ios = await window.electronAPI.checkIosConnection();
+
+                if (ios.status === 'connected') {
+                    State.currentDeviceMode = 'ios';
+                    State.currentUdid = ios.udid;
+                    this.setUI(ui, '🍎', 'iPhone 연결됨', ios.model, '#5CB85C');
+                    return;
+                }
+                // 💡 [추가] iOS 연결 시 오류 상태(error) 처리
+                else if (ios.status === 'error') {
+                    State.currentDeviceMode = null;
+                    const errorMessage = ios.error || 'iOS 도구 실행 오류. iTunes 설치 상태 확인 필요.';
+                    this.setUI(ui, '⚠️', 'iOS 도구 오류', errorMessage, '#D9534F', false);
+                    return;
+                }
+
+            } catch (e) {
+                // 통신 API 자체의 예외 (매우 드묾)
+                this.setUI(ui, '❌', '통신 오류', 'iOS 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
+                return;
+            }
+
+            // 3. 연결 없음 (기존 로직 유지)
+            State.currentDeviceMode = null;
+            this.setUI(ui, '🔌', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
+        },
+
+        setUI(ui, iconText, titleText, descText, color, showBtn = true) {
+            // ... (setUI 함수는 변경 없음)
+            ui.icon.textContent = iconText;
+            ui.title.textContent = titleText;
+            ui.title.style.color = color;
+            ui.desc.innerHTML = descText.includes('연결') || descText.includes('허용') || descText.includes('오류') ? `<span style="color:${color};">${descText}</span>` : `모델: <strong>${descText}</strong>`;
+
+            const btnContainer = document.getElementById('start-scan-container');
+            btnContainer.style.display = showBtn ? 'block' : 'none';
+
+            if (showBtn && !btnContainer.dataset.visible) {
+                btnContainer.dataset.visible = "true";
+            }
         }
-
-        // 3. 연결 없음 (기존 로직 유지)
-        State.currentDeviceMode = null;
-        this.setUI(ui, '🔌', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
-    },
-
-    setUI(ui, iconText, titleText, descText, color, showBtn = true) {
-        // ... (setUI 함수는 변경 없음)
-        ui.icon.textContent = iconText;
-        ui.title.textContent = titleText;
-        ui.title.style.color = color;
-        ui.desc.innerHTML = descText.includes('연결') || descText.includes('허용') || descText.includes('오류') ? `<span style="color:${color};">${descText}</span>` : `모델: <strong>${descText}</strong>`;
-        
-        const btnContainer = document.getElementById('start-scan-container');
-        btnContainer.style.display = showBtn ? 'block' : 'none';
-
-        if (showBtn && !btnContainer.dataset.visible) {
-            btnContainer.dataset.visible = "true";
-        }
-    }
     };
 
     // =========================================================
@@ -806,39 +829,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const openScanFileBtn = document.getElementById('select-file-btn');
     if (openScanFileBtn) {
         openScanFileBtn.addEventListener('click', async () => {
-            
+
             openScanFileBtn.disabled = true;
             openScanFileBtn.textContent = "파일 여는 중...";
 
             try {
                 const result = await window.electronAPI.openScanFile();
-                
+
                 if (result.success) {
                     const data = result.data;
                     const osMode = result.osMode; // 저장된 데이터에서 OS 모드를 가져옴
 
                     // 1. 상태 업데이트 (렌더링에 OS 모드가 필요하므로)
-                    State.currentDeviceMode = osMode; 
+                    State.currentDeviceMode = osMode;
                     State.lastScanData = data;
                     window.lastScanData = data;
-                    
+
                     // 2. UI 전환
                     ViewManager.activateMenu('nav-result');
                     ResultsRenderer.render(data);
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
-                    
+
                     // 3. 네비게이션 버튼 표시
                     document.getElementById('nav-create').classList.add('hidden');
                     document.getElementById('nav-open').classList.add('hidden');
                     document.getElementById('nav-result').classList.remove('hidden');
 
                     await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo.model}`);
-                    
+
                 } else if (result.message !== '열기 취소') {
                     await CustomUI.alert(`❌ 파일 열기 실패: ${result.error || result.message}`);
                 }
             } catch (error) {
-                 await CustomUI.alert(`시스템 오류: ${error.message}`);
+                await CustomUI.alert(`시스템 오류: ${error.message}`);
             } finally {
                 openScanFileBtn.disabled = false;
                 openScanFileBtn.textContent = "📁 로컬 파일 열기";
@@ -1479,17 +1502,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const span = iconWrapper.querySelector('.detail-fallback-span');
 
             const setLocalFallbackIcon = () => {
-    // 💡 assets/systemAppLogo.png 경로를 사용하여 이미지 설정
-    img.src = './assets/systemAppLogo.png'; 
-    img.style.display = 'block';
-    span.style.display = 'none';
-    
-    // 로컬 폴백 이미지 로드 실패 시, 최종적으로 '📱' 이모지로 전환
-    img.onerror = () => {
-        img.style.display = 'none';
-        span.style.display = 'flex';
-    };
-};
+                // 💡 assets/systemAppLogo.png 경로를 사용하여 이미지 설정
+                img.src = './assets/systemAppLogo.png';
+                img.style.display = 'block';
+                span.style.display = 'none';
+
+                // 로컬 폴백 이미지 로드 실패 시, 최종적으로 '📱' 이모지로 전환
+                img.onerror = () => {
+                    img.style.display = 'none';
+                    span.style.display = 'flex';
+                };
+            };
 
             // [Case A] 캐시된 아이콘이 있으면 즉시 표시
             if (app.cachedIconUrl) {
@@ -1657,10 +1680,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 await CustomUI.alert("저장할 데이터가 없습니다.");
                 return;
             }
-            
+
             saveResultsBtn.disabled = true;
             saveResultsBtn.textContent = "저장 중...";
-            
+
             try {
                 const result = await window.electronAPI.saveScanResult(State.lastScanData);
                 if (result.success) {
@@ -1669,7 +1692,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await CustomUI.alert(`저장 실패: ${result.error || result.message}`);
                 }
             } catch (error) {
-                 await CustomUI.alert(`로컬 저장 오류: ${error.message}`);
+                await CustomUI.alert(`로컬 저장 오류: ${error.message}`);
             } finally {
                 saveResultsBtn.disabled = false;
                 saveResultsBtn.textContent = "💾 로컬 저장";
@@ -2007,24 +2030,24 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         transformAndroidData: (scanData) => {
-            const transformedApps = scanData.allApps || [];
-            
-            // 💡 [핵심 수정] VT 확진 앱만 위협 목록으로 분류
-            // app.reason 필드에 "[VT 확진]"이 포함된 앱만 필터링합니다.
-            const suspiciousApps = transformedApps.filter(app => {
-                // reason 필드가 있고, 그 안에 "[VT 확진]" 문자열이 포함된 경우만 true
-                return app.reason && app.reason.includes('[VT 확진]');
-            });
+            const transformedApps = scanData.allApps || [];
+
+            // 💡 [핵심 수정] VT 확진 앱만 위협 목록으로 분류
+            // app.reason 필드에 "[VT 확진]"이 포함된 앱만 필터링합니다.
+            const suspiciousApps = transformedApps.filter(app => {
+                // reason 필드가 있고, 그 안에 "[VT 확진]" 문자열이 포함된 경우만 true
+                return app.reason && app.reason.includes('[VT 확진]');
+            });
 
 
-            return {
-                deviceInfo: scanData.deviceInfo,
-                allApps: transformedApps,
-                apkFiles: scanData.apkFiles || [],
-                suspiciousApps: suspiciousApps
-                // networkUsageMap 등 다른 필드는 필요에 따라 추가
-            };
-        },
+            return {
+                deviceInfo: scanData.deviceInfo,
+                allApps: transformedApps,
+                apkFiles: scanData.apkFiles || [],
+                suspiciousApps: suspiciousApps
+                // networkUsageMap 등 다른 필드는 필요에 따라 추가
+            };
+        },
 
 
         // iOS 데이터를 안드로이드 포맷으로 변환
@@ -3510,73 +3533,73 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function checkAndUpdateUI() {
-    console.log("업데이트 확인 로직 실행 (클라이언트 SDK)...");
-    
-    try {
-        // Firestore에서 'updates' 컬렉션의 'latest' 문서를 가져옵니다.
-        const docRef = doc(db, "updates", "latest");
-        const docSnap = await getDoc(docRef);
+        console.log("업데이트 확인 로직 실행 (클라이언트 SDK)...");
 
-  
-        if (!docSnap.exists()) {
-            console.log("Firestore에 업데이트 정보 문서가 없습니다.");
-            return;
-        }
+        try {
+            // Firestore에서 'updates' 컬렉션의 'latest' 문서를 가져옵니다.
+            const docRef = doc(db, "updates", "latest");
+            const docSnap = await getDoc(docRef);
 
-        const latestInfo = docSnap.data();
-        const latestVersion = latestInfo.version;
-    const downloadUrl = latestInfo.url;
-    
-    // 💡 [핵심 수정] compareVersions 함수를 사용하여 버전 비교
-    const comparisonResult = compareVersions(latestVersion, CURRENT_APP_VERSION);
-    
-    // latestVersion이 CURRENT_APP_VERSION보다 클 경우 (결과: 1)
-    if (comparisonResult > 0) { 
-        
-        // ... (업데이트 알림 로직 유지) ...
-        const updateMessage = 
-            `🎉 새 버전 ${latestVersion}이 출시되었습니다! 🎉\n` +
-            `현재 버전: ${CURRENT_APP_VERSION}\n\n` +
-            `아래 링크에서 업데이트 파일을 다운로드하세요:\n${downloadUrl}`;
-        
-        await CustomUI.alert(updateMessage);
-        
-    } else {
-        console.log(`최신 버전을 사용 중입니다. (V${CURRENT_APP_VERSION})`);
-    }
 
-    } catch (error) {
-        console.error('업데이트 확인 중 통신 오류:', error);
-        // 사용자에게는 오류를 보여주지 않습니다.
-    }
-}
+            if (!docSnap.exists()) {
+                console.log("Firestore에 업데이트 정보 문서가 없습니다.");
+                return;
+            }
 
-// renderer.js 파일 내 (주요 함수 영역에 추가)
+            const latestInfo = docSnap.data();
+            const latestVersion = latestInfo.version;
+            const downloadUrl = latestInfo.url;
 
-/**
- * SemVer(Semantic Versioning) 규칙에 따라 두 버전 문자열을 비교합니다.
- * @param {string} a - 비교할 첫 번째 버전 (예: '1.0.10')
- * @param {string} b - 비교할 두 번째 버전 (예: '1.1.0')
- * @returns {number} 1: a가 더 큼, -1: b가 더 큼, 0: 두 버전이 같음
- */
-function compareVersions(a, b) {
-    // 버전을 점(.) 기준으로 나눕니다.
-    const partsA = a.split('.').map(Number);
-    const partsB = b.split('.').map(Number);
+            // 💡 [핵심 수정] compareVersions 함수를 사용하여 버전 비교
+            const comparisonResult = compareVersions(latestVersion, CURRENT_APP_VERSION);
 
-    // Major, Minor, Patch 순서로 각 부분을 비교합니다.
-    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-        const numA = partsA[i] || 0;
-        const numB = partsB[i] || 0;
+            // latestVersion이 CURRENT_APP_VERSION보다 클 경우 (결과: 1)
+            if (comparisonResult > 0) {
 
-        if (numA > numB) {
-            return 1; // A가 B보다 큼
-        }
-        if (numA < numB) {
-            return -1; // B가 A보다 큼
+                // ... (업데이트 알림 로직 유지) ...
+                const updateMessage =
+                    `🎉 새 버전 ${latestVersion}이 출시되었습니다! 🎉\n` +
+                    `현재 버전: ${CURRENT_APP_VERSION}\n\n` +
+                    `아래 링크에서 업데이트 파일을 다운로드하세요:\n${downloadUrl}`;
+
+                await CustomUI.alert(updateMessage);
+
+            } else {
+                console.log(`최신 버전을 사용 중입니다. (V${CURRENT_APP_VERSION})`);
+            }
+
+        } catch (error) {
+            console.error('업데이트 확인 중 통신 오류:', error);
+            // 사용자에게는 오류를 보여주지 않습니다.
         }
     }
 
-    return 0; // 두 버전이 같음
-}
+    // renderer.js 파일 내 (주요 함수 영역에 추가)
+
+    /**
+     * SemVer(Semantic Versioning) 규칙에 따라 두 버전 문자열을 비교합니다.
+     * @param {string} a - 비교할 첫 번째 버전 (예: '1.0.10')
+     * @param {string} b - 비교할 두 번째 버전 (예: '1.1.0')
+     * @returns {number} 1: a가 더 큼, -1: b가 더 큼, 0: 두 버전이 같음
+     */
+    function compareVersions(a, b) {
+        // 버전을 점(.) 기준으로 나눕니다.
+        const partsA = a.split('.').map(Number);
+        const partsB = b.split('.').map(Number);
+
+        // Major, Minor, Patch 순서로 각 부분을 비교합니다.
+        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const numA = partsA[i] || 0;
+            const numB = partsB[i] || 0;
+
+            if (numA > numB) {
+                return 1; // A가 B보다 큼
+            }
+            if (numA < numB) {
+                return -1; // B가 A보다 큼
+            }
+        }
+
+        return 0; // 두 버전이 같음
+    }
 });
