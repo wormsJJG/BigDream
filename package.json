@@ -60,6 +60,6 @@
   },
   "build": {
     "productName": "BD-Scanner",
-    "appId": "BigDream.BD_Scanner"
+    "appId": "com.bigdream.bdscanner"
   }
 }

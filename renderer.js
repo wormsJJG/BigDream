@@ -27,7 +27,7 @@ console.log('--- renderer.js: 파일 로드됨 ---');
 document.addEventListener('DOMContentLoaded', () => {
     console.log('--- renderer.js: DOM 로드 완료 ---');
 
-    // checkAndUpdateUI();
+    checkAndUpdateUI();
     getSaveInfo();
 
     const ID_DOMAIN = "@bd.com";
