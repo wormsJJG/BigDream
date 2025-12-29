@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld(
 
             console.log('--- preload.js: checkDeviceConnection 호출됨');
             return ipcRenderer.invoke('check-device-connection');
-        }, 
+        },
 
         runScan: () => {
             console.log('--- preload.js: runScan 호출됨 ---');
@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld(
         neutralizeApp: (pkg) => {
 
             console.log('--- preload.js: neutalizeApp 호출됨');
-            
+
             return ipcRenderer.invoke('neutralize-app', pkg);
         },
 
@@ -56,9 +56,14 @@ contextBridge.exposeInMainWorld(
 
         runIosScan: (udid) => {
 
-             console.log('--- preload.js: runIosScan 호출됨');
+            console.log('--- preload.js: runIosScan 호출됨');
 
             return ipcRenderer.invoke('run-ios-scan', udid);
+        },
+        // 백업 삭제 API
+        deleteIosBackup: (udid) => {
+            console.log('--- preload.js: deleteIosBackup 호출됨');
+            return ipcRenderer.invoke('delete-ios-backup', udid);
         },
         saveScanResult: (data) => {
 

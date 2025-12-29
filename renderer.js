@@ -1034,12 +1034,20 @@ document.addEventListener('DOMContentLoaded', () => {
         async startIosScan() {
             ViewManager.updateProgress(5, "아이폰 백업 준비 중... (시간이 소요됩니다)");
             try {
+                // 실제 검사 수행
                 const rawData = await window.electronAPI.runIosScan(State.currentUdid);
                 if (rawData.error) throw new Error(rawData.error);
-                const data = Utils.transformIosData(rawData);
-                this.finishScan(data);
+                const data = Utils.transformIosData(rawData); //데이터 변환
+                console.log("아이폰 분석 완료, 개인정보 보호를 위해 백업 파일을 삭제합니다..."); //분석 이후 PC에 남은 백업 파일 삭제 요청
+                await window.electronAPI.deleteIosBackup(State.currentUdid);
+                this.finishScan(data); //결과 화면 렌더링
             } catch (error) {
                 this.handleError(error);
+
+                // 에러가 발생해도 백업이 남아있을 수 있으므로 삭제 시도
+                if (State.currentUdid) {
+                    await window.electronAPI.deleteIosBackup(State.currentUdid);
+                }
             }
         },
 
