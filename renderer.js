@@ -105,38 +105,34 @@ document.addEventListener('DOMContentLoaded', () => {
         // 내부 스크린 전환 (로그인 후 콘텐츠)
         showScreen(parentView, screenId) {
             if (!parentView) return;
-            // 모든 스크린을 숨김
-            parentView.querySelectorAll('.screen').forEach(s => {
+
+            // 1. 모든 스크린 숨김
+            document.querySelectorAll('.screen').forEach(s => {
                 s.classList.remove('active');
-                s.classList.add('hidden'); // 추가: hidden 클래스도 확실히 추가
+                s.classList.add('hidden');
             });
 
-            const screenToShow = parentView.querySelector(`#${screenId}`);
-
+            // 2. 선택된 스크린 표시
+            const screenToShow = document.getElementById(screenId);
             if (screenToShow) {
-            screenToShow.classList.remove('hidden');
-            screenToShow.classList.add('active');
-            console.log(`--- 화면 활성화 완료: ${screenId} ---`);
-        } else {
-            console.error(`--- 화면을 찾을 수 없음: ${screenId} ---`);
-        }
-
-        // =========================================================
-        // [수정된 로직] 하단 안내 문구 노출 제어 (관리자 페이지 방해 금지)
-        // =========================================================
-        const privacyNotice = document.getElementById('privacy-footer-notice');
-        if (privacyNotice) {
-            // 이 문구는 '일반 검사 과정'에서만 보여야 합니다.
-            const allowedScreens = ['create-scan-screen', 'device-connection-screen', 'scan-progress-screen'];
-            
-            if (allowedScreens.includes(screenId)) {
-                privacyNotice.style.display = 'block';
-            } else {
-                // 관리자(admin-screen), 결과보고서(scan-results-screen) 등에서는 절대 안 보이게 함
-                privacyNotice.style.display = 'none';
+                screenToShow.classList.remove('hidden');
+                screenToShow.classList.add('active');
             }
-        }
-    },
+
+            // 3. [추가] 개인정보 안내 문구 노출 제어
+            const privacyNotice = document.getElementById('privacy-footer-notice');
+            if (privacyNotice) {
+                // 문구를 보여줄 화면 ID 목록
+                const allowedScreens = ['create-scan-screen', 'device-connection-screen'];
+
+                if (allowedScreens.includes(screenId)) {
+                    privacyNotice.style.display = 'block';
+                } else {
+                    // 검사 진행 중, 결과 보고서, 관리자 화면 등에서는 숨김
+                    privacyNotice.style.display = 'none';
+                }
+            }
+        },
 
         // 사이드바 메뉴 활성화
         activateMenu(targetId) {

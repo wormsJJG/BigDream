@@ -116,13 +116,18 @@ body {
 .main-content {
     flex-grow: 1;
     padding: 40px;
-    overflow-y: auto;
-    /* 내부 스크롤 */
+    overflow-y: auto; /* 내부 스크롤 */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
 }
 
 /* 화면 전환 애니메이션 */
 .screen {
     display: none;
+    width: 100%; /* 너비를 꽉 채우도록 명시 */
+    box-sizing: border-box;
 }
 
 /* [시작] 회사 정보 표시 스타일 */
@@ -156,6 +161,7 @@ body {
 
 .screen.active {
     display: block;
+    width: 100%;
     animation: fadeIn 0.4s ease-out;
 }
 
@@ -1527,3 +1533,14 @@ p {
     color: #4ECDC4;
 }
 
+.privacy-notice {
+    margin-top: auto;   /* [수정] 컨텐츠가 적어도 화면 맨 아래로 밀어냄 */
+    padding: 30px 0 20px;
+    text-align: center;
+    font-size: 14px;
+    color: #a0a0a0;
+    border-top: 1px solid #eeeeee;
+    width: 100%;        /* 너비 100% 보장 */
+    flex-shrink: 0;     /* 크기가 줄어들지 않도록 설정 */
+    box-sizing: border-box;
+}
