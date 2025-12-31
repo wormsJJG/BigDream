@@ -1,6 +1,6 @@
 {
   "name": "BD-SCANNER",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Mobile Scanner",
   "main": "main.js",
   "scripts": {
