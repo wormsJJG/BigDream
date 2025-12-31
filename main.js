@@ -92,6 +92,15 @@ const Utils = {
         } catch (e) { console.warn(`폴더 삭제 실패 (${dirPath}):`, e.message); }
     },
 
+    formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    },
+
     async isMvtInstalled() {
         try {
             // mvt-ios 버전 정보를 요청하여 에러가 없으면 설치된 것으로 간주
@@ -246,7 +255,7 @@ app.whenReady().then(async () => {
     await Utils.checkAndInstallPrerequisites(mainWindow);
  
 
-    autoUpdater.checkForUpdatesAndNotify();
+    await autoUpdater.checkForUpdatesAndNotify();
     
 }).catch(err => {
     console.log(err)
