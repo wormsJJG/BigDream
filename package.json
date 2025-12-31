@@ -72,7 +72,7 @@
       "installerIcon": "assets/setUpIcon.ico",
       "shortcutName": "BD-Scanner",
       "artifactName": "BD-Scanner-${version}.${ext}",
-      "uninstallDisplayName": "NB"
+      "uninstallDisplayName": "BD-Scanner"
     },
     "extraResources": [
       {
