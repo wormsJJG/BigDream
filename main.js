@@ -619,8 +619,8 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
         // MVT 실행 (에러 나도 결과 파일만 있으면 되므로 try-catch)
         try { await Utils.runCommand(finalCmd); } catch (e) { console.warn("MVT 실행 중 경고(무시가능):", e.message); }
 
-        console.log(`[iOS] 분석 완료. 개인정보 보호를 위해 원본 백업을 삭제합니다: ${specificBackupPath}`);
-        Utils.cleanDirectory(specificBackupPath); 
+        // console.log(`[iOS] 분석 완료. 개인정보 보호를 위해 원본 백업을 삭제합니다: ${specificBackupPath}`);
+        // Utils.cleanDirectory(specificBackupPath); 
 
         // [Step 5] 결과 파싱
         const results = IosService.parseMvtResults(MVT_RESULT);
