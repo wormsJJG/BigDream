@@ -85,7 +85,10 @@ contextBridge.exposeInMainWorld(
 
             console.log('--- preload.js: get-login-info 호출됨');
             return ipcRenderer.invoke('getLogininfo');
-        }
+        },
+        onUpdateStart: (callback) => ipcRenderer.on('update-start', (event, version) => callback(version)),
+    onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (event, data) => callback(data)),
+    onUpdateError: (callback) => ipcRenderer.on('update-error', (event, msg) => callback(msg)),
     }
 );
 

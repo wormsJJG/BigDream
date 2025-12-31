@@ -24,6 +24,8 @@ const log = require('electron-log');
 const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : __dirname;
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = "info";
+autoUpdater.autoDownload = true; // 업데이트 발견 시 자동 다운로드
+autoUpdater.allowPrerelease = false;
 
 const CONFIG = {
     IS_DEV_MODE: false,
@@ -202,17 +204,39 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
+function sendStatusToWindow(channel, data) {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (mainWindow) {
+        mainWindow.webContents.send(channel, data);
+    }
+}
+
 autoUpdater.on('checking-for-update', () => { log.info('업데이트 확인 중...'); });
-autoUpdater.on('update-available', (info) => { log.info('업데이트 가능'); });
+autoUpdater.on('update-available', (info) => { 
+    log.info('업데이트 가능');
+    
+    sendStatusToWindow('update-start', info.version)
+});
 autoUpdater.on('update-not-available', (info) => { log.info('최신 버전임'); });
-autoUpdater.on('error', (err) => { log.info('에러 발생: ' + err); });
+autoUpdater.on('error', (err) => { 
+    log.info('에러 발생: ' + err); 
+
+    sendStatusToWindow('update-error', err.message)
+});
 autoUpdater.on('download-progress', (progressObj) => {
     log.info(`다운로드 중: ${progressObj.percent}%`);
+
+    sendStatusToWindow('update-progress', {
+        percent: Math.floor(progressObj.percent),
+        bytesPerSecond: Utils.formatBytes(progressObj.bytesPerSecond) + '/s',
+        transferred: Utils.formatBytes(progressObj.transferred),
+        total: Utils.formatBytes(progressObj.total)
+    });
 });
 autoUpdater.on('update-downloaded', (info) => {
     log.info('다운로드 완료. 앱을 재시작하여 업데이트를 적용합니다.');
     // 업데이트 다운로드 완료 후 바로 설치하려면 아래 주석 해제
-    // autoUpdater.quitAndInstall(); 
+    autoUpdater.quitAndInstall(); 
 });
 
 app.whenReady().then(async () => {
@@ -222,7 +246,7 @@ app.whenReady().then(async () => {
     await Utils.checkAndInstallPrerequisites(mainWindow);
  
 
-    // autoUpdater.checkForUpdates();
+    autoUpdater.checkForUpdatesAndNotify();
     
 }).catch(err => {
     console.log(err)

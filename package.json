@@ -1,21 +1,16 @@
 {
   "name": "BD-SCANNER",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Mobile Scanner",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build:osx": "electron-builder --mac",
-    "build:linux": "npm run build:linux32 && npm run build:linux64",
-    "build:linux32": "electron-builder --linux --ia32",
-    "build:linux64": "electron-builder --linux --x64",
-    "build:win": "npm run build:win32 && npm run build:win64",
-    "build:win32": "electron-builder --win portable --ia32",
-    "build:win64": "electron-builder --win portable --x64",
-    "make": "electron-forge make",
-    "package": "electron-forge package",
-    "pack": "electron-builder"
+    "build": "react-scripts build",
+    "deploy:xos": "electron-builder --mac",
+    "deploy:win32": "electron-builder --win --ia32",
+    "deploy:win64": "electron-builder --win --x64 --publish always",
+    "deploy:win": "yarn deploy:win32 && yarn deploy:win64",
+    "test": "react-scripts test"
   },
   "author": "Big Dream Security",
   "license": "ISC",
@@ -60,6 +55,49 @@
   },
   "build": {
     "productName": "BD-Scanner",
-    "appId": "com.bigdream.bdscanner"
-  }
+    "appId": "com.bigdream.bdscanner",
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/setUpIcon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "perMachine": true,
+      "language": 1042,
+      "installerIcon": "assets/setUpIcon.ico",
+      "shortcutName": "BD-Scanner",
+      "artifactName": "BD-Scanner-${version}.${ext}",
+      "uninstallDisplayName": "NB"
+    },
+    "extraResources": [
+      {
+        "from": "platform-tools/",
+        "to": "platform-tools/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "ios-tools/",
+        "to": "ios-tools/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "pcap_receiver.py",
+        "to": "pcap_receiver.py"
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "token": "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",
+      "private": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wormsJJG/BigDream"
+ }
 }

@@ -27,7 +27,6 @@ console.log('--- renderer.js: 파일 로드됨 ---');
 document.addEventListener('DOMContentLoaded', () => {
     console.log('--- renderer.js: DOM 로드 완료 ---');
 
-    checkAndUpdateUI();
     getSaveInfo();
 
     const ID_DOMAIN = "@bd.com";
@@ -3381,6 +3380,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    window.electronAPI.onUpdateStart((version) => {
+        const modal = document.getElementById('update-modal');
+        const verText = document.getElementById('update-ver-text');
+        verText.textContent = `V${version}으로 업데이트를 시작합니다.`;
+        modal.classList.remove('hidden');
+    });
+
+    // 업데이트 진행 중
+    window.electronAPI.onUpdateProgress((data) => {
+        const fill = document.getElementById('update-progress-fill');
+        const percentText = document.getElementById('update-percent');
+        const speedText = document.getElementById('update-speed');
+        const sizeText = document.getElementById('update-size-info');
+
+        fill.style.width = `${data.percent}%`;
+        percentText.textContent = `${data.percent}%`;
+        speedText.textContent = data.bytesPerSecond;
+        sizeText.textContent = `${data.transferred} / ${data.total}`;
+    });
+
+    // 에러 발생 시
+    window.electronAPI.onUpdateError(async (msg) => {
+        await CustomUI.alert("업데이트 중 오류가 발생했습니다: " + msg);
+        document.getElementById('update-modal').classList.add('hidden');
+    });
+
     window.viewHistory = async (uid) => {
         const modal = document.getElementById('admin-result-modal');
         const content = document.getElementById('admin-result-content');
@@ -3534,48 +3559,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 reportResultsBtn.textContent = "📡 서버 전송";
             }
         });
-    }
-
-    async function checkAndUpdateUI() {
-        console.log("업데이트 확인 로직 실행 (클라이언트 SDK)...");
-
-        try {
-            // Firestore에서 'updates' 컬렉션의 'latest' 문서를 가져옵니다.
-            const docRef = doc(db, "updates", "latest");
-            const docSnap = await getDoc(docRef);
-
-
-            if (!docSnap.exists()) {
-                console.log("Firestore에 업데이트 정보 문서가 없습니다.");
-                return;
-            }
-
-            const latestInfo = docSnap.data();
-            const latestVersion = latestInfo.version;
-            const downloadUrl = latestInfo.url;
-
-            // 💡 [핵심 수정] compareVersions 함수를 사용하여 버전 비교
-            const comparisonResult = compareVersions(latestVersion, CURRENT_APP_VERSION);
-
-            // latestVersion이 CURRENT_APP_VERSION보다 클 경우 (결과: 1)
-            if (comparisonResult > 0) {
-
-                // ... (업데이트 알림 로직 유지) ...
-                const updateMessage =
-                    `🎉 새 버전 ${latestVersion}이 출시되었습니다! 🎉\n` +
-                    `현재 버전: ${CURRENT_APP_VERSION}\n\n` +
-                    `아래 링크에서 업데이트 파일을 다운로드하세요:\n${downloadUrl}`;
-
-                await CustomUI.alert(updateMessage);
-
-            } else {
-                console.log(`최신 버전을 사용 중입니다. (V${CURRENT_APP_VERSION})`);
-            }
-
-        } catch (error) {
-            console.error('업데이트 확인 중 통신 오류:', error);
-            // 사용자에게는 오류를 보여주지 않습니다.
-        }
     }
 
     // renderer.js 파일 내 (주요 함수 영역에 추가)

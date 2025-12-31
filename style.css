@@ -318,12 +318,6 @@ p {
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
-.support-icon {
-    width: 80px;
-    margin-bottom: 20px;
-    opacity: 0.8;
-}
-
 .support-contact {
     display: inline-block;
     background: white;
@@ -1543,4 +1537,31 @@ p {
     width: 100%;        /* 너비 100% 보장 */
     flex-shrink: 0;     /* 크기가 줄어들지 않도록 설정 */
     box-sizing: border-box;
+}
+
+/* 기존 modal 스타일이 있다고 가정하고 추가 */
+.modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s ease-in-out;
+}
+
+.modal.hidden {
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 업데이트 아이콘 애니메이션 */
+.update-icon {
+    animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
 }
