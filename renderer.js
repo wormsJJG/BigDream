@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const privacyNotice = document.getElementById('privacy-footer-notice');
             if (privacyNotice) {
                 // 문구를 보여줄 화면 ID 목록
-                const allowedScreens = ['create-scan-screen', 'device-connection-screen'];
+                const allowedScreens = ['create-scan-screen', 'device-connection-screen', 'scan-progress-screen', 'scan-results-screen'];
 
                 if (allowedScreens.includes(screenId)) {
                     privacyNotice.style.display = 'block';
