@@ -1876,7 +1876,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 appGrid.appendChild(div);
             });
 
-            setTimeout(() => {
+            setTimeout( async () => {
                 window.print();
                 printArea.style.display = 'none';
 
@@ -1887,6 +1887,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fileSection = document.getElementById('print-file-system-section');
                 if (fileSection) fileSection.style.display = 'block';
 
+
+                if (State.currentDeviceMode === 'android') {
+                    console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
+                    
+                    // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
+                    const result = await window.electronAPI.autoPushReportToAndroid();
+
+                    if (result.success) {
+                        // 성공 시 사용자에게 알림 (선택 사항)
+                        CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
+                    } else {
+                        // 실패 시 로그만 출력하거나 필요 시 알림
+                        console.error("휴대폰 자동 전송 실패:", result.error);
+                    }
+                }
+                
             }, 500);
         });
     }

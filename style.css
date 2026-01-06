@@ -1511,18 +1511,18 @@ p {
 }
 
 .support-company {
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 800;         
     color: #ffffff;
 }
 
 .support-title {
-    font-size: 11px;
+    font-size: 14px;
     color: #bdc3c7;
 }
 
 .support-phone {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     color: #4ECDC4;
 }
@@ -1531,7 +1531,7 @@ p {
     margin-top: auto;   /* [수정] 컨텐츠가 적어도 화면 맨 아래로 밀어냄 */
     padding: 30px 0 20px;
     text-align: center;
-    font-size: 14px;
+    font-size: 17px;
     color: #a0a0a0;
     border-top: 1px solid #eeeeee;
     width: 100%;        /* 너비 100% 보장 */

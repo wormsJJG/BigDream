@@ -435,7 +435,45 @@ ipcMain.handle('get-app-data', async (event, packageName) => {
     }
 });
 
+// 검사결과 핸드폰에 저장하는 로직
+ipcMain.handle('auto-push-report-to-android', async (event) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    
+    // 1. 대상자 이름을 파일명에 반영 (예: 홍길동_리포트.pdf)
+    // 렌더러에서 전달받거나, 여기서 직접 생성 가능합니다.
+    const tempPdfPath = path.join(app.getPath('temp'), `BD_Security_Report.pdf`);
 
+    try {
+        // 2. 현재 리포트 화면을 PDF 데이터로 굽기
+        const pdfData = await mainWindow.webContents.printToPDF({
+            printBackground: true,
+            landscape: false,
+            pageSize: 'A4'
+        });
+
+        // 3. 임시 경로에 쓰기
+        fs.writeFileSync(tempPdfPath, pdfData);
+
+        // 4. 안드로이드 기기 체크
+        const devices = await client.listDevices();
+        if (devices.length === 0) throw new Error('기기가 연결되어 있지 않습니다.');
+        const serial = devices[0].id;
+
+        // 5. 휴대폰 전송 경로 (Download 폴더)
+        const remotePath = `/storage/emulated/0/Download/BD_Security_Report.pdf`;
+
+        // 6. ADB Push 실행
+        await client.push(serial, tempPdfPath, remotePath);
+
+        // 7. 임시 파일 삭제
+        if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
+
+        return { success: true, remotePath };
+    } catch (err) {
+        console.error('휴대폰 자동 전송 실패:', err);
+        return { success: false, error: err.message };
+    }
+});
 // ============================================================
 // [4] iOS IPC 핸들러 (iOS HANDLERS)
 // ============================================================
