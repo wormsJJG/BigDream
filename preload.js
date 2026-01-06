@@ -89,7 +89,7 @@ contextBridge.exposeInMainWorld(
         onUpdateStart: (callback) => ipcRenderer.on('update-start', (event, version) => callback(version)),
     onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (event, data) => callback(data)),
     onUpdateError: (callback) => ipcRenderer.on('update-error', (event, msg) => callback(msg)),
-    autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android'),
+    autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android')
     }
 );
 

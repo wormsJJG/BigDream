@@ -221,14 +221,14 @@ function sendStatusToWindow(channel, data) {
 }
 
 autoUpdater.on('checking-for-update', () => { log.info('업데이트 확인 중...'); });
-autoUpdater.on('update-available', (info) => { 
+autoUpdater.on('update-available', (info) => {
     log.info('업데이트 가능');
-    
+
     sendStatusToWindow('update-start', info.version)
 });
 autoUpdater.on('update-not-available', (info) => { log.info('최신 버전임'); });
-autoUpdater.on('error', (err) => { 
-    log.info('에러 발생: ' + err); 
+autoUpdater.on('error', (err) => {
+    log.info('에러 발생: ' + err);
 
     sendStatusToWindow('update-error', err.message)
 });
@@ -245,7 +245,7 @@ autoUpdater.on('download-progress', (progressObj) => {
 autoUpdater.on('update-downloaded', (info) => {
     log.info('다운로드 완료. 앱을 재시작하여 업데이트를 적용합니다.');
     // 업데이트 다운로드 완료 후 바로 설치하려면 아래 주석 해제
-    autoUpdater.quitAndInstall(); 
+    autoUpdater.quitAndInstall();
 });
 
 app.whenReady().then(async () => {
@@ -253,10 +253,10 @@ app.whenReady().then(async () => {
     createWindow();
     const mainWindow = BrowserWindow.getAllWindows()[0];
     await Utils.checkAndInstallPrerequisites(mainWindow);
- 
+
 
     await autoUpdater.checkForUpdatesAndNotify();
-    
+
 }).catch(err => {
     console.log(err)
 });
@@ -296,7 +296,7 @@ ipcMain.handle('check-device-connection', async () => {
     try {
         const devices = await client.listDevices();
         if (devices.length === 0) return { status: 'disconnected' };
-        
+
         const device = devices[0];
         if (device.type === 'unauthorized') return { status: 'unauthorized' };
         if (device.type === 'offline') return { status: 'offline' };
@@ -438,10 +438,10 @@ ipcMain.handle('get-app-data', async (event, packageName) => {
 // 검사결과 핸드폰에 저장하는 로직
 ipcMain.handle('auto-push-report-to-android', async (event) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    
+
     // 1. 대상자 이름을 파일명에 반영 (예: 홍길동_리포트.pdf)
     // 렌더러에서 전달받거나, 여기서 직접 생성 가능합니다.
-    const tempPdfPath = path.join(app.getPath('temp'), `BD_Security_Report.pdf`);
+    const tempPdfPath = path.join(app.getPath('temp'), `BD_Scanner_Report.pdf`);
 
     try {
         // 2. 현재 리포트 화면을 PDF 데이터로 굽기
@@ -460,7 +460,7 @@ ipcMain.handle('auto-push-report-to-android', async (event) => {
         const serial = devices[0].id;
 
         // 5. 휴대폰 전송 경로 (Download 폴더)
-        const remotePath = `/storage/emulated/0/Download/BD_Security_Report.pdf`;
+        const remotePath = `/storage/emulated/0/Download/BD_Scanner_Report.pdf`;
 
         // 6. ADB Push 실행
         await client.push(serial, tempPdfPath, remotePath);
@@ -489,7 +489,7 @@ ipcMain.handle('check-ios-connection', async () => {
         // 1. idevice_id.exe 실행 (UDID 가져오기)
         const cmdId = `"${CONFIG.PATHS.IOS_ID}" -l`;
         const udidOutput = await Utils.runCommand(cmdId);
-        
+
         const udid = udidOutput.trim();
 
         if (udid.length === 0) {
@@ -499,7 +499,7 @@ ipcMain.handle('check-ios-connection', async () => {
         // 2. ideviceinfo.exe 실행 (모델명 가져오기)
         const cmdInfo = `"${CONFIG.PATHS.IOS_INFO}" -k DeviceName`;
         const nameOutput = await Utils.runCommand(cmdInfo);
-        
+
         const modelName = nameOutput ? nameOutput.trim() : 'iPhone Device';
 
         // 성공
@@ -507,20 +507,20 @@ ipcMain.handle('check-ios-connection', async () => {
 
     } catch (error) {
         // Utils.runCommand에서 reject를 던지면 여기서 잡힙니다.
-        
+
         const detailedError = error.message || "iOS 도구 실행 중 알 수 없는 오류";
-        
+
         // 도구 파일이 실제로 없는지 확인
         if (!fs.existsSync(CONFIG.PATHS.IOS_ID)) {
             return { status: 'error', error: `필수 도구 파일 없음: ${CONFIG.PATHS.IOS_ID}` };
-        } 
-        
+        }
+
         // 실행 권한 또는 드라이버(iTunes) 문제일 가능성이 높음
         console.error(`❌ [iOS] 연결 확인 실패 상세: ${detailedError}`);
         let userMsg = "iOS 기기 연결 오류. iTunes/Apple 드라이버가 설치되었는지 확인하세요.";
-        
+
         if (detailedError.includes('command failed')) {
-             userMsg = "iOS 도구 실행 실패. 기기가 잠금 해제되었는지, '이 컴퓨터 신뢰'를 수락했는지 확인하세요.";
+            userMsg = "iOS 도구 실행 실패. 기기가 잠금 해제되었는지, '이 컴퓨터 신뢰'를 수락했는지 확인하세요.";
         }
 
 
@@ -786,15 +786,15 @@ ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
 // 자동 로그인 관련 로직
 
 // 💡 [IPC 핸들러] 로그인 정보 저장
-ipcMain.handle('saveLoginInfo', async (event, {id, pw, remember}) => {
+ipcMain.handle('saveLoginInfo', async (event, { id, pw, remember }) => {
 
     try {
-       let savePw = pw;
-        
+        let savePw = pw;
+
         // safeStorage가 사용 가능한 환경인지 확인 후 암호화
         if (safeStorage.isEncryptionAvailable()) {
-        // 비밀번호를 암호화된 Buffer로 변환 후 base64 문자열로 저장
-        safePw = safeStorage.encryptString(pw).toString('base64');
+            // 비밀번호를 암호화된 Buffer로 변환 후 base64 문자열로 저장
+            safePw = safeStorage.encryptString(pw).toString('base64');
         }
 
         const data = { id, safePw, remember }
@@ -811,7 +811,7 @@ ipcMain.handle('getLogininfo', async () => {
     try {
         if (fs.existsSync(CONFIG.PATHS.LOGIN_CONFIG_PATH)) {
             const fileContent = fs.readFileSync(CONFIG.PATHS.LOGIN_CONFIG_PATH, 'utf8');
-            
+
             // 파일 내용이 비어있는지 확인
             if (!fileContent || fileContent === "") {
                 return { remember: false, id: '', pw: '' };
@@ -819,18 +819,18 @@ ipcMain.handle('getLogininfo', async () => {
 
             const data = JSON.parse(fileContent);
             if (data.remember && data.safePw && safeStorage.isEncryptionAvailable()) {
-            try {
-                // base64 문자열을 Buffer로 변환 후 복호화
-                const buffer = Buffer.from(data.safePw, 'base64');
-                data.pw = safeStorage.decryptString(buffer);
-            } catch (e) {
+                try {
+                    // base64 문자열을 Buffer로 변환 후 복호화
+                    const buffer = Buffer.from(data.safePw, 'base64');
+                    data.pw = safeStorage.decryptString(buffer);
+                } catch (e) {
 
-                data.pw = ""; // 복호화 실패 시 빈값
-            }
+                    data.pw = ""; // 복호화 실패 시 빈값
+                }
             }
             returnData = {
-                id: data.id, 
-                pw: data.pw, 
+                id: data.id,
+                pw: data.pw,
                 remember: data.remember
             }
 
@@ -876,18 +876,28 @@ const AndroidService = {
             if (devices.length === 0) throw new Error('기기 연결 끊김');
             const serial = devices[0].id;
 
-            // 1차: 비활성화
-            const disableCmd = await client.shell(serial, `pm disable-user --user 0 ${packageName}`);
-            const disableOutput = (await adb.util.readAll(disableCmd)).toString().trim();
+            console.log(`[Android] 삭제 시도 전 기기 관리자 권한 해제 시도: ${packageName}`);
 
-            if (disableOutput.includes('new state: disabled') || disableOutput.includes('new state: default')) {
-                // 2차: 삭제
-                try {
-                    await client.uninstall(serial, packageName);
-                    return { success: true, message: "앱이 완전히 삭제되었습니다." };
-                } catch (e) { console.warn('삭제 실패'); }
-            } else {
-                throw new Error("기기 관리자 권한 등으로 인해 차단됨.");
+            // 1. [핵심 추가] 기기 관리자 권한 강제 해제 (Active Admin 제거)
+            // 이 명령어를 먼저 실행해야 '기기 관리자 권한으로 인해 차단됨' 에러를 우회할 수 있습니다.
+            try {
+                await client.shell(serial, `dpm remove-active-admin ${packageName}`);
+            } catch (e) {
+                console.log("기기 관리자 권한이 없거나 이미 해제됨");
+            }
+
+            // 2. 앱 비활성화 (pm disable)
+            const disableCmd = await client.shell(serial, `pm disable-user --user 0 ${packageName}`);
+            await adb.util.readAll(disableCmd);
+
+            // 3. 실제 앱 삭제 실행
+            try {
+                await client.uninstall(serial, packageName);
+                return { success: true, message: "앱이 완전히 삭제되었습니다." };
+            } catch (e) {
+                // 만약 삭제가 안된다면 데이터 캐시라도 날림
+                await client.shell(serial, `pm clear ${packageName}`);
+                throw new Error("일반 삭제 실패, 데이터를 초기화하고 중지시켰습니다.");
             }
         } catch (err) {
             console.error('최종 실패:', err);
@@ -1110,9 +1120,9 @@ const AndroidService = {
             '/storage/emulated/0',                // 내부 저장소의 최상위 (광범위 검색)
             '/data/local/tmp'                     // 임시 파일 경로
         ];
-        
+
         let allApkPaths = new Set();
-        
+
         console.log('🔄 [Android] APK 파일 검색 시작: 내부 저장소 주요 경로 검색');
 
         for (const searchPath of searchPaths) {
@@ -1122,21 +1132,21 @@ const AndroidService = {
                 const command = `find "${searchPath}" -type f -iname "*.apk" 2>/dev/null`;
                 const output = await client.shell(serial, command);
                 const data = (await adb.util.readAll(output)).toString();
-                
+
                 const foundFiles = data.trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
-                
+
                 foundFiles.forEach(file => {
                     // 중복 방지를 위해 Set에 추가
                     allApkPaths.add(file.trim());
                 });
-                
+
             } catch (e) {
                 // 이 오류는 ADB 통신 자체의 문제일 가능성이 높습니다.
                 console.warn(`⚠️ [Android] APK 검색 중 통신 오류 (${searchPath}): ${e.message}`);
                 // 계속 진행
             }
         }
-        
+
         // 검색 결과를 배열로 변환하여 반환
         return Array.from(allApkPaths);
     },
