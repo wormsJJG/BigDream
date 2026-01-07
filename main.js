@@ -16,7 +16,10 @@ const gplay = gplayRaw.default || gplayRaw;
 const { exec, spawn } = require('child_process');
 const { autoUpdater } = require("electron-updater");
 const log = require('electron-log');
-
+const { EventEmitter } = require('events');
+const aiEvents = new EventEmitter();
+let aiProcess = null;
+aiEvents.setMaxListeners(0);
 // ============================================================
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
@@ -198,6 +201,57 @@ const client = adb.createClient({ bin: CONFIG.PATHS.ADB });
 // ============================================================
 // [2] 앱 생명주기 및 창 관리 (APP LIFECYCLE)
 // ============================================================
+
+function startAIEngine(mainWindow) {
+    const scriptPath = path.join(__dirname, 'ai_engine.py');
+    aiProcess = spawn('python', ['-u', scriptPath]); // 또는 'python3'
+
+    aiProcess.stdout.on('data', (data) => {
+        try {
+            const strData = data.toString().trim();
+            const lines = strData.split('\n');
+            lines.forEach(line => {
+                if (!line) return;
+                const response = JSON.parse(line);
+
+                if (response.type === 'SCAN_RESULT') {
+                    // 1. run-scan 핸들러 내부에서 기다리는 놈에게 신호 보내기
+                    aiEvents.emit(`result:${response.packageName}`, response.result);
+                    
+                    // 2. (선택) 실시간 UI 업데이트용으로 렌더러에도 보내기
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('ai-scan-result', response);
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('AI 파싱 에러:', e);
+        }
+    });
+}
+
+function analyzeAppWithAI(payload) {
+    return new Promise((resolve) => {
+        if (!aiProcess) return resolve({ score: 0, grade: 'UNKNOWN', reason: 'AI 엔진 꺼짐' });
+
+        // 응답을 기다리는 1회성 리스너 등록
+        const eventName = `result:${payload.packageName}`;
+        
+        const timeout = setTimeout(() => {
+            // 타임아웃 발생 시에도 리스너를 확실히 제거해야 메모리가 안전합니다.
+            aiEvents.removeAllListeners(eventName);
+            resolve({ score: 0, grade: 'TIMEOUT', reason: '분석 시간 초과' });
+        }, 5000); // 앱이 많을 땐 타임아웃을 5초 정도로 넉넉히 주는 것도 좋습니다.
+
+        aiEvents.once(eventName, (result) => {
+            clearTimeout(timeout);
+            resolve(result);
+        });
+
+        aiProcess.stdin.write(JSON.stringify({ type: 'SCAN_APP', payload }) + '\n');
+    });
+}
+
 function createWindow() {
     console.log('--- [System] Main Window Created ---');
     const mainWindow = new BrowserWindow({
@@ -253,10 +307,8 @@ app.whenReady().then(async () => {
     createWindow();
     const mainWindow = BrowserWindow.getAllWindows()[0];
     await Utils.checkAndInstallPrerequisites(mainWindow);
-
-
     await autoUpdater.checkForUpdatesAndNotify();
-
+    startAIEngine();
 }).catch(err => {
     console.log(err)
 });
@@ -316,73 +368,133 @@ ipcMain.handle('check-device-connection', async () => {
 
 // 3-2. 스파이앱 정밀 탐지 + VT 검사
 ipcMain.handle('run-scan', async () => {
-    console.log('--- [Android] 정밀 분석 시작 ---');
-    if (CONFIG.IS_DEV_MODE) {
-        await Utils.sleep(1500);
-        return MockData.getAndroidScanResult();
-    }
-
+    console.log('--- AI 정밀 분석 시작 ---');
     try {
         const devices = await client.listDevices();
-        if (devices.length === 0) throw new Error('연결된 기기가 없습니다.');
+        if (devices.length === 0) throw new Error('기기 없음');
         const serial = devices[0].id;
 
-        // [Step A] 기본 정보 수집
-        const deviceInfo = await AndroidService.getDeviceInfo(serial);
-        deviceInfo.os = 'ANDROID'
+        // 1. 모든 앱의 경로와 패키지명 가져오기 (-f 옵션 필수)
+        // 출력 예: package:/data/app/~~.apk=com.kakao.talk
+        const packagesOutput = await client.shell(serial, 'pm list packages -f')
+            .then(adb.util.readAll)
+            .then(buf => buf.toString().trim().split('\n'));
 
-        // [Step B] 앱 및 파일 데이터 수집
-        const apkFiles = await AndroidService.findApkFiles(serial);
-        const allApps = await AndroidService.getInstalledApps(serial);
-        const networkMap = await AndroidService.getNetworkUsageMap(serial);
+        // 파싱
+        const allApps = packagesOutput.map(line => {
+            const parts = line.replace('package:', '').split('=');
+            return { path: parts[0], packageName: parts[1] };
+        });
 
-        // [Step C] 앱 상세 분석 (권한, 백그라운드, 네트워크 매핑)
+        const deviceInfo = { model: 'Android Device', serial: serial }; // 간략화
         const processedApps = [];
-        // 20개씩 끊어서 병렬 처리 (속도 최적화)
+
+        // 20개씩 끊어서 처리
         for (let i = 0; i < allApps.length; i += 20) {
             const chunk = allApps.slice(i, i + 20);
+            
             const results = await Promise.all(chunk.map(async (app) => {
-                const [isRunningBg, permissions] = await Promise.all([
-                    AndroidService.checkIsRunningBackground(serial, app.packageName),
-                    AndroidService.getAppPermissions(serial, app.packageName)
-                ]);
-                const netStats = networkMap[app.uid] || { rx: 0, tx: 0 };
+                try {
+                    // 추가 정보 수집
+                    const [isRunningBg, permissions] = await Promise.all([
+                        // 실행 중인지 체크 (간소화된 로직, 실제 서비스 코드 사용 권장)
+                        client.shell(serial, 'ps -A').then(adb.util.readAll).then(b => b.toString().includes(app.packageName)),
+                        // 권한 추출 (로직은 기존 AndroidService 활용 권장)
+                        client.shell(serial, `dumpsys package ${app.packageName}`).then(adb.util.readAll).then(b => {
+                            return (b.toString().match(/android\.permission\.[A-Z_]+/g) || []);
+                        })
+                    ]);
 
-                return { ...app, isRunningBg, ...permissions, dataUsage: netStats };
+                    // ★ [조사관의 핵심 역할] 증거 수집
+
+                    // 증거 1: 경로가 시스템 파티션인가?
+                    const isSystemPath = app.path.startsWith('/system/') || 
+                                         app.path.startsWith('/vendor/') || 
+                                         app.path.startsWith('/product/') ||
+                                         app.path.startsWith('/apex/');
+
+                    // 증거 2: 이름이 시스템 앱스러운가?
+                    const isSystemName = app.packageName.startsWith('com.android.') || 
+                                         app.packageName.startsWith('com.samsung.') || 
+                                         app.packageName.startsWith('com.google.');
+
+                    let isSafeSystemApp = false;
+                    let isMasquerading = false;
+                    let isSideloaded = false;
+
+                    if (isSystemPath) {
+                        // 시스템 경로에 있으면 안전한 시스템 앱
+                        isSafeSystemApp = true;
+                    } else {
+                        // /data 경로에 있는데...
+                        
+                        // 인스톨러 확인 (사이드로딩 체크)
+                        const installer = await client.shell(serial, `pm list packages -i ${app.packageName}`)
+                                                .then(adb.util.readAll)
+                                                .then(b => b.toString());
+                        
+                        // 스토어 출신이 아니면 사이드로딩
+                        if (!installer.includes('com.android.vending') && !installer.includes('play.google')) {
+                            isSideloaded = true;
+                        }
+
+                        // 이름은 시스템인데 스토어 출신이 아니면 -> 위장(Masquerading)!
+                        if (isSystemName && isSideloaded) {
+                            isMasquerading = true;
+                        }
+                    }
+
+                    // ★ [AI에게 판단 위임] 조사한 정보만 넘김
+                    const aiPayload = {
+                        packageName: app.packageName,
+                        permissions: [...new Set(permissions)],
+                        isSideloaded: isSideloaded,
+                        isRunningBg: isRunningBg,
+                        isSystemApp: isSafeSystemApp, // "이거 진짜 시스템 앱 맞음"
+                        isMasquerading: isMasquerading // "이거 시스템인 척 하는 가짜임"
+                    };
+
+                    console.log(aiPayload)
+
+                    const aiResult = await analyzeAppWithAI(aiPayload);
+
+                    return {
+                        ...app,
+                        isRunningBg,
+                        permissions: permissions,
+                        // 결과 통합
+                        aiScore: aiResult.score,
+                        aiGrade: aiResult.grade,
+                        reason: aiResult.grade !== 'SAFE' ? `[AI탐지] ${aiResult.reason} (${aiResult.score}점)` : null
+                    };
+
+                } catch (e) {
+                    return { ...app, error: true };
+                }
             }));
             processedApps.push(...results);
         }
 
-        // [Step D] 의심 앱 1차 필터링
-        let suspiciousApps = AndroidService.filterSuspiciousApps(processedApps);
-
-        processedApps.forEach(app => {
-            // app.reason이 있지만, "[VT 확진]" 태그가 없는 경우 (행동 탐지 실패 앱)
-            if (app.reason && !app.reason.includes('[VT 확진]')) {
-                app.reason = null; // UI에 표시되지 않도록 reason 속성을 제거
-            }
-        });
-
-        // [Step E] VirusTotal 2차 정밀 검사
-        if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
-
-            console.log(`🔍 VT 정밀 검사 대상: ${suspiciousApps.length}개`);
-            await AndroidService.runVirusTotalCheck(serial, suspiciousApps);
-            suspiciousApps = suspiciousApps.filter(app => {
-                // app.reason 필드가 존재하고, "[VT 확진]" 문자열을 포함하는 경우만 통과
-                return app.reason && app.reason.includes('[VT 확진]');
-            });
-        }
-
-        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
+        // 결과 필터링 (위험한 것만 추출)
+        const suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
+        // [Step E] (선택) VirusTotal 2차 정밀 검사 - AI가 의심한 것만 검사
+        // 키가 있을 때만 실행
+        // if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
+        //     console.log(`🌐 VT 정밀 검사 진행 (${suspiciousApps.length}개)`);
+        //     await AndroidService.runVirusTotalCheck(serial, suspiciousApps);
+            
+        //     // VT 결과까지 반영된 리스트 업데이트 (필요 시 로직 수정)
+        //     // 여기서는 VT 결과가 있든 없든 AI가 잡은건 일단 보여줌
+        // }
+// 3-3. 앱 삭제
+        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles: [] };
 
     } catch (err) {
-        console.error('검사 실패:', err);
-        throw err;
+        console.error(err);
+        return { error: err.message };
     }
 });
 
-// 3-3. 앱 삭제
 ipcMain.handle('uninstall-app', async (event, packageName) => {
     console.log(`--- [Android] 앱 삭제 요청: ${packageName} ---`);
     if (CONFIG.IS_DEV_MODE) {

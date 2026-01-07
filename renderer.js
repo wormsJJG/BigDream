@@ -809,6 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ViewManager.showScreen(loggedInView, 'scan-progress-screen');
 
             if (State.currentDeviceMode === 'android') {
+
                 await ScanController.startAndroidScan();
             } else if (State.currentDeviceMode === 'ios') {
                 await ScanController.startIosScan();
