@@ -217,7 +217,7 @@ function startAIEngine(mainWindow) {
                 if (response.type === 'SCAN_RESULT') {
                     // 1. run-scan 핸들러 내부에서 기다리는 놈에게 신호 보내기
                     aiEvents.emit(`result:${response.packageName}`, response.result);
-                    
+
                     // 2. (선택) 실시간 UI 업데이트용으로 렌더러에도 보내기
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send('ai-scan-result', response);
@@ -236,7 +236,7 @@ function analyzeAppWithAI(payload) {
 
         // 응답을 기다리는 1회성 리스너 등록
         const eventName = `result:${payload.packageName}`;
-        
+
         const timeout = setTimeout(() => {
             // 타임아웃 발생 시에도 리스너를 확실히 제거해야 메모리가 안전합니다.
             aiEvents.removeAllListeners(eventName);
@@ -374,120 +374,133 @@ ipcMain.handle('run-scan', async () => {
         if (devices.length === 0) throw new Error('기기 없음');
         const serial = devices[0].id;
 
-        // 1. 모든 앱의 경로와 패키지명 가져오기 (-f 옵션 필수)
-        // 출력 예: package:/data/app/~~.apk=com.kakao.talk
-        const packagesOutput = await client.shell(serial, 'pm list packages -f')
-            .then(adb.util.readAll)
-            .then(buf => buf.toString().trim().split('\n'));
+        const deviceInfo = await AndroidService.getDeviceInfo(serial);
+        deviceInfo.os = 'ANDROID'
 
-        // 파싱
-        const allApps = packagesOutput.map(line => {
-            const parts = line.replace('package:', '').split('=');
-            return { path: parts[0], packageName: parts[1] };
-        });
-
-        const deviceInfo = { model: 'Android Device', serial: serial }; // 간략화
+        // [Step B] 앱 및 파일 데이터 수집
+        const allApps = await AndroidService.getInstalledApps(serial);
+        const apkFiles = await AndroidService.findApkFiles(serial);
+        const networkMap = await AndroidService.getNetworkUsageMap(serial);
         const processedApps = [];
 
         // 20개씩 끊어서 처리
         for (let i = 0; i < allApps.length; i += 20) {
             const chunk = allApps.slice(i, i + 20);
-            
+
             const results = await Promise.all(chunk.map(async (app) => {
                 try {
-                    // 추가 정보 수집
-                    const [isRunningBg, permissions] = await Promise.all([
-                        // 실행 중인지 체크 (간소화된 로직, 실제 서비스 코드 사용 권장)
-                        client.shell(serial, 'ps -A').then(adb.util.readAll).then(b => b.toString().includes(app.packageName)),
-                        // 권한 추출 (로직은 기존 AndroidService 활용 권장)
-                        client.shell(serial, `dumpsys package ${app.packageName}`).then(adb.util.readAll).then(b => {
-                            return (b.toString().match(/android\.permission\.[A-Z_]+/g) || []);
-                        })
+                    // [1] 기본 정보 수집 (기존과 동일)
+                    const [isRunningBg, permData] = await Promise.all([
+                        AndroidService.checkIsRunningBackground(serial, app.packageName),
+                        AndroidService.getAppPermissions(serial, app.packageName)
                     ]);
 
-                    // ★ [조사관의 핵심 역할] 증거 수집
+                    const combinedPermissions = [
+            ...(permData.requestedList || []),
+            ...(permData.grantedList || [])
+        ];
+        const permissions = [...new Set(combinedPermissions)];
 
-                    // 증거 1: 경로가 시스템 파티션인가?
-                    const isSystemPath = app.path.startsWith('/system/') || 
-                                         app.path.startsWith('/vendor/') || 
-                                         app.path.startsWith('/product/') ||
-                                         app.path.startsWith('/apex/');
 
-                    // 증거 2: 이름이 시스템 앱스러운가?
-                    const isSystemName = app.packageName.startsWith('com.android.') || 
-                                         app.packageName.startsWith('com.samsung.') || 
-                                         app.packageName.startsWith('com.google.');
+        console.log(permissions)
+                    const netStats = networkMap[app.uid] || { rx: 0, tx: 0 }
 
-                    let isSafeSystemApp = false;
+                    // [2-2] 위장술(Masquerading) 최종 판정
+                    // 이미 getInstalledApps에서 isSystemApp 판정을 했으므로, 
+                    // 이름은 삼성/구글인데 시스템 앱이 아니라고 판정된 경우만 위장으로 간주
+                    const trustedPrefixes = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
+                    const isTrustedName = trustedPrefixes.some(prefix => app.packageName.startsWith(prefix));
+
                     let isMasquerading = false;
-                    let isSideloaded = false;
-
-                    if (isSystemPath) {
-                        // 시스템 경로에 있으면 안전한 시스템 앱
-                        isSafeSystemApp = true;
-                    } else {
-                        // /data 경로에 있는데...
-                        
-                        // 인스톨러 확인 (사이드로딩 체크)
-                        const installer = await client.shell(serial, `pm list packages -i ${app.packageName}`)
-                                                .then(adb.util.readAll)
-                                                .then(b => b.toString());
-                        
-                        // 스토어 출신이 아니면 사이드로딩
-                        if (!installer.includes('com.android.vending') && !installer.includes('play.google')) {
-                            isSideloaded = true;
-                        }
-
-                        // 이름은 시스템인데 스토어 출신이 아니면 -> 위장(Masquerading)!
-                        if (isSystemName && isSideloaded) {
-                            isMasquerading = true;
-                        }
+                    if (isTrustedName && !app.isSystemApp) {
+                        isMasquerading = true;
                     }
 
-                    // ★ [AI에게 판단 위임] 조사한 정보만 넘김
+                    // [2-3] AI 엔진에게 판단 위임
                     const aiPayload = {
                         packageName: app.packageName,
-                        permissions: [...new Set(permissions)],
-                        isSideloaded: isSideloaded,
+                        permissions: permissions,
+                        isSideloaded: app.isSideloaded,
                         isRunningBg: isRunningBg,
-                        isSystemApp: isSafeSystemApp, // "이거 진짜 시스템 앱 맞음"
-                        isMasquerading: isMasquerading // "이거 시스템인 척 하는 가짜임"
+                        isSystemApp: app.isSystemApp,
+                        isMasquerading: isMasquerading
                     };
-
-                    console.log(aiPayload)
 
                     const aiResult = await analyzeAppWithAI(aiPayload);
 
                     return {
                         ...app,
                         isRunningBg,
-                        permissions: permissions,
-                        // 결과 통합
+                        ...permData,
+                        dataUsage: netStats,
+                        isMasquerading: isMasquerading,
                         aiScore: aiResult.score,
                         aiGrade: aiResult.grade,
                         reason: aiResult.grade !== 'SAFE' ? `[AI탐지] ${aiResult.reason} (${aiResult.score}점)` : null
                     };
 
                 } catch (e) {
+                    console.error(`Error analyzing ${app.packageName}:`, e);
                     return { ...app, error: true };
                 }
             }));
             processedApps.push(...results);
         }
 
+        const desktopPath = path.join(os.homedir(), 'Desktop');
+        const csvPath = path.join(desktopPath, 'my_phone_data.csv');
+
+        // 2. CSV 헤더 정의 (기존 dataset.csv와 형식을 맞춰야 함)
+        // feature_list.pkl에 저장된 모든 권한 리스트를 가져와야 정확하지만, 
+        // 여기서는 현재 스캔된 앱들이 가진 모든 권한을 수집합니다.
+        // const allPermissions = new Set();
+        // processedApps.forEach(app => {
+        //     if (app.permissions) app.permissions.forEach(p => allPermissions.add(p));
+        // });
+        // const permissionCols = Array.from(allPermissions);
+
+        // // 헤더: 패키지명, 모든권한들..., sideloaded, bg_run, LABEL
+        // const header = ['packageName', ...permissionCols, 'is_sideloaded', 'is_bg_run', 'LABEL'].join(';');
+
+        // // 3. 데이터 행 생성
+        // const rows = processedApps.map(app => {
+        //     const row = [];
+        //     row.push(app.packageName); // packageName
+
+        //     // 각 권한 컬럼에 대해 있으면 1, 없으면 0
+        //     permissionCols.forEach(p => {
+        //         row.push(app.permissions.includes(p) ? 1 : 0);
+        //     });
+
+        //     row.push(app.isSideloaded ? 1 : 0);
+        //     row.push(app.isRunningBg ? 1 : 0);
+
+        //     // 학습 데이터로 쓸 때: 사용자가 판단하기에 이 앱이 악성이면 1, 아니면 0
+        //     // 일단 현재 AI의 판단 결과나 기본값 0을 넣어둡니다.
+        //     row.push(app.aiGrade === 'DANGER' ? 1 : 0);
+
+        //     return row.join(';');
+        // });
+
+        // 4. 파일 저장
+        fs.writeFileSync(csvPath, '\ufeff' + [header, ...rows].join('\n'), 'utf8');
+        console.log(`📊 학습용 데이터 추출 완료: ${csvPath}`);
+        // ---------------------------------------------------------
         // 결과 필터링 (위험한 것만 추출)
         const suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
+
         // [Step E] (선택) VirusTotal 2차 정밀 검사 - AI가 의심한 것만 검사
         // 키가 있을 때만 실행
         // if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
         //     console.log(`🌐 VT 정밀 검사 진행 (${suspiciousApps.length}개)`);
         //     await AndroidService.runVirusTotalCheck(serial, suspiciousApps);
-            
+
         //     // VT 결과까지 반영된 리스트 업데이트 (필요 시 로직 수정)
         //     // 여기서는 VT 결과가 있든 없든 AI가 잡은건 일단 보여줌
         // }
-// 3-3. 앱 삭제
-        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles: [] };
+
+        // 3-3. 앱 삭제
+        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles: apkFiles };
 
     } catch (err) {
         console.error(err);
@@ -1053,12 +1066,12 @@ const AndroidService = {
 
     // 설치된 앱 목록 (시스템 앱 필터링 강화 버전)
     async getInstalledApps(serial) {
-        // 1. 시스템 앱 목록 획득: 'pm list packages -s' 사용 (가장 정확)
+        // 1. 시스템 앱 목록 획득 (가장 정확한 명단)
         const sysOutput = await client.shell(serial, 'pm list packages -s');
         const sysData = await adb.util.readAll(sysOutput);
         const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
 
-        // 2. 전체 앱 목록 및 설치 정보 획득
+        // 2. 전체 앱 목록 및 상세 정보 획득
         const output = await client.shell(serial, 'pm list packages -i -f -U');
         const data = await adb.util.readAll(output);
         const lines = data.toString().trim().split('\n');
@@ -1068,12 +1081,15 @@ const AndroidService = {
             'com.kt.olleh.storefront', 'com.lguplus.appstore', 'com.google.android.feedback'
         ];
 
+        // 시스템 앱이라고 믿을 수 있는 이름 패턴 (AI 학습 및 필터링용)
+        const TRUSTED_PREFIXES = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
+
         return lines.map((line) => {
             if (!line) return null;
-            // format: package:/path=com.name uid:1000 installer=com.foo
             const parts = line.split(/\s+/);
             let packageName = '', apkPath = 'N/A', installer = null, uid = null;
 
+            // [사용자님의 원본 파싱 로직 유지]
             parts.forEach(part => {
                 if (part.includes('=')) {
                     if (part.startsWith('package:')) {
@@ -1093,22 +1109,44 @@ const AndroidService = {
 
             if (!packageName) return null;
 
-            let origin = '외부 설치'; // 기본값: Sideload
-            let isSideloaded = true;
+            // --- 여기서부터 AI 전용 필드 계산 (파싱된 값 활용) ---
 
-            // 💡 [시스템 앱 판별] 1순위: 시스템 패키지 목록에 있는지 확인
+            let origin = '외부 설치';
+            let isSideloaded = true;
+            let isSystemApp = false;
+            let isMasquerading = false;
+
+            // 1. 시스템 앱 판정 (Set 목록 대조)
             if (systemPackages.has(packageName)) {
                 origin = '시스템 앱';
                 isSideloaded = false;
+                isSystemApp = true;
             }
-            // 💡 [공식 스토어 판별] 2순위: 공식 설치 경로(installer)가 있는지 확인 (시스템 앱이 아닐 경우만)
+            // 2. 공식 스토어 판정
             else if (installer && TRUSTED_INSTALLERS.includes(installer)) {
                 origin = '공식 스토어';
                 isSideloaded = false;
+                isSystemApp = false;
             }
 
-            // isSideloaded는 '외부 설치'일 경우에만 true가 됩니다.
-            return { packageName, apkPath, installer, isSideloaded, uid, origin }; // 💡 origin 필드 추가
+            // 3. 위장 앱(Masquerading) 판정 로직
+            // 이름은 시스템Prefix인데, 실제 시스템 앱 목록에 없고 스토어 출처도 아닐 때
+            const hasTrustedName = TRUSTED_PREFIXES.some(pre => packageName.startsWith(pre));
+            if (hasTrustedName && !isSystemApp && isSideloaded) {
+                isMasquerading = true;
+            }
+
+            // AI 엔진 및 CSV 추출에 필요한 모든 필드 반환
+            return {
+                packageName,
+                apkPath,
+                installer,
+                isSideloaded,
+                isSystemApp,      // AI 학습용 핵심 필드
+                isMasquerading,   // AI 학습용 핵심 필드
+                uid,
+                origin
+            };
         }).filter(item => item !== null);
     },
 
