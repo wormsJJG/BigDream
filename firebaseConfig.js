@@ -2,7 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ★★★ Firebase 콘솔 -> 프로젝트 설정 -> 내 앱 -> SDK 설정에서 복사해오세요 ★★★
 const firebaseConfig = {
   apiKey: "AIzaSyDGTvT4En8iXJENDU3miHSJnD_n6MUF10M",
   authDomain: "bigdream-216cb.firebaseapp.com",
