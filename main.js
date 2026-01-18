@@ -17,14 +17,20 @@ const { exec, spawn } = require('child_process');
 const { autoUpdater } = require("electron-updater");
 const log = require('electron-log');
 const { EventEmitter } = require('events');
+
 const aiEvents = new EventEmitter();
-let aiProcess = null;
 aiEvents.setMaxListeners(0);
+
+const { analyzeAppWithStaticModel } = require("./ai/aiStaticAnalyzer"); // 경로는 맞게 조정
+
+let aiProcess = null;
+
 // ============================================================
 // [1] 환경 설정 및 상수 (CONFIGURATION)
 // ============================================================
 
 const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : __dirname;
+
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = "info";
 autoUpdater.autoDownload = true; // 업데이트 발견 시 자동 다운로드
@@ -158,12 +164,10 @@ const Utils = {
 
         // 1. Python 설치 여부 확인
         try {
-            // 'python3' 명령어가 있는지 확인
             await this.runCommand('python --version');
             console.log("✅ Python 설치 확인 완료.");
             pythonInstalled = true;
         } catch (e) {
-            // 'python' 명령어로 다시 한번 확인 (일부 환경에서 'python'만 사용)
             try {
                 await this.runCommand('python --version');
                 console.log("✅ Python 설치 확인 완료.");
@@ -183,10 +187,8 @@ const Utils = {
             });
 
             if (dialogResult.response === 0) {
-                // '예'를 선택한 경우, Python 다운로드 페이지를 엽니다.
                 require('electron').shell.openExternal('https://www.python.org/downloads/windows/');
             }
-            // Python이 없으면 MVT 설치 단계는 건너뜁니다.
             return false;
         }
 
@@ -201,56 +203,6 @@ const client = adb.createClient({ bin: CONFIG.PATHS.ADB });
 // ============================================================
 // [2] 앱 생명주기 및 창 관리 (APP LIFECYCLE)
 // ============================================================
-
-function startAIEngine(mainWindow) {
-    const scriptPath = path.join(__dirname, 'ai_engine.py');
-    aiProcess = spawn('python', ['-u', scriptPath]); // 또는 'python3'
-
-    aiProcess.stdout.on('data', (data) => {
-        try {
-            const strData = data.toString().trim();
-            const lines = strData.split('\n');
-            lines.forEach(line => {
-                if (!line) return;
-                const response = JSON.parse(line);
-
-                if (response.type === 'SCAN_RESULT') {
-                    // 1. run-scan 핸들러 내부에서 기다리는 놈에게 신호 보내기
-                    aiEvents.emit(`result:${response.packageName}`, response.result);
-
-                    // 2. (선택) 실시간 UI 업데이트용으로 렌더러에도 보내기
-                    if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send('ai-scan-result', response);
-                    }
-                }
-            });
-        } catch (e) {
-            console.error('AI 파싱 에러:', e);
-        }
-    });
-}
-
-function analyzeAppWithAI(payload) {
-    return new Promise((resolve) => {
-        if (!aiProcess) return resolve({ score: 0, grade: 'UNKNOWN', reason: 'AI 엔진 꺼짐' });
-
-        // 응답을 기다리는 1회성 리스너 등록
-        const eventName = `result:${payload.packageName}`;
-
-        const timeout = setTimeout(() => {
-            // 타임아웃 발생 시에도 리스너를 확실히 제거해야 메모리가 안전합니다.
-            aiEvents.removeAllListeners(eventName);
-            resolve({ score: 0, grade: 'TIMEOUT', reason: '분석 시간 초과' });
-        }, 5000); // 앱이 많을 땐 타임아웃을 5초 정도로 넉넉히 주는 것도 좋습니다.
-
-        aiEvents.once(eventName, (result) => {
-            clearTimeout(timeout);
-            resolve(result);
-        });
-
-        aiProcess.stdin.write(JSON.stringify({ type: 'SCAN_APP', payload }) + '\n');
-    });
-}
 
 function createWindow() {
     console.log('--- [System] Main Window Created ---');
@@ -277,13 +229,11 @@ function sendStatusToWindow(channel, data) {
 autoUpdater.on('checking-for-update', () => { log.info('업데이트 확인 중...'); });
 autoUpdater.on('update-available', (info) => {
     log.info('업데이트 가능');
-
     sendStatusToWindow('update-start', info.version)
 });
 autoUpdater.on('update-not-available', (info) => { log.info('최신 버전임'); });
 autoUpdater.on('error', (err) => {
     log.info('에러 발생: ' + err);
-
     sendStatusToWindow('update-error', err.message)
 });
 autoUpdater.on('download-progress', (progressObj) => {
@@ -298,25 +248,22 @@ autoUpdater.on('download-progress', (progressObj) => {
 });
 autoUpdater.on('update-downloaded', (info) => {
     log.info('다운로드 완료. 앱을 재시작하여 업데이트를 적용합니다.');
-    // 업데이트 다운로드 완료 후 바로 설치하려면 아래 주석 해제
     autoUpdater.quitAndInstall();
 });
 
 app.whenReady().then(async () => {
-
     createWindow();
     const mainWindow = BrowserWindow.getAllWindows()[0];
     await Utils.checkAndInstallPrerequisites(mainWindow);
     await autoUpdater.checkForUpdatesAndNotify();
-    startAIEngine();
 }).catch(err => {
     console.log(err)
 });
 
 app.on('window-all-closed', () => {
-
     app.quit();
 })
+
 // 창 리셋 (UI 강제 새로고침 효과)
 ipcMain.handle('force-window-reset', () => {
     const mainWindow = BrowserWindow.getAllWindows()[0];
@@ -366,22 +313,370 @@ ipcMain.handle('check-device-connection', async () => {
     }
 });
 
+// ============================================================
+// [정적AI 정책/유틸] (중복 선언 제거 + 타입 안전)
+// ============================================================
+
+const DANGEROUS_PERMS = new Set([
+    "android.permission.READ_SMS",
+    "android.permission.RECEIVE_SMS",
+    "android.permission.SEND_SMS",
+    "android.permission.WRITE_SMS",
+    "android.permission.RECEIVE_MMS",
+    "android.permission.RECEIVE_WAP_PUSH",
+
+    "android.permission.READ_CONTACTS",
+    "android.permission.WRITE_CONTACTS",
+    "android.permission.GET_ACCOUNTS",
+
+    "android.permission.READ_CALL_LOG",
+    "android.permission.WRITE_CALL_LOG",
+    "android.permission.READ_PHONE_STATE",
+    "android.permission.READ_PHONE_NUMBERS",
+    "android.permission.CALL_PHONE",
+    "android.permission.ANSWER_PHONE_CALLS",
+
+    "android.permission.ACCESS_FINE_LOCATION",
+    "android.permission.ACCESS_COARSE_LOCATION",
+
+    "android.permission.RECORD_AUDIO",
+    "android.permission.CAMERA",
+
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.READ_MEDIA_IMAGES",
+    "android.permission.READ_MEDIA_VIDEO",
+    "android.permission.READ_MEDIA_AUDIO",
+]);
+
+const TRUSTED_INSTALLERS = new Set([
+    "com.android.vending",                 // Play Store
+    "com.sec.android.app.samsungapps",     // Galaxy Store
+    // "com.amazon.venezia",                  // Amazon (필요시)
+    "com.lguplus.appstore",
+    "com.kt.olleh.storefront",
+    "com.skt.skaf.A000Z00040",
+]);
+
+const SYSTEMISH_PREFIXES = [
+    "com.android.",
+    "android",
+    "com.android.systemui",
+    "com.android.settings",
+];
+
+// “삼성/구글 전체”는 너무 넓어서 위장 판정 오탐이 커짐
+// 위장은 SYSTEMISH_PREFIXES 위주로만 잡는 게 안전
+function isSystemishName(pkg) {
+    return SYSTEMISH_PREFIXES.some(p => pkg === p || pkg.startsWith(p));
+}
+
+function toBool(v) {
+    return v === true || v === 1 || v === "true";
+}
+
+function buildSignals(app, permissions) {
+    const p = new Set(permissions || []);
+    const has = (...xs) => xs.some(x => p.has(x));
+
+    const signals = {
+        boot: has("android.permission.RECEIVE_BOOT_COMPLETED") ? 1 : 0,
+        overlay: has("android.permission.SYSTEM_ALERT_WINDOW") ? 1 : 0,
+        ignoreBatteryOpt: has("android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS") ? 1 : 0,
+
+        sms: has("android.permission.READ_SMS", "android.permission.RECEIVE_SMS", "android.permission.SEND_SMS", "android.permission.WRITE_SMS") ? 1 : 0,
+        call: has("android.permission.READ_CALL_LOG", "android.permission.WRITE_CALL_LOG", "android.permission.READ_PHONE_STATE", "android.permission.READ_PHONE_NUMBERS", "android.permission.CALL_PHONE", "android.permission.ANSWER_PHONE_CALLS") ? 1 : 0,
+        contacts: has("android.permission.READ_CONTACTS", "android.permission.WRITE_CONTACTS") ? 1 : 0,
+        location: has("android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION") ? 1 : 0,
+        mic: has("android.permission.RECORD_AUDIO") ? 1 : 0,
+        camera: has("android.permission.CAMERA") ? 1 : 0,
+
+        // 위험 권한 수(“전체 권한 수” 쓰면 시스템/벤더 앱에서 오탐 폭발)
+        dangerousCount: (permissions || []).filter(x => DANGEROUS_PERMS.has(x)).length,
+
+        // 런타임 신호(여기선 boolean -> 0/1)
+        runningBg: toBool(app.isRunningBg) ? 1 : 0,
+        sideload: toBool(app.isSideloaded) ? 1 : 0,
+        systemApp: toBool(app.isSystemApp) ? 1 : 0,
+        masquerading: toBool(app.isMasquerading) ? 1 : 0,
+        accessibilityEnabled: toBool(app.accessibilityEnabled) ? 1 : 0,
+        overlayAllowed: toBool(app.overlayAllowed) ? 1 : 0,
+    };
+
+    return signals;
+}
+
+function masqueradeScore(app) {
+    // “위장”은 단일 조건 true/false로 끝내면 오탐/미탐이 큼 -> 점수화
+    // 점수 4 이상이면 masquerading true 추천
+    let s = 0;
+
+    const isSystemish = isSystemishName(app.packageName);
+    const sideload = toBool(app.isSideloaded);
+    const sys = toBool(app.isSystemApp);
+
+    // 시스템처럼 보이는데 시스템앱이 아님(모순)
+    if (isSystemish && !sys) s += 2;
+
+    // 사이드로드면 강하게 의심
+    if (sideload) s += 2;
+
+    // installer가 없거나 신뢰 설치처가 아니면 의심 추가
+    if (!app.installer) s += 1;
+    else if (!TRUSTED_INSTALLERS.has(app.installer)) s += 1;
+
+    return s;
+}
+
+function computeRuleScore(sig) {
+    // ✅ 룰 점수: “단일 조건=100점” 같은 문제 방지
+    // 오탐을 줄이려면 "조합"이 있어야 점수가 크게 올라가게 설계해야 함.
+    let score = 0;
+
+    // 설치 출처
+    if (sig.sideload) score += 2;
+    if (sig.masquerading) score += 3;
+
+    // 지속성/은닉
+    if (sig.boot) score += 1;
+    if (sig.ignoreBatteryOpt) score += 1;
+    if (sig.overlay && sig.overlayAllowed) score += 2;
+
+    // 주요 탈취 영역(조합 보너스)
+    const sensitive = sig.sms + sig.call + sig.contacts + sig.location + sig.mic + sig.camera;
+    score += Math.min(4, sensitive); // 최대 4
+
+    // 접근성(실제로 활성화된 경우)
+    if (sig.accessibilityEnabled) score += 3;
+
+    // 백그라운드 실행 중이면 약간 가산(정적-only 모델이라도 운영상 신호)
+    if (sig.runningBg) score += 1;
+
+    // 위험 권한 과다
+    if (sig.dangerousCount >= 6) score += 1;
+    if (sig.dangerousCount >= 10) score += 1;
+
+    return score;
+}
+
+function gradeFrom(prob, ruleScore, isOfficialStore) {
+    // AI가 낮으면 절대 올리지 않는다 (오탐 방지 최우선)
+    if (prob < 0.35) return "SAFE";
+
+    // 공식 스토어는 더 보수적으로
+    const dangerProb = isOfficialStore ? 0.95 : 0.85;
+    const warnProb = isOfficialStore ? 0.85 : 0.70;
+
+    if (prob >= dangerProb && ruleScore >= (isOfficialStore ? 6 : 4)) return "DANGER";
+    if (prob >= warnProb && ruleScore >= (isOfficialStore ? 5 : 3)) return "WARNING";
+
+    return "SAFE";
+}
+
+function reasonKorean(app, sig, ruleScore, prob, isMasquerading) {
+    const parts = [];
+
+    // 설치 출처
+    if (toBool(app.isSideloaded)) parts.push("외부 설치(사이드로드)");
+    else if (app.installer === "com.android.vending") parts.push("Play 스토어 설치");
+    else if (app.installer === "com.sec.android.app.samsungapps") parts.push("Galaxy Store 설치");
+    else if (app.installer) parts.push(`설치처: ${app.installer}`);
+
+    if (sig.boot) parts.push("부팅 후 자동 실행 가능");
+    if (sig.overlay) parts.push("오버레이(화면 위 표시) 가능");
+    if (sig.overlayAllowed) parts.push("오버레이 실제 허용됨");
+    if (sig.ignoreBatteryOpt) parts.push("배터리 최적화 무시(상시 실행 가능)");
+
+    if (sig.accessibilityEnabled) parts.push("접근성 서비스 활성화됨");
+
+    if (sig.sms) parts.push("SMS 접근 권한");
+    if (sig.call) parts.push("통화/전화 관련 권한");
+    if (sig.contacts) parts.push("연락처 접근 권한");
+    if (sig.location) parts.push("위치 접근 권한");
+    if (sig.mic) parts.push("마이크 접근 권한");
+    if (sig.camera) parts.push("카메라 접근 권한");
+
+    if (toBool(app.isRunningBg)) parts.push("현재 백그라운드 실행 중");
+    if (isMasquerading) parts.push("시스템 앱 위장 의심");
+
+    // 너무 길면 상위만
+    const top = parts.slice(0, 7).join(" / ");
+    const score = Math.round(prob * 100);
+
+    return `[정적AI] ${top} (AI확률 ${score}%, 룰 ${ruleScore}점)`;
+}
+function isOfficialStoreInstaller(app) {
+    const installer = app?.installer || "";
+    return TRUSTED_INSTALLERS.has(installer) && app.isSideloaded === false;
+}
+
+function isTrustedVendorPkg(pkg) {
+    // 너무 넓게 잡으면 오탐 커짐 -> 삼성/구글 핵심만
+    return pkg.startsWith("com.samsung.") || pkg.startsWith("com.google.") || pkg.startsWith("com.android.");
+}
+
+function clampGradeForOfficialStore(originalGrade, prob, strongSignalsCount) {
+    // 공식스토어 앱은 “강한 신호”가 없으면 DANGER 금지
+    // strongSignalsCount: 접근성 활성/디바이스어드민/노티리스너/런처숨김 같은 것들
+    if (prob < 0.8) return "SAFE";
+    if (strongSignalsCount === 0) return "SAFE";
+    if (strongSignalsCount === 1) return "WARNING";
+    return originalGrade; // 2개 이상이면 AI 그대로 반영 가능
+}
+
+// ✅ 이게 최종 “의사결정 엔진”
+async function analyzeWithPolicy({
+    serial,
+    app,
+    permissions,
+    overlayAllowed,
+    accessibilityEnabled,
+    deviceAdminActive,
+    notifListenerEnabled,
+    hasLauncher,
+    analyzeAppWithStaticModel
+}) {
+    const aiPayload = {
+        packageName: app.packageName,
+        permissions,
+        isSideloaded: !!app.isSideloaded,
+        isRunningBg: !!app.isRunningBg,
+        isSystemApp: !!app.isSystemApp,
+        isMasquerading: !!app.isMasquerading,
+    };
+
+    const ai = await analyzeAppWithStaticModel(aiPayload);
+
+    // ai.score가 0~100이라고 가정 (기존 코드 호환)
+    const prob = Math.max(0, Math.min(1, Number(
+        ai.prob ?? ai.probability ?? ai.scoreProb ?? (typeof ai.score === "number" ? (ai.score / 100) : 0)
+    )));
+
+    // 강한 신호(“권한 많음”이 아니라 “실제 악용 흔적/상태”)
+    const strongSignals = [
+        !!accessibilityEnabled,
+        !!deviceAdminActive,
+        !!notifListenerEnabled,
+        hasLauncher === false,                 // 런처 없음(숨김)
+        !!overlayAllowed && !!accessibilityEnabled, // 접근성+오버레이 조합
+    ].filter(Boolean);
+
+    const strongCount = strongSignals.length;
+
+    let grade = ai.grade || (prob >= 0.90 ? "DANGER" : prob >= 0.75 ? "WARNING" : "SAFE");
+
+    const official = isOfficialStoreInstaller(app.installer) && !app.isSideloaded;
+
+    // ✅ 공식스토어 오탐 방지(핵심)
+    if (official) {
+        grade = clampGradeForOfficialStore(grade, prob, strongCount);
+    }
+
+    // ✅ 사이드로드는 조금 더 공격적으로(강한신호 1개 이상이면)
+    if (app.isSideloaded && prob >= 0.60 && strongCount >= 1) {
+        grade = (prob >= 0.80 ? "DANGER" : "WARNING");
+    }
+
+    // 이유(한국어) - SAFE면 null 처리해서 UI 깔끔하게
+    const reasons = [];
+    if (official) reasons.push(app.installer === "com.sec.android.app.samsungapps" ? "Galaxy Store 설치" : "Play 스토어 설치");
+    if (app.isSideloaded) reasons.push("외부 설치(사이드로드)");
+    if (permissions.includes("android.permission.RECEIVE_BOOT_COMPLETED")) reasons.push("부팅 후 자동 실행 가능");
+    if (permissions.includes("android.permission.SYSTEM_ALERT_WINDOW")) reasons.push("오버레이 권한 선언");
+    if (overlayAllowed) reasons.push("오버레이 실제 허용(appops)");
+    if (permissions.includes("android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS")) reasons.push("배터리 최적화 무시");
+
+    if (accessibilityEnabled) reasons.push("접근성 서비스 활성(강한 신호)");
+    if (deviceAdminActive) reasons.push("기기 관리자 활성(강한 신호)");
+    if (notifListenerEnabled) reasons.push("알림 접근(노티 리스너) 활성(강한 신호)");
+    if (hasLauncher === false) reasons.push("런처 숨김(아이콘 없음)");
+
+    const score100 = Math.round(prob * 100);
+
+    const reason = (grade === "SAFE")
+        ? null
+        : `[정적AI] ${reasons.slice(0, 8).join(" / ")} (AI확률 ${score100}%)`;
+
+    return {
+        score: score100,
+        grade,
+        reason,
+        prob,
+        strongCount,
+    };
+}
+
+// ============================================================
+// [서명 기반 신뢰 정책] (오탐 줄이기 핵심)
+// ============================================================
+
+// ✅ 여기엔 "정상(known-good) 서명 SHA256 지문"을 넣어두면 됨.
+// 처음엔 비워두고, 오탐 난 정상 앱의 서명부터 축적해도 효과 큼.
+const KNOWN_GOOD_SIGNER_SHA256 = new Set([
+    // 예시(가짜): "ab12cd34...",
+    // "여기에 dumpsys에서 뽑은 sha256(digest) 넣기"
+]);
+
+
+function normalizeHex(hex) {
+    if (!hex) return null;
+    return String(hex).replace(/[^0-9a-fA-F]/g, "").toLowerCase();
+}
+
+function isKnownGoodSigner(signingInfo) {
+    const sha = normalizeHex(signingInfo?.sha256);
+    if (!sha) return false;
+    return KNOWN_GOOD_SIGNER_SHA256.has(sha);
+}
+
+function countStrongSignals({ accessibilityEnabled, deviceAdminActive, notifListenerEnabled, hasLauncher, overlayAllowed }) {
+    return [
+        !!accessibilityEnabled,
+        !!deviceAdminActive,
+        !!notifListenerEnabled,
+        hasLauncher === false,                 // 런처 없음(숨김)
+        !!overlayAllowed && !!accessibilityEnabled, // 접근성+오버레이 실제 허용 조합
+    ].filter(Boolean).length;
+}
+
+// ✅ 공식스토어든 뭐든, "서명 good"이면 등급을 강제로 낮춰 오탐 방지
+function applySignerPolicy({ grade, prob, isGoodSigner, strongCount }) {
+    if (!isGoodSigner) return grade;
+
+    // 서명 good인데도 DANGER/WARNING을 주려면 "실제 악용 상태"가 있어야 함
+    if (strongCount === 0) return "SAFE";
+    if (strongCount === 1) return "WARNING";
+
+    // strongCount >= 2일 때만 원래 grade를 유지(여기서도 prob 낮으면 하향 가능)
+    if (prob < 0.85) return "WARNING";
+    return grade;
+}
+
+// ============================================================
 // 3-2. 스파이앱 정밀 탐지 + VT 검사
+// ============================================================
 ipcMain.handle('run-scan', async () => {
     console.log('--- AI 정밀 분석 시작 ---');
+    // “강한 악용 신호” (권한이 아니라 “실제 활성/상태”)
+
     try {
         const devices = await client.listDevices();
         if (devices.length === 0) throw new Error('기기 없음');
         const serial = devices[0].id;
 
         const deviceInfo = await AndroidService.getDeviceInfo(serial);
-        deviceInfo.os = 'ANDROID'
+        deviceInfo.os = 'ANDROID';
 
         // [Step B] 앱 및 파일 데이터 수집
         const allApps = await AndroidService.getInstalledApps(serial);
         const apkFiles = await AndroidService.findApkFiles(serial);
         const networkMap = await AndroidService.getNetworkUsageMap(serial);
+
+        // ✅ 접근성 활성 목록은 1번만
+        const enabledAccServicesStr = await AndroidService.getEnabledAccessibilityServices(serial);
+        console.log(enabledAccServicesStr)
         const processedApps = [];
+        let aiCount = 0;
 
         // 20개씩 끊어서 처리
         for (let i = 0; i < allApps.length; i += 20) {
@@ -390,53 +685,133 @@ ipcMain.handle('run-scan', async () => {
             const results = await Promise.all(chunk.map(async (app) => {
                 try {
                     // [1] 기본 정보 수집 (기존과 동일)
-                    const [isRunningBg, permData] = await Promise.all([
+                    const [isRunningBg, permData, signingInfo] = await Promise.all([
                         AndroidService.checkIsRunningBackground(serial, app.packageName),
-                        AndroidService.getAppPermissions(serial, app.packageName)
+                        AndroidService.getAppPermissions(serial, app.packageName),
+                        AndroidService.getSigningInfo(serial, app.packageName),
                     ]);
 
                     const combinedPermissions = [
-            ...(permData.requestedList || []),
-            ...(permData.grantedList || [])
-        ];
-        const permissions = [...new Set(combinedPermissions)];
+                        ...(permData.requestedList || []),
+                        ...(permData.grantedList || []),
+                    ];
+                    const permissions = [...new Set(combinedPermissions)];
 
+                    const netStats = networkMap[app.uid] || { rx: 0, tx: 0 };
 
-        console.log(permissions)
-                    const netStats = networkMap[app.uid] || { rx: 0, tx: 0 }
+                    // boolean 정규화
+                    app.isSystemApp = toBool(app.isSystemApp);
+                    app.isSideloaded = toBool(app.isSideloaded);
+                    app.isRunningBg = toBool(isRunningBg);
 
-                    // [2-2] 위장술(Masquerading) 최종 판정
-                    // 이미 getInstalledApps에서 isSystemApp 판정을 했으므로, 
-                    // 이름은 삼성/구글인데 시스템 앱이 아니라고 판정된 경우만 위장으로 간주
-                    const trustedPrefixes = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
-                    const isTrustedName = trustedPrefixes.some(prefix => app.packageName.startsWith(prefix));
+                    // ✅ (추가) 접근성 실제 활성 여부
+                    const accessibilityEnabled = await AndroidService.isAccessibilityEnabledForPackage(
+                        serial,
+                        app.packageName,
+                        enabledAccServicesStr
+                    );
 
-                    let isMasquerading = false;
-                    if (isTrustedName && !app.isSystemApp) {
-                        isMasquerading = true;
+                    // ✅ (추가) 오버레이 실제 허용(appops)
+                    const declaresOverlay = permissions.includes("android.permission.SYSTEM_ALERT_WINDOW");
+                    const overlayAllowed = declaresOverlay
+                        ? await AndroidService.getAppOpAllowed(serial, app.packageName, "SYSTEM_ALERT_WINDOW")
+                        : false;
+
+                    // ✅ (추가) Device Admin / Notification Listener / Launcher 숨김
+                    const [deviceAdminActive, notifListenerEnabled, hasLauncher] = await Promise.all([
+                        AndroidService.isDeviceAdminActive(serial, app.packageName),
+                        AndroidService.isNotificationListenerEnabled(serial, app.packageName),
+                        AndroidService.hasLauncherActivity(serial, app.packageName),
+                    ]);
+                    
+                    // [2-2] 위장술(Masquerading) 최종 판정 (네 원칙 유지 + 점수화 권장)
+                    // 이미 getInstalledApps에서 isMasquerading이 계산될 수 있으니, 여기서는 그대로 존중
+                    // 단, getInstalledApps에서 계산 안하면 fallback:
+                    if (typeof app.isMasquerading !== "boolean") {
+                        const trustedPrefixes = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
+                        const isTrustedName = trustedPrefixes.some(prefix => app.packageName.startsWith(prefix));
+                        app.isMasquerading = (isTrustedName && !app.isSystemApp && app.isSideloaded);
                     }
 
-                    // [2-3] AI 엔진에게 판단 위임
-                    const aiPayload = {
-                        packageName: app.packageName,
-                        permissions: permissions,
-                        isSideloaded: app.isSideloaded,
-                        isRunningBg: isRunningBg,
-                        isSystemApp: app.isSystemApp,
-                        isMasquerading: isMasquerading
-                    };
+                    // ✅ 시스템 앱은 AI 검사 제외(위장 제외)
+                    if (app.isSystemApp && !app.isMasquerading) {
+                        return {
+                            ...app,
+                            isRunningBg: app.isRunningBg,
+                            ...permData,
+                            dataUsage: netStats,
+                            aiScore: 0,
+                            aiGrade: "SAFE",
+                            reason: null,
+                            accessibilityEnabled,
+                            overlayAllowed,
+                            deviceAdminActive,
+                            notifListenerEnabled,
+                            hasLauncher,
+                        };
+                    }
 
-                    const aiResult = await analyzeAppWithAI(aiPayload);
+                    // ✅ 0.5) 공식 스토어 앱이면 검사 자체를 스킵 
+                    if (isOfficialStoreInstaller(app)) {
+                        return {
+                            ...app,
+                            isRunningBg: app.isRunningBg,
+                            ...permData,
+                            dataUsage: netStats,
+                            aiScore: 0,
+                            aiGrade: "SAFE",
+                            reason: null, // 또는 "[정책] 공식 스토어 앱은 검사 제외"
+                        };
+                    }
+
+
+                    // [2-3] AI + 정책 기반 최종 판단
+                    const aiFinal = await analyzeWithPolicy({
+                        serial,
+                        app,
+                        permissions,
+                        overlayAllowed,
+                        accessibilityEnabled,
+                        deviceAdminActive,
+                        notifListenerEnabled,
+                        hasLauncher,
+                        analyzeAppWithStaticModel,
+                    });
+                    
+                    const strongCount = countStrongSignals({
+                        accessibilityEnabled,
+                        deviceAdminActive,
+                        notifListenerEnabled,
+                        hasLauncher,
+                        overlayAllowed
+                    });
+
+                    const isGoodSigner = isKnownGoodSigner(signingInfo);
+
+                    // ✅ 서명 정책 적용(오탐 줄이기)
+                    const finalGrade = applySignerPolicy({
+                        grade: aiFinal.grade,
+                        prob: aiFinal.prob ?? (aiFinal.score / 100),
+                        isGoodSigner,
+                        strongCount
+                    });
+
+                    console.log(finalGrade)
+                    aiCount += 1;
 
                     return {
                         ...app,
-                        isRunningBg,
+                        isRunningBg: app.isRunningBg,
                         ...permData,
                         dataUsage: netStats,
-                        isMasquerading: isMasquerading,
-                        aiScore: aiResult.score,
-                        aiGrade: aiResult.grade,
-                        reason: aiResult.grade !== 'SAFE' ? `[AI탐지] ${aiResult.reason} (${aiResult.score}점)` : null
+                        aiScore: aiFinal.score,
+                        aiGrade: finalGrade,
+                        reason: aiFinal.reason,
+                        accessibilityEnabled,
+                        overlayAllowed,
+                        deviceAdminActive,
+                        notifListenerEnabled,
+                        hasLauncher,
                     };
 
                 } catch (e) {
@@ -444,63 +819,24 @@ ipcMain.handle('run-scan', async () => {
                     return { ...app, error: true };
                 }
             }));
+
             processedApps.push(...results);
         }
 
-        const desktopPath = path.join(os.homedir(), 'Desktop');
-        const csvPath = path.join(desktopPath, 'my_phone_data.csv');
+        console.log("AI inference count:", aiCount);
 
-        // 2. CSV 헤더 정의 (기존 dataset.csv와 형식을 맞춰야 함)
-        // feature_list.pkl에 저장된 모든 권한 리스트를 가져와야 정확하지만, 
-        // 여기서는 현재 스캔된 앱들이 가진 모든 권한을 수집합니다.
-        // const allPermissions = new Set();
-        // processedApps.forEach(app => {
-        //     if (app.permissions) app.permissions.forEach(p => allPermissions.add(p));
-        // });
-        // const permissionCols = Array.from(allPermissions);
-
-        // // 헤더: 패키지명, 모든권한들..., sideloaded, bg_run, LABEL
-        // const header = ['packageName', ...permissionCols, 'is_sideloaded', 'is_bg_run', 'LABEL'].join(';');
-
-        // // 3. 데이터 행 생성
-        // const rows = processedApps.map(app => {
-        //     const row = [];
-        //     row.push(app.packageName); // packageName
-
-        //     // 각 권한 컬럼에 대해 있으면 1, 없으면 0
-        //     permissionCols.forEach(p => {
-        //         row.push(app.permissions.includes(p) ? 1 : 0);
-        //     });
-
-        //     row.push(app.isSideloaded ? 1 : 0);
-        //     row.push(app.isRunningBg ? 1 : 0);
-
-        //     // 학습 데이터로 쓸 때: 사용자가 판단하기에 이 앱이 악성이면 1, 아니면 0
-        //     // 일단 현재 AI의 판단 결과나 기본값 0을 넣어둡니다.
-        //     row.push(app.aiGrade === 'DANGER' ? 1 : 0);
-
-        //     return row.join(';');
-        // });
-
-        // 4. 파일 저장
-        fs.writeFileSync(csvPath, '\ufeff' + [header, ...rows].join('\n'), 'utf8');
-        console.log(`📊 학습용 데이터 추출 완료: ${csvPath}`);
         // ---------------------------------------------------------
         // 결과 필터링 (위험한 것만 추출)
         const suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
 
-        // [Step E] (선택) VirusTotal 2차 정밀 검사 - AI가 의심한 것만 검사
-        // 키가 있을 때만 실행
+        // [Step E] (선택) VirusTotal 2차 정밀 검사 - “정책 통과한 것만” + “공식스토어는 기본 스킵” 추천
         // if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
-        //     console.log(`🌐 VT 정밀 검사 진행 (${suspiciousApps.length}개)`);
-        //     await AndroidService.runVirusTotalCheck(serial, suspiciousApps);
-
-        //     // VT 결과까지 반영된 리스트 업데이트 (필요 시 로직 수정)
-        //     // 여기서는 VT 결과가 있든 없든 AI가 잡은건 일단 보여줌
+        //   const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
+        //   console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
+        //   await AndroidService.runVirusTotalCheck(serial, vtTargets);
         // }
 
-        // 3-3. 앱 삭제
-        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles: apkFiles };
+        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
 
     } catch (err) {
         console.error(err);
@@ -508,6 +844,7 @@ ipcMain.handle('run-scan', async () => {
     }
 });
 
+// 3-3. 앱 삭제
 ipcMain.handle('uninstall-app', async (event, packageName) => {
     console.log(`--- [Android] 앱 삭제 요청: ${packageName} ---`);
     if (CONFIG.IS_DEV_MODE) {
@@ -536,7 +873,7 @@ ipcMain.handle('get-app-data', async (event, packageName) => {
         // 2. gplay.app 함수가 실제로 있는지 확인 (안전장치)
         if (typeof gplay.app !== 'function') {
             console.error('[Error] gplay.app 함수를 찾을 수 없습니다. gplay 객체:', gplay);
-            return null; // 함수가 없으면 null 반환하여 멈춤 방지
+            return null;
         }
 
         // 3. 한국 스토어 기준으로 검색
@@ -565,7 +902,6 @@ ipcMain.handle('auto-push-report-to-android', async (event) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
 
     // 1. 대상자 이름을 파일명에 반영 (예: 홍길동_리포트.pdf)
-    // 렌더러에서 전달받거나, 여기서 직접 생성 가능합니다.
     const tempPdfPath = path.join(app.getPath('temp'), `BD_Scanner_Report.pdf`);
 
     try {
@@ -599,11 +935,11 @@ ipcMain.handle('auto-push-report-to-android', async (event) => {
         return { success: false, error: err.message };
     }
 });
+
 // ============================================================
 // [4] iOS IPC 핸들러 (iOS HANDLERS)
 // ============================================================
 
-// 4-1. iOS 연결 확인
 // 4-1. iOS 연결 확인
 ipcMain.handle('check-ios-connection', async () => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosConnection();
@@ -631,23 +967,18 @@ ipcMain.handle('check-ios-connection', async () => {
         return { status: 'connected', model: modelName, udid: udid, type: 'ios' };
 
     } catch (error) {
-        // Utils.runCommand에서 reject를 던지면 여기서 잡힙니다.
-
         const detailedError = error.message || "iOS 도구 실행 중 알 수 없는 오류";
 
-        // 도구 파일이 실제로 없는지 확인
         if (!fs.existsSync(CONFIG.PATHS.IOS_ID)) {
             return { status: 'error', error: `필수 도구 파일 없음: ${CONFIG.PATHS.IOS_ID}` };
         }
 
-        // 실행 권한 또는 드라이버(iTunes) 문제일 가능성이 높음
         console.error(`❌ [iOS] 연결 확인 실패 상세: ${detailedError}`);
         let userMsg = "iOS 기기 연결 오류. iTunes/Apple 드라이버가 설치되었는지 확인하세요.";
 
         if (detailedError.includes('command failed')) {
             userMsg = "iOS 도구 실행 실패. 기기가 잠금 해제되었는지, '이 컴퓨터 신뢰'를 수락했는지 확인하세요.";
         }
-
 
         return { status: 'error', error: userMsg };
     }
@@ -668,12 +999,9 @@ async function getIosDeviceInfo(udid) {
     };
 
     try {
-        // 1. ideviceinfo 명령어로 하드웨어 정보 조회
-        // (idevicebackup2가 있는 폴더에 ideviceinfo도 같이 있어야 함)
         const cmd = `ideviceinfo -u ${udid}`;
-        const output = await Utils.runCommand(cmd); // Utils.runCommand가 stdout을 반환한다고 가정
+        const output = await Utils.runCommand(cmd);
 
-        // 결과 파싱 (Key: Value 형태)
         const rawMap = {};
         output.split('\n').forEach(line => {
             const parts = line.split(':');
@@ -684,7 +1012,6 @@ async function getIosDeviceInfo(udid) {
             }
         });
 
-        // 2. 모델명 매핑 (ProductType -> 사람이 읽는 이름)
         const modelMap = {
             'iPhone10,3': 'iPhone X', 'iPhone10,6': 'iPhone X',
             'iPhone11,2': 'iPhone XS', 'iPhone11,4': 'iPhone XS Max', 'iPhone11,6': 'iPhone XS Max',
@@ -700,7 +1027,6 @@ async function getIosDeviceInfo(udid) {
             'iPhone15,2': 'iPhone 14 Pro', 'iPhone15,3': 'iPhone 14 Pro Max',
             'iPhone15,4': 'iPhone 15', 'iPhone15,5': 'iPhone 15 Plus',
             'iPhone16,1': 'iPhone 15 Pro', 'iPhone16,2': 'iPhone 15 Pro Max',
-            // 최신 기종이 없으면 ProductType(예: iPhone17,1) 그대로 표시됨
         };
 
         const pType = rawMap['ProductType'];
@@ -712,7 +1038,6 @@ async function getIosDeviceInfo(udid) {
 
     } catch (e) {
         console.warn(`⚠️ [iOS] ideviceinfo 실행 실패: ${e.message}`);
-        // 실패해도 멈추지 않고 기본값(Unknown)으로 진행
     }
 
     return info;
@@ -745,12 +1070,9 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
         if (isBackupExists) {
             console.log(`[iOS] 기존 백업 발견됨. 백업 과정을 건너뜁니다.`);
 
-            // (보완) 만약 ideviceinfo가 실패해서 전화번호가 '-'라면, 
-            // 백업 폴더 내의 Info.plist에서 한 번 더 찾아볼 수 있습니다.
             if (deviceInfo.phoneNumber === '-') {
                 try {
                     const plistContent = fs.readFileSync(path.join(specificBackupPath, 'Info.plist'), 'utf8');
-                    // 정규식으로 간단히 전화번호 패턴 찾기 (XML 파싱 대신)
                     const phoneMatch = plistContent.match(/<key>PhoneNumber<\/key>\s*<string>(.*?)<\/string>/);
                     if (phoneMatch && phoneMatch[1]) {
                         deviceInfo.phoneNumber = phoneMatch[1];
@@ -762,28 +1084,17 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
         } else {
             console.log('[iOS] 기존 백업 없음. 새 백업 시작...');
             Utils.cleanDirectory(specificBackupPath);
-            // idevicebackup2 실행
             await Utils.runCommand(`"${IOS_BACKUP}" backup --full "${TEMP_BACKUP}" -u ${udid}`);
             console.log('[iOS] 백업 완료.');
         }
 
         // [Step 4] MVT 분석 실행
         console.log('3. MVT 분석 시작...');
-        const userHome = os.homedir();
-        const mvtPathLocal = path.join(userHome, 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'Scripts', 'mvt-ios.exe');
-        const mvtPathRoaming = path.join(userHome, 'AppData', 'Roaming', 'Python', 'Python311', 'Scripts', 'mvt-ios.exe');
-
         let mvtCmd = `mvt-ios`;
-        // if (fs.existsSync(mvtPathLocal)) mvtCmd = `"${mvtPathLocal}"`;
-        // else if (fs.existsSync(mvtPathRoaming)) mvtCmd = `"${mvtPathRoaming}"`;
 
         const finalCmd = `${mvtCmd} check-backup --output "${MVT_RESULT}" "${specificBackupPath}"`;
 
-        // MVT 실행 (에러 나도 결과 파일만 있으면 되므로 try-catch)
         try { await Utils.runCommand(finalCmd); } catch (e) { console.warn("MVT 실행 중 경고(무시가능):", e.message); }
-
-        // console.log(`[iOS] 분석 완료. 개인정보 보호를 위해 원본 백업을 삭제합니다: ${specificBackupPath}`);
-        // Utils.cleanDirectory(specificBackupPath); 
 
         // [Step 5] 결과 파싱
         const results = IosService.parseMvtResults(MVT_RESULT);
@@ -808,10 +1119,7 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
 ipcMain.handle('saveScanResult', async (event, data) => {
     // 💡 data: { deviceInfo: {...}, allApps: [...], ... } 전체 검사 결과 객체
     try {
-        // Electron dialog 모듈을 사용하여 저장 경로 대화 상자 열기
         const { dialog } = require('electron');
-        const fs = require('fs');
-        const path = require('path');
 
         // 파일명 생성: BD_YYYYMMDD_MODEL.json
         const now = new Date();
@@ -844,7 +1152,6 @@ ipcMain.handle('saveScanResult', async (event, data) => {
 ipcMain.handle('open-scan-file', async (event) => {
     try {
         const { dialog } = require('electron');
-        const fs = require('fs');
 
         const result = await dialog.showOpenDialog({
             title: '검사 결과 열기',
@@ -884,11 +1191,9 @@ ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
             return { available: false, message: '업데이트 정보 없음' };
         }
 
-        const latestInfo = doc.data(); // { version: '1.0.1', url: 'https://...' }
+        const latestInfo = doc.data();
         const latestVersion = latestInfo.version;
 
-        // 2. 버전 비교 (Major.Minor.Patch)
-        // 실제 프로젝트에서는 semver 라이브러리(npm install semver)를 사용하는 것이 좋습니다.
         const isNewVersion = latestVersion > currentVersion;
 
         if (isNewVersion) {
@@ -912,13 +1217,12 @@ ipcMain.handle('checkForUpdate', async (event, currentVersion) => {
 
 // 💡 [IPC 핸들러] 로그인 정보 저장
 ipcMain.handle('saveLoginInfo', async (event, { id, pw, remember }) => {
-
     try {
-        let savePw = pw;
+        // ✅ 변수명 오류 수정: safePw / savePw 혼동 해결
+        let safePw = pw;
 
         // safeStorage가 사용 가능한 환경인지 확인 후 암호화
         if (safeStorage.isEncryptionAvailable()) {
-            // 비밀번호를 암호화된 Buffer로 변환 후 base64 문자열로 저장
             safePw = safeStorage.encryptString(pw).toString('base64');
         }
 
@@ -949,11 +1253,10 @@ ipcMain.handle('getLogininfo', async () => {
                     const buffer = Buffer.from(data.safePw, 'base64');
                     data.pw = safeStorage.decryptString(buffer);
                 } catch (e) {
-
                     data.pw = ""; // 복호화 실패 시 빈값
                 }
             }
-            returnData = {
+            const returnData = {
                 id: data.id,
                 pw: data.pw,
                 remember: data.remember
@@ -994,6 +1297,13 @@ const AndroidService = {
         return { model, serial, isRooted, phoneNumber };
     },
 
+    // ---------------------------------------------------------
+    // ✅ [Helper] adb shell 결과를 "문자열"로 받기 (Stream -> String)
+    async adbShell(serial, cmd) {
+        const out = await client.shell(serial, cmd);
+        return (await adb.util.readAll(out)).toString().trim();
+    },
+
     // 앱 삭제 (Disable -> Uninstall)
     async uninstallApp(packageName) {
         try {
@@ -1004,7 +1314,6 @@ const AndroidService = {
             console.log(`[Android] 삭제 시도 전 기기 관리자 권한 해제 시도: ${packageName}`);
 
             // 1. [핵심 추가] 기기 관리자 권한 강제 해제 (Active Admin 제거)
-            // 이 명령어를 먼저 실행해야 '기기 관리자 권한으로 인해 차단됨' 에러를 우회할 수 있습니다.
             try {
                 await client.shell(serial, `dpm remove-active-admin ${packageName}`);
             } catch (e) {
@@ -1020,7 +1329,6 @@ const AndroidService = {
                 await client.uninstall(serial, packageName);
                 return { success: true, message: "앱이 완전히 삭제되었습니다." };
             } catch (e) {
-                // 만약 삭제가 안된다면 데이터 캐시라도 날림
                 await client.shell(serial, `pm clear ${packageName}`);
                 throw new Error("일반 삭제 실패, 데이터를 초기화하고 중지시켰습니다.");
             }
@@ -1030,7 +1338,7 @@ const AndroidService = {
         }
     },
 
-    // 앱 무력화 (권한 박탈 + 강제 종료) 
+    // 앱 무력화 (권한 박탈 + 강제 종료)
     async neutralizeApp(packageName) {
         try {
             const devices = await client.listDevices();
@@ -1159,7 +1467,7 @@ const AndroidService = {
         } catch (e) { return false; }
     },
 
-    // 권한 상세 분석 
+    // 권한 상세 분석
     async getAppPermissions(serial, packageName) {
         try {
             const output = await client.shell(serial, `dumpsys package ${packageName}`);
@@ -1207,7 +1515,6 @@ const AndroidService = {
             }
 
             // 💡 방법 2: /proc/net/xt_qtaguid/stats 파일 직접 읽기 (루팅 필요하거나 접근이 막힐 수 있음)
-            // 루팅 환경이나 이전 OS에서는 더 안정적일 수 있습니다.
             if (data.length === 0) {
                 try {
                     const output = await client.shell(serial, 'cat /proc/net/xt_qtaguid/stats');
@@ -1223,7 +1530,6 @@ const AndroidService = {
                 const trimmedLine = line.trim();
 
                 // 1. UID 식별자 (ident=...) 찾기
-                // 예: ident=[... ] uid=10272 set=FOREGROUND ...
                 if (trimmedLine.startsWith('ident=')) {
                     const uidMatch = trimmedLine.match(/uid=(\d+)/);
                     if (uidMatch) {
@@ -1232,11 +1538,10 @@ const AndroidService = {
                             usageMap[currentUid] = { rx: 0, tx: 0 };
                         }
                     } else {
-                        currentUid = null; // UID를 찾지 못하면 데이터 누적 중단
+                        currentUid = null;
                     }
                 }
                 // 2. NetworkStatsHistory 버킷 찾기 (rb=... tb=...)
-                // 예: st=1764835200 rb=9021 rp=14 tb=5982 tp=13 op=0
                 else if (currentUid && trimmedLine.startsWith('st=')) {
                     const rbMatch = trimmedLine.match(/rb=(\d+)/);
                     const tbMatch = trimmedLine.match(/tb=(\d+)/);
@@ -1245,13 +1550,11 @@ const AndroidService = {
                         const rxBytes = parseInt(rbMatch[1], 10) || 0;
                         const txBytes = parseInt(tbMatch[1], 10) || 0;
 
-                        // 현재 UID의 합산 맵에 누적
                         usageMap[currentUid].rx += rxBytes;
                         usageMap[currentUid].tx += txBytes;
                     }
                 }
             });
-            // --- 데이터 파싱 로직 종료 ---
 
         } catch (e) {
             // ... (오류 처리 로직 유지) ...
@@ -1261,14 +1564,12 @@ const AndroidService = {
 
     // APK 파일 검색
     async findApkFiles(serial) {
-        // APK 파일 검색 경로를 사용자 저장 공간의 주요 경로로 확장합니다.
-        // 이 경로는 SD 카드가 아닌, 내부 저장소(/storage/emulated/0)를 포함합니다.
         const searchPaths = [
-            '/storage/emulated/0/Download',       // 표준 다운로드 폴더
-            '/storage/emulated/0/Documents',      // 표준 문서 폴더
-            '/storage/emulated/0/Android/data',   // 앱 데이터 폴더
-            '/storage/emulated/0',                // 내부 저장소의 최상위 (광범위 검색)
-            '/data/local/tmp'                     // 임시 파일 경로
+            '/storage/emulated/0/Download',
+            '/storage/emulated/0/Documents',
+            '/storage/emulated/0/Android/data',
+            '/storage/emulated/0',
+            '/data/local/tmp'
         ];
 
         let allApkPaths = new Set();
@@ -1277,27 +1578,18 @@ const AndroidService = {
 
         for (const searchPath of searchPaths) {
             try {
-                // find 명령을 실행하고, 권한 오류 메시지는 무시합니다 (2>/dev/null).
-                // -type f: 파일만 검색, -iname: 대소문자 구분 없이 *.apk 검색
                 const command = `find "${searchPath}" -type f -iname "*.apk" 2>/dev/null`;
                 const output = await client.shell(serial, command);
                 const data = (await adb.util.readAll(output)).toString();
 
                 const foundFiles = data.trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
-
-                foundFiles.forEach(file => {
-                    // 중복 방지를 위해 Set에 추가
-                    allApkPaths.add(file.trim());
-                });
+                foundFiles.forEach(file => allApkPaths.add(file.trim()));
 
             } catch (e) {
-                // 이 오류는 ADB 통신 자체의 문제일 가능성이 높습니다.
                 console.warn(`⚠️ [Android] APK 검색 중 통신 오류 (${searchPath}): ${e.message}`);
-                // 계속 진행
             }
         }
 
-        // 검색 결과를 배열로 변환하여 반환
         return Array.from(allApkPaths);
     },
 
@@ -1311,12 +1603,12 @@ const AndroidService = {
             'android.permission.RECEIVE_SMS', 'android.permission.SEND_SMS',
             'android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.BIND_DEVICE_ADMIN',
             'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-            'android.permission.ACCESS_BACKGROUND_LOCATION', // Android 10+ 백그라운드 위치 추적
-            'android.permission.FOREGROUND_SERVICE',         // 백그라운드 작업 위장
-            'android.permission.WAKE_LOCK',                  // 절전 모드 방지
-            'android.permission.SYSTEM_ALERT_WINDOW',        // 오버레이 공격
-            'android.permission.QUERY_ALL_PACKAGES',         // 앱 목록 감지 우회
-            'android.permission.GET_TASKS'                   // 실행 앱 모니터링
+            'android.permission.ACCESS_BACKGROUND_LOCATION',
+            'android.permission.FOREGROUND_SERVICE',
+            'android.permission.WAKE_LOCK',
+            'android.permission.SYSTEM_ALERT_WINDOW',
+            'android.permission.QUERY_ALL_PACKAGES',
+            'android.permission.GET_TASKS'
         ];
         const ALARM = ['android.permission.SCHEDULE_EXACT_ALARM', 'android.permission.USE_EXACT_ALARM', 'com.android.alarm.permission.SET_ALARM'];
         const SAFE_PREFIX = ['com.samsung.', 'com.sec.', 'com.qualcomm.', 'com.sktelecom.', 'com.kt.', 'com.lgu.', 'uplus.', 'lgt.', 'com.facebook.', 'com.instagram.', 'com.twitter.', 'com.kakao.', 'jp.naver.'];
@@ -1375,11 +1667,128 @@ const AndroidService = {
                 }
                 fs.unlinkSync(tempPath);
             } catch (e) {
-                console.error(`VT 검사 오류 (${app.packageName})`);
+                console.error(`VT 검사 오류 (${app.packageName})`)
                 app.vtResult = { error: "검사 불가" };
             }
         }
+    },
+    // (추가) 해당 패키지가 접근성 활성인지
+    async isAccessibilityEnabledForPackage(serial, packageName, cachedServicesString = null) {
+        let s = cachedServicesString;
+
+        if (s == null) {
+            s = await AndroidService.getEnabledAccessibilityServices(serial);
+        }
+
+        // 무조건 문자열로 강제
+        if (typeof s !== "string") {
+            try { s = String(s); } catch { return false; }
+        }
+
+        if (!s || s === "null") return false;
+
+        const items = s.split(":").map(x => x.trim()).filter(Boolean);
+        return items.some(x => x.startsWith(packageName + "/") || x === packageName);
+    },
+
+    // ---------------------------
+    // (추가, 옵션) AppOps가 실제 허용인지 확인
+    // overlay는 "SYSTEM_ALERT_WINDOW"
+    async getAppOpAllowed(serial, packageName, op) {
+        // appops 출력은 기기/버전에 따라 다름.
+        // 예) "SYSTEM_ALERT_WINDOW: allow"
+        // 예) "SYSTEM_ALERT_WINDOW: deny"
+        // 예) "SYSTEM_ALERT_WINDOW: default"
+        try {
+            const out = await this.adbShell(serial, `appops get ${packageName} ${op}`);
+            const line = (out || "").toLowerCase();
+            if (line.includes("allow")) return true;
+            if (line.includes("deny")) return false;
+            // default면 확정 불가 -> false 취급(오탐 방지)
+            return false;
+        } catch {
+            // 접근 불가/실패 -> false 취급(오탐 방지)
+            return false;
+        }
+    },
+    async getEnabledAccessibilityServices(serial) {
+        try {
+            const s = await AndroidService.adbShell(
+                serial,
+                "settings get secure enabled_accessibility_services"
+            );
+
+            if (!s || s === "null") return "";
+            return String(s);
+        } catch (e) {
+            return "";
+        }
+    },
+    async getSigningInfo(serial, packageName) {
+        try {
+            const dumpsys = await AndroidService.adbShell(serial, `dumpsys package ${packageName}`);
+
+            // 1) SigningInfo 영역에서 certificate digest 패턴 찾기
+            // 예: "SHA-256 digest: 12:34:..."
+            const sha256Match = dumpsys.match(/SHA-256 digest:\s*([0-9A-Fa-f:]+)/);
+            const sha256 = sha256Match ? sha256Match[1].replace(/:/g, "").toLowerCase() : null;
+
+            // 2) Subject / Issuer 같은 문자열이 있는 경우(일부 기기)
+            const issuerMatch = dumpsys.match(/Issuer:\s*(.*)/i);
+            const subjectMatch = dumpsys.match(/Subject:\s*(.*)/i);
+
+            const issuer = issuerMatch ? issuerMatch[1].trim() : null;
+            const subject = subjectMatch ? subjectMatch[1].trim() : null;
+
+            return { sha256, issuer, subject };
+        } catch {
+            return { sha256: null, issuer: null, subject: null };
+        }
+    },
+    async hasLauncherActivity(serial, packageName) {
+        try {
+            // cmd package resolve-activity는 일부 기기에서 잘 됨
+            const out = await AndroidService.adbShell(
+                serial,
+                `cmd package resolve-activity --brief ${packageName}`
+            );
+
+            // 정상이라면 컴포넌트가 찍힘
+            // 결과가 empty/No activity면 런처 없음으로 봄
+            if (!out) return false;
+            const low = out.toLowerCase();
+            if (low.includes("no activity") || low.includes("not found")) return false;
+
+            return true;
+        } catch {
+            // 실패하면 런처 있음으로 보수 처리(오탐 방지)
+            return true;
+        }
+    },
+    // ✅ Device Admin 활성 여부(강한 악성 신호)
+    async isDeviceAdminActive(serial, packageName) {
+        try {
+            const out = await AndroidService.adbShell(serial, "dumpsys device_policy");
+            const low = (out || "").toLowerCase();
+            return low.includes(packageName.toLowerCase());
+        } catch {
+            return false;
+        }
+    },
+    // ✅ Notification Listener 활성 여부
+    async isNotificationListenerEnabled(serial, packageName) {
+        try {
+            const s = await AndroidService.adbShell(
+                serial,
+                "settings get secure enabled_notification_listeners"
+            );
+            if (!s || s === "null") return false;
+            return String(s).toLowerCase().includes(packageName.toLowerCase());
+        } catch {
+            return false;
+        }
     }
+
 };
 
 // ============================================================
@@ -1390,12 +1799,10 @@ const IosService = {
 
     decodeUnicode(str) {
         if (!str) return '';
-        // JSON 파서가 이미 대부분의 이스케이프 시퀀스를 처리하지만,
-        // JSON.parse()가 아닌 파일 읽기 후 직접 처리할 경우를 대비하여 함수 정의
         try {
             return JSON.parse(`"${str.replace(/"/g, '\\"')}"`);
         } catch (e) {
-            return str; // 파싱 실패 시 원본 문자열 반환
+            return str;
         }
     },
 
@@ -1437,7 +1844,6 @@ const IosService = {
                 const pType = infoJson['Product Type'];
                 const friendlyModel = modelMap[pType] || infoJson['Product Name'] || pType || 'iPhone';
 
-                // 정보 갱신 (finalDeviceInfo 업데이트)
                 finalDeviceInfo = {
                     model: friendlyModel,
                     serial: infoJson['Serial Number'] || infoJson['IMEI'] || finalDeviceInfo.serial,
@@ -1494,33 +1900,28 @@ const IosService = {
                 const appContent = fs.readFileSync(appsFilePath, 'utf-8');
                 let rawApps = [];
 
-                // 1. **[시도 1: 단일 JSON 배열]** 파일 전체를 하나의 JSON 객체로 파싱 시도 (가장 일반적인 웹 JSON 포맷)
+                // 1. **[시도 1: 단일 JSON 배열]**
                 try {
                     const parsedJson = JSON.parse(appContent);
                     if (Array.isArray(parsedJson)) {
                         rawApps = parsedJson;
                         console.log('✅ [iOS] applications.json: 단일 JSON 배열로 성공적으로 파싱됨.');
                     } else {
-                        // 배열이 아니면, JSON Lines 시도를 위해 에러를 발생시키지 않고 넘어갑니다.
                         throw new Error("Not an array");
                     }
                 } catch (e) {
-                    // 2. **[시도 2: JSON Lines]** 단일 배열 파싱 실패 시, 줄 단위로 파싱 시도
+                    // 2. **[시도 2: JSON Lines]**
                     console.log('🔄 [iOS] applications.json: 단일 배열 파싱 실패. JSON Lines로 재시도.');
                     const lines = appContent.trim().split('\n').filter(line => line.trim().length > 0);
 
                     lines.forEach(line => {
                         try {
                             rawApps.push(JSON.parse(line));
-                        } catch (e) {
-                            // ★★★ 이 줄에서 발생하는 오류 로그를 콘솔에만 찍고 건너뜁니다.
-                            // 이 부분이 기존에 수많은 에러 로그를 발생시키던 부분입니다.
-                            // console.warn(`⚠️ [iOS] applications.json 줄 파싱 실패 (JSON 에러): ${e.message}`);
-                        }
+                        } catch (e) { }
                     });
                 }
 
-                // 3. 파싱된 rawApps 배열을 표준 형식으로 변환
+                // 3. 표준 형식으로 변환
                 rawApps.forEach(appData => {
                     const bundleId = appData.softwareVersionBundleId || appData.name;
                     const itemName = appData.itemName || appData.title;
@@ -1565,29 +1966,18 @@ const IosService = {
     }
 };
 
-
-// ============================================================
-// [7] 유틸리티 함수 (UTILITIES)
-// ============================================================
-
-
 // ============================================================
 // [8] 테스트용 가짜 데이터 (MOCK DATA)
 // ============================================================
 const MockData = {
-
     getAndroidConnection() {
         return { status: 'connected', model: 'SM-TEST' };
     },
 
     getAndroidScanResult() {
-        // --- 1. 앱 목록 정의: isSideloaded, origin, uid 설정 ---
         const allApps = [
-            // [시나리오 1: 공식 스토어 & 안전] (기준 앱)
             { packageName: 'com.google.android.youtube', cachedTitle: 'YouTube', installer: 'com.android.vending', isSideloaded: false, uid: '10100', origin: '공식 스토어', dataUsage: { rx: 50000000, tx: 3000000 } },
-            // [시나리오 2: 시스템 앱 위장] (정상 시스템 앱)
             { packageName: 'com.android.systemui', cachedTitle: 'System UI', installer: null, isSideloaded: false, uid: '1000', origin: '시스템 앱', dataUsage: { rx: 1000000, tx: 500000 } },
-            // [시나리오 3: 외부 설치 & 위치 추적 스파이앱 위장] (WAF-001)
             {
                 packageName: 'com.android.settings.daemon',
                 cachedTitle: 'Wi-Fi Assistant',
@@ -1595,12 +1985,11 @@ const MockData = {
                 isSideloaded: true,
                 uid: '10272',
                 origin: '외부 설치',
-                dataUsage: { rx: 50000, tx: 85000000 }, // 수신은 적고, 송신(tx)이 비정상적으로 높음
+                dataUsage: { rx: 50000, tx: 85000000 },
                 permissions: ['ACCESS_FINE_LOCATION', 'READ_SMS', 'RECEIVE_BOOT_COMPLETED']
             },
-            // [시나리오 4: 알려진 악성 패턴] (IOC 탐지 대상)
             {
-                packageName: 'com.fp.backup', // 기존 위협 탐지 앱
+                packageName: 'com.fp.backup',
                 cachedTitle: 'Backup Service',
                 installer: 'com.sideload.browser',
                 isSideloaded: true,
@@ -1609,10 +1998,9 @@ const MockData = {
                 dataUsage: { rx: 10000000, tx: 10000000 },
                 reason: '[VT 확진] 악성(22/68) + READ_SMS, READ_CALL_LOG 권한 다수'
             },
-            // [시나리오 5: 익명/데이터 탈취 위장] (아이콘 숨김 시나리오)
             {
                 packageName: 'com.hidden.syscore',
-                cachedTitle: '', // 이름 숨김 시도
+                cachedTitle: '',
                 installer: null,
                 isSideloaded: true,
                 uid: '10274',
@@ -1620,46 +2008,40 @@ const MockData = {
                 dataUsage: { rx: 10000, tx: 2000000 },
                 permissions: ['SYSTEM_ALERT_WINDOW', 'CAMERA', 'RECORD_AUDIO']
             },
-            // 나머지 정상 앱 (UID 10275)
             { packageName: 'com.kakao.talk', cachedTitle: '카카오톡', installer: 'com.android.vending', isSideloaded: false, uid: '10275', origin: '공식 스토어', dataUsage: { rx: 20000000, tx: 5000000 } },
         ];
 
-        // --- 2. APK 파일 목록 (5. 파일 시스템 분석 대상) ---
         const apkFiles = [
             '/sdcard/Download/system_update_v1.apk',
             '/sdcard/Android/data/com.hidden.syscore/files/core.apk',
         ];
 
-        // --- 3. 위협 탐지 목록 (4. 위협 탐지 상세 내역 대상) ---
         const suspiciousApps = allApps.filter(app => app.reason || (app.uid === '10272' && app.isSideloaded));
 
-        // [추가] 시나리오 3을 강제로 위협 목록에 추가 (외부 설치 + 비정상 데이터 사용 징후)
         if (!suspiciousApps.some(app => app.packageName === 'com.android.settings.daemon')) {
             suspiciousApps.push(allApps.find(app => app.packageName === 'com.android.settings.daemon'));
         }
 
-        // [추가] 시나리오 5를 강제로 위협 목록에 추가 (외부 설치 + 이름 숨김)
         if (!suspiciousApps.some(app => app.packageName === 'com.hidden.syscore')) {
             suspiciousApps.push(allApps.find(app => app.packageName === 'com.hidden.syscore'));
         }
 
-        // --- 4. 최종 결과 반환 ---
         return {
             deviceInfo: {
                 model: 'SM-F966N (MOCK)',
                 serial: 'RFCY71W09GM',
-                phoneNumber: '알 수 없음', // 안드로이드는 획득 불가로 설정 유지
+                phoneNumber: '알 수 없음',
                 os: 'Android 14'
             },
             allApps: allApps,
             apkFiles: apkFiles,
-            suspiciousApps: suspiciousApps.filter(Boolean), // null 값 제거
+            suspiciousApps: suspiciousApps.filter(Boolean),
             networkUsageMap: {
                 '10100': { rx: 50000000, tx: 3000000 },
                 '1000': { rx: 1000000, tx: 500000 },
-                '10272': { rx: 50000, tx: 85000000 }, // 시나리오 3: 위치/스파이앱 (송신이 과도)
-                '10273': { rx: 10000000, tx: 10000000 }, // 시나리오 4: VT 확진
-                '10274': { rx: 10000, tx: 2000000 }, // 시나리오 5: 은닉 앱 (데이터 송신 존재)
+                '10272': { rx: 50000, tx: 85000000 },
+                '10273': { rx: 10000000, tx: 10000000 },
+                '10274': { rx: 10000, tx: 2000000 },
                 '10275': { rx: 20000000, tx: 5000000 }
             }
         };
@@ -1676,16 +2058,12 @@ const MockData = {
             { packageName: 'com.lguplus.aicallagent', cachedTitle: '익시오' },
             { packageName: 'com.apple.weather', cachedTitle: '날씨' },
             { packageName: 'net.whatsapp.WhatsApp', cachedTitle: 'WhatsApp' },
-            { packageName: 'com.spyware.agent.hidden', cachedTitle: '시스템 서비스' }, // 의도적으로 의심 앱 추가
-            { packageName: 'com.naver.map', cachedTitle: '네이버 지도' }, // 앱 목록 보강
+            { packageName: 'com.spyware.agent.hidden', cachedTitle: '시스템 서비스' },
+            { packageName: 'com.naver.map', cachedTitle: '네이버 지도' },
             { packageName: 'com.tistory.blog', cachedTitle: '티스토리' },
             { packageName: 'com.google.youtube', cachedTitle: 'YouTube' },
             { packageName: 'com.kakaobank.bank', cachedTitle: '카카오뱅크' },
         ];
-
-        // MVT 분석 결과 (suspiciousItems)를 렌더러가 기대하는 형식에 맞게 변환해야 합니다.
-        // MVT는 suspiciousItems를 반환하고, renderer는 Utils.transformIosData를 통해
-        // suspiciousApps와 mvtResults를 분리합니다.
 
         return {
             deviceInfo: {
@@ -1694,16 +2072,11 @@ const MockData = {
                 phoneNumber: '+82 10-9999-0000',
                 os: 'iOS 17.4'
             },
-
-            // 💡 1. MVT의 원본 탐지 결과 (suspiciousItems는 findings에 해당)
-            //    이 데이터가 renderer.js의 Utils.transformIosData에서 suspiciousApps로 매핑됩니다.
             suspiciousItems: [
                 { module: 'SMS', check_name: 'iMessage Link IOC', description: '악성 도메인 접속 유도 링크 수신', path: '/private/var/mobile/Library/SMS/sms.db', sha256: 'a1b2c3d4...' },
                 { module: 'WebKit', check_name: 'Browser History IOC', description: 'Safari에서 C2 서버 도메인 접속 흔적 발견', path: '/private/var/mobile/Library/WebKit', sha256: 'e5f6g7h8...' },
                 { module: 'Process', check_name: 'Suspicious Process', description: '비정상적인 이름의 백그라운드 프로세스 활동', path: 'com.apple.bh', sha256: 'i9j0k1l2...' },
             ],
-
-            // 💡 2. MVT 5대 영역 분류 결과 (renderer가 기대하는 구조)
             mvtResults: {
                 web: { status: 'warning', warnings: ['악성 URL 접속 흔적: hxxp://c2-server.com', 'Safari 캐시에서 비정상 파일 발견'] },
                 messages: { status: 'warning', warnings: ['악성 도메인 접속 유도 링크 수신'] },
@@ -1711,10 +2084,8 @@ const MockData = {
                 apps: { status: 'safe', warnings: [] },
                 artifacts: { status: 'safe', warnings: [] }
             },
-
-            // 💡 3. 설치된 앱 목록 (renderer.js의 allApps로 최종 전달됨)
             allApps: installedApps,
-            apkFiles: [], // iOS에서는 APK 없음
+            apkFiles: [],
         };
     },
 };
