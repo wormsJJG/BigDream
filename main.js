@@ -667,151 +667,79 @@ ipcMain.handle('run-scan', async () => {
         const deviceInfo = await AndroidService.getDeviceInfo(serial);
         deviceInfo.os = 'ANDROID';
 
-        // [Step B] 앱 및 파일 데이터 수집
+        // 기초 데이터 수집
         const allApps = await AndroidService.getInstalledApps(serial);
         const apkFiles = await AndroidService.findApkFiles(serial);
         const networkMap = await AndroidService.getNetworkUsageMap(serial);
 
-        // ✅ 접근성 활성 목록은 1번만
-        const enabledAccServicesStr = await AndroidService.getEnabledAccessibilityServices(serial);
-        console.log(enabledAccServicesStr)
         const processedApps = [];
-        let aiCount = 0;
 
-        // 20개씩 끊어서 처리
+        // 20개씩 병렬 처리
         for (let i = 0; i < allApps.length; i += 20) {
             const chunk = allApps.slice(i, i + 20);
 
             const results = await Promise.all(chunk.map(async (app) => {
                 try {
-                    // [1] 기본 정보 수집 (기존과 동일)
-                    const [isRunningBg, permData, signingInfo] = await Promise.all([
+                    // 1. 상세 정보 수집 (권한 및 컴포넌트 정보)
+                    const [isRunningBg, permData] = await Promise.all([
                         AndroidService.checkIsRunningBackground(serial, app.packageName),
-                        AndroidService.getAppPermissions(serial, app.packageName),
-                        AndroidService.getSigningInfo(serial, app.packageName),
+                        AndroidService.getAppPermissions(serial, app.packageName)
                     ]);
 
-                    const combinedPermissions = [
+                    // 권한 통합
+                    const permissions = [...new Set([
                         ...(permData.requestedList || []),
-                        ...(permData.grantedList || []),
-                    ];
-                    const permissions = [...new Set(combinedPermissions)];
+                        ...(permData.grantedList || [])
+                    ])];
 
                     const netStats = networkMap[app.uid] || { rx: 0, tx: 0 };
 
-                    // boolean 정규화
-                    app.isSystemApp = toBool(app.isSystemApp);
-                    app.isSideloaded = toBool(app.isSideloaded);
-                    app.isRunningBg = toBool(isRunningBg);
+                    // 2. 💡 AI를 위한 지능형 지표 계산
+                    // 이름 사칭 여부 (AI가 참고할 보조 지표)
+                    const trustedPrefixes = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'android'];
+                    const isMasquerading = trustedPrefixes.some(p => app.packageName.startsWith(p)) && !app.isSystemApp;
 
-                    // ✅ (추가) 접근성 실제 활성 여부
-                    const accessibilityEnabled = await AndroidService.isAccessibilityEnabledForPackage(
-                        serial,
-                        app.packageName,
-                        enabledAccServicesStr
-                    );
+                    const aiPayload = {
+                        packageName: app.packageName,
+                        permissions: permissions,
+                        isSideloaded: app.isSideloaded,
+                        // 경로가 시스템 영역인지 판정
+                        isSystemPath: app.apkPath.startsWith('/system') ||
+                            app.apkPath.startsWith('/vendor') ||
+                            app.apkPath.startsWith('/product'),
+                        isMasquerading: isMasquerading,
+                        // 💡 중요: AI가 밀도를 계산할 수 있도록 개수 전달
+                        services_cnt: permData.servicesCount || 0,
+                        receivers_cnt: permData.receiversCount || 0
+                    };
 
-                    // ✅ (추가) 오버레이 실제 허용(appops)
-                    const declaresOverlay = permissions.includes("android.permission.SYSTEM_ALERT_WINDOW");
-                    const overlayAllowed = declaresOverlay
-                        ? await AndroidService.getAppOpAllowed(serial, app.packageName, "SYSTEM_ALERT_WINDOW")
-                        : false;
+                    // 3. AI 엔진 분석 호출 (수동 필터 없음)
+                    const aiResult = await analyzeAppWithStaticModel(aiPayload);
 
-                    // ✅ (추가) Device Admin / Notification Listener / Launcher 숨김
-                    const [deviceAdminActive, notifListenerEnabled, hasLauncher] = await Promise.all([
-                        AndroidService.isDeviceAdminActive(serial, app.packageName),
-                        AndroidService.isNotificationListenerEnabled(serial, app.packageName),
-                        AndroidService.hasLauncherActivity(serial, app.packageName),
-                    ]);
-                    
-                    // [2-2] 위장술(Masquerading) 최종 판정 (네 원칙 유지 + 점수화 권장)
-                    // 이미 getInstalledApps에서 isMasquerading이 계산될 수 있으니, 여기서는 그대로 존중
-                    // 단, getInstalledApps에서 계산 안하면 fallback:
-                    if (typeof app.isMasquerading !== "boolean") {
-                        const trustedPrefixes = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
-                        const isTrustedName = trustedPrefixes.some(prefix => app.packageName.startsWith(prefix));
-                        app.isMasquerading = (isTrustedName && !app.isSystemApp && app.isSideloaded);
+                    if(aiResult.score >= 50){
+                        console.log(`\n🚨 [AI 탐지 로그: ${app.packageName}]`);
+                        console.log(`- 판정 점수: ${aiResult.score}점 (${aiResult.grade})`);
+                        console.log(`- 앱 경로: ${app.apkPath}`);
+                        console.log(`- 시스템 경로 판정: ${aiPayload.isSystemPath}`);
+                        console.log(`- 서비스 개수: ${permData.servicesCount}`);
+                        console.log(`- 리시버 개수: ${permData.receiversCount}`);
+                        console.log(`- 권한 개수: ${permissions.length}`);
+                        console.log(`- 사이드로드 여부: ${app.isSideloaded}`);
+                        console.log(`- 원인: ${aiResult.reason}`);
+                        console.log(`-------------------------------------------\n`);
                     }
-
-                    // ✅ 시스템 앱은 AI 검사 제외(위장 제외)
-                    if (app.isSystemApp && !app.isMasquerading) {
-                        return {
-                            ...app,
-                            isRunningBg: app.isRunningBg,
-                            ...permData,
-                            dataUsage: netStats,
-                            aiScore: 0,
-                            aiGrade: "SAFE",
-                            reason: null,
-                            accessibilityEnabled,
-                            overlayAllowed,
-                            deviceAdminActive,
-                            notifListenerEnabled,
-                            hasLauncher,
-                        };
-                    }
-
-                    // ✅ 0.5) 공식 스토어 앱이면 검사 자체를 스킵 
-                    if (isOfficialStoreInstaller(app)) {
-                        return {
-                            ...app,
-                            isRunningBg: app.isRunningBg,
-                            ...permData,
-                            dataUsage: netStats,
-                            aiScore: 0,
-                            aiGrade: "SAFE",
-                            reason: null, // 또는 "[정책] 공식 스토어 앱은 검사 제외"
-                        };
-                    }
-
-
-                    // [2-3] AI + 정책 기반 최종 판단
-                    const aiFinal = await analyzeWithPolicy({
-                        serial,
-                        app,
-                        permissions,
-                        overlayAllowed,
-                        accessibilityEnabled,
-                        deviceAdminActive,
-                        notifListenerEnabled,
-                        hasLauncher,
-                        analyzeAppWithStaticModel,
-                    });
-                    
-                    const strongCount = countStrongSignals({
-                        accessibilityEnabled,
-                        deviceAdminActive,
-                        notifListenerEnabled,
-                        hasLauncher,
-                        overlayAllowed
-                    });
-
-                    const isGoodSigner = isKnownGoodSigner(signingInfo);
-
-                    // ✅ 서명 정책 적용(오탐 줄이기)
-                    const finalGrade = applySignerPolicy({
-                        grade: aiFinal.grade,
-                        prob: aiFinal.prob ?? (aiFinal.score / 100),
-                        isGoodSigner,
-                        strongCount
-                    });
-
-                    console.log(finalGrade)
-                    aiCount += 1;
 
                     return {
                         ...app,
-                        isRunningBg: app.isRunningBg,
+                        isRunningBg,
                         ...permData,
                         dataUsage: netStats,
-                        aiScore: aiFinal.score,
-                        aiGrade: finalGrade,
-                        reason: aiFinal.reason,
-                        accessibilityEnabled,
-                        overlayAllowed,
-                        deviceAdminActive,
-                        notifListenerEnabled,
-                        hasLauncher,
+                        aiScore: aiResult.score,
+                        aiGrade: aiResult.grade,
+                        reason: aiResult.reason,
+                        // 상세 정보 보관
+                        servicesCount: permData.servicesCount,
+                        receiversCount: permData.receiversCount
                     };
 
                 } catch (e) {
@@ -822,8 +750,6 @@ ipcMain.handle('run-scan', async () => {
 
             processedApps.push(...results);
         }
-
-        console.log("AI inference count:", aiCount);
 
         // ---------------------------------------------------------
         // 결과 필터링 (위험한 것만 추출)
@@ -1469,37 +1395,36 @@ const AndroidService = {
 
     // 권한 상세 분석
     async getAppPermissions(serial, packageName) {
-        try {
-            const output = await client.shell(serial, `dumpsys package ${packageName}`);
-            const dumpsys = (await adb.util.readAll(output)).toString();
+    try {
+        const output = await client.shell(serial, `dumpsys package ${packageName}`);
+        const dumpsys = (await adb.util.readAll(output)).toString();
 
-            const reqMatch = dumpsys.match(/requested permissions:\s*([\s\S]*?)(?:install permissions:|runtime permissions:)/);
-            const requestedPerms = new Set();
-            if (reqMatch && reqMatch[1]) {
-                reqMatch[1].match(/android\.permission\.[A-Z_]+/g)?.forEach(p => requestedPerms.add(p));
-            }
-
-            const grantedPerms = new Set();
-            const installMatch = dumpsys.match(/install permissions:\s*([\s\S]*?)(?:runtime permissions:|\n\n)/);
-            if (installMatch && installMatch[1]) {
-                installMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)?.forEach(p => grantedPerms.add(p.split(':')[0]));
-            }
-            const runtimeMatch = dumpsys.match(/runtime permissions:\s*([\s\S]*?)(?:Dex opt state:|$)/);
-            if (runtimeMatch && runtimeMatch[1]) {
-                runtimeMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)?.forEach(p => grantedPerms.add(p.split(':')[0]));
-            }
-
-            return {
-                allPermissionsGranted: requestedPerms.size > 0 && [...requestedPerms].every(p => grantedPerms.has(p)),
-                requestedList: Array.from(requestedPerms),
-                grantedList: Array.from(grantedPerms),
-                requestedCount: requestedPerms.size,
-                grantedCount: grantedPerms.size,
-            };
-        } catch (e) {
-            return { allPermissionsGranted: false, requestedList: [], grantedList: [], requestedCount: 0, grantedCount: 0 };
+        // 1. 권한 파싱 (기존 로직 유지)
+        const requestedPerms = new Set();
+        const reqMatch = dumpsys.match(/requested permissions:\s*([\s\S]*?)(?:install permissions:|runtime permissions:)/);
+        if (reqMatch && reqMatch[1]) {
+            (reqMatch[1].match(/android\.permission\.[A-Z_]+/g) || []).forEach(p => requestedPerms.add(p));
         }
-    },
+        const grantedPerms = new Set();
+        const installMatch = dumpsys.match(/install permissions:\s*([\s\S]*?)(?:runtime permissions:|\n\n)/);
+        if (installMatch && installMatch[1]) {
+            (installMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g) || []).forEach(p => grantedPerms.add(p.split(':')[0]));
+        }
+
+        const componentPattern = new RegExp(`${packageName.replace(/\./g, '\\.')}/[\\w\\.]+\\.[\\w\\.]+`, 'g');
+        const matches = dumpsys.match(componentPattern) || [];
+        const uniqueCount = [...new Set(matches)].length;
+
+        return {
+            requestedList: Array.from(requestedPerms),
+            grantedList: Array.from(grantedPerms),
+            servicesCount: Math.max(1, Math.ceil(uniqueCount / 2)),
+            receiversCount: Math.floor(uniqueCount / 2)
+        };
+    } catch (e) {
+        return { requestedList: [], grantedList: [], servicesCount: 0, receiversCount: 0 };
+    }
+},
 
     // 네트워크 사용량 (UID 기반)
     async getNetworkUsageMap(serial) {
