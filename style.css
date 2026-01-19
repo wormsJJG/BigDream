@@ -1595,3 +1595,27 @@ p {
     width: 100%;
     height: 100%;
 }
+
+/* 상세보기 내 액션 버튼 전용 스타일 */
+#app-detail-view .action-buttons {
+    display: flex !important;
+    gap: 12px !important;
+    justify-content: flex-end;
+    width: auto;
+}
+
+#app-detail-view .action-buttons button {
+    width: 180px !important;
+    height: 48px !important;
+    padding: 0 !important; 
+    
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    border: none !important;
+    white-space: nowrap !important;
+}

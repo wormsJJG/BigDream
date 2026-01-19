@@ -1111,44 +1111,41 @@ const AndroidService = {
 
     // APK 파일 검색
     async findApkFiles(serial) {
-        // APK 파일 검색 경로를 사용자 저장 공간의 주요 경로로 확장합니다.
-        // 이 경로는 SD 카드가 아닌, 내부 저장소(/storage/emulated/0)를 포함합니다.
-        const searchPaths = [
-            '/storage/emulated/0/Download',       // 표준 다운로드 폴더
-            '/storage/emulated/0/Documents',      // 표준 문서 폴더
-            '/storage/emulated/0/Android/data',   // 앱 데이터 폴더
-            '/storage/emulated/0',                // 내부 저장소의 최상위 (광범위 검색)
-            '/data/local/tmp'                     // 임시 파일 경로
-        ];
-
-        let allApkPaths = new Set();
-
-        console.log('🔄 [Android] APK 파일 검색 시작: 내부 저장소 주요 경로 검색');
+        const searchPaths = ['/storage/emulated/0/Download', '/data/local/tmp'];
+        let allApkData = [];
 
         for (const searchPath of searchPaths) {
             try {
-                // find 명령을 실행하고, 권한 오류 메시지는 무시합니다 (2>/dev/null).
-                // -type f: 파일만 검색, -iname: 대소문자 구분 없이 *.apk 검색
+                // 1. ADB를 통해 .apk 파일 목록 검색
                 const command = `find "${searchPath}" -type f -iname "*.apk" 2>/dev/null`;
                 const output = await client.shell(serial, command);
-                const data = (await adb.util.readAll(output)).toString();
+                const data = (await adb.util.readAll(output)).toString().trim();
 
-                const foundFiles = data.trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
+                if (!data) continue;
 
-                foundFiles.forEach(file => {
-                    // 중복 방지를 위해 Set에 추가
-                    allApkPaths.add(file.trim());
-                });
+                const files = data.split('\n');
+                for (const file of files) {
+                    const filePath = file.trim();
+                    const fileName = filePath.split('/').pop();
 
+                    // 💡 [이사님이 말씀하신 부분 적용]
+                    // 렌더러의 AppDetailManager.show가 기대하는 형식으로 데이터를 구성합니다.
+                    allApkData.push({
+                        packageName: 'com.android.pkg.' + fileName.replace('.apk', ''),
+                        fileName: fileName,
+                        apkPath: filePath,
+                        cachedTitle: fileName,    // 앱 이름 대신 파일명을 제목으로 사용
+                        fileSize: '확인 중...',    // 실제 크기를 구하려면 추가 명령어(ls -lh)가 필요하므로 우선 텍스트 처리
+                        isSideloaded: true,
+                        isApkFile: true,          // 👈 렌더러에서 APK 전용 UI를 띄우기 위한 핵심 플래그
+                        requestedList: []         // 권한 목록 (추후 보강 가능)
+                    });
+                }
             } catch (e) {
-                // 이 오류는 ADB 통신 자체의 문제일 가능성이 높습니다.
-                console.warn(`⚠️ [Android] APK 검색 중 통신 오류 (${searchPath}): ${e.message}`);
-                // 계속 진행
+                console.error(`${searchPath} 검색 실패:`, e);
             }
         }
-
-        // 검색 결과를 배열로 변환하여 반환
-        return Array.from(allApkPaths);
+        return allApkData;
     },
 
     // 의심 앱 필터링 로직

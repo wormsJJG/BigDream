@@ -42,7 +42,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 사이드바 active 클래스 관리
                 document.querySelectorAll('#logged-out-view .nav-item').forEach(li => li.classList.remove('active'));
                 navLogin.classList.add('active');
-                // 화면 전환
+
+                // 로그인 화면만 보이게 하고 나머지는 숨김
+                document.getElementById('login-screen').style.display = 'block';
+                document.getElementById('support-screen').style.display = 'none';
+
                 ViewManager.showScreen(loggedOutView, 'login-screen');
             });
         }
@@ -52,7 +56,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 사이드바 active 클래스 관리
                 document.querySelectorAll('#logged-out-view .nav-item').forEach(li => li.classList.remove('active'));
                 navSupport.classList.add('active');
-                // 화면 전환
+
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('support-screen').style.display = 'block';
+
                 ViewManager.showScreen(loggedOutView, 'support-screen');
             });
         }
@@ -494,6 +501,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', () => {
             const targetId = tab.dataset.target;
 
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+
             // 1. 관리자 화면과 상세 화면을 완전히 닫기
             const screensToHide = ['admin-screen', 'admin-report-detail-screen', 'app-detail-view', 'create-scan-screen', 'open-scan-screen'];
             screensToHide.forEach(id => {
@@ -835,13 +844,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const createBtn = document.getElementById('nav-create');
             const openBtn = document.getElementById('nav-open');
-            const subMenu = document.getElementById('result-sub-menu'); // 개편된 서브메뉴 ID
+            const subMenu = document.getElementById('result-sub-menu');
 
             if (createBtn) createBtn.classList.add('hidden');
             if (openBtn) openBtn.classList.add('hidden');
+
             if (subMenu) {
-                subMenu.classList.remove('hidden');
-                subMenu.classList.add('active');
+                subMenu.classList.add('hidden');
+                subMenu.classList.remove('active');
             }
 
             ViewManager.showScreen(loggedInView, 'scan-progress-screen');
@@ -1065,14 +1075,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
 
-                // 왼쪽 메뉴 등장
                 const resultSubMenu = document.getElementById('result-sub-menu');
-                if (resultSubMenu) resultSubMenu.classList.remove('hidden');
+                if (resultSubMenu) {
+                    resultSubMenu.classList.remove('hidden');
+                    resultSubMenu.classList.add('active');
+                }
 
-                // 탭 버튼 초기화 (첫 번째 탭 강조)
                 document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
-                const firstBtn = document.querySelector('[data-target="res-summary"]');
-                if (firstBtn) firstBtn.classList.add('active');
+                const firstTab = document.querySelector('[data-target="res-summary"]');
+                if (firstTab) firstTab.classList.add('active');
+
             }, 1000);
         },
 
@@ -1125,7 +1137,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (bgGrid) {
                 bgGrid.innerHTML = '';
 
-                // 💡 isRunningBg가 정확히 true인 것만 골라냅니다.
                 const runningApps = data.allApps.filter(app => app.isRunningBg === true);
 
                 console.log("렌더러 수신 데이터 총 개수:", data.allApps.length);
@@ -1142,18 +1153,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // 5. [탭 4] 발견된 설치 파일 (APK) 주입
-            const apkList = document.getElementById('res-apk-list');
-            if (apkList) {
-                apkList.innerHTML = '';
-                if (data.apkFiles && data.apkFiles.length > 0) {
-                    data.apkFiles.forEach(f => {
-                        const li = document.createElement('li');
-                        li.innerHTML = `<span>📦</span> ${f}`;
-                        apkList.appendChild(li);
+            const apkGrid = document.getElementById('apk-grid-container');
+            if (apkGrid && data.apkFiles) {
+                apkGrid.innerHTML = '';
+
+                if (data.apkFiles.length > 0) {
+                    data.apkFiles.forEach(apk => {
+                        const apkData = {
+                            ...apk,
+                            isApkFile: true, // APK 파일임을 식별하는 플래그
+                            title: apk.cachedTitle || apk.fileName,
+                            packageName: apk.packageName || 'Unknown APK'
+                        };
+
+                        this.createAppIcon(apkData, apkGrid);
                     });
                 } else {
-                    apkList.innerHTML = '<li style="color:#888; padding:10px;">발견된 .apk 파일이 없습니다.</li>';
+                    apkGrid.innerHTML = '<p class="empty-text">발견된 APK 파일이 없습니다.</p>';
                 }
             }
 
@@ -1467,29 +1483,72 @@ document.addEventListener('DOMContentLoaded', () => {
         lastScrollY: 0,
 
         show(app, displayName) {
-            console.log("상세 정보 표시 실행:", displayName);
-            
+            console.log("상세 정보 표시 실행:", displayName, "경로:", app.apkPath);
+
             const dashboard = document.getElementById('results-dashboard-view');
             const detailView = document.getElementById('app-detail-view');
+            const resultsHeader = document.querySelector('.results-header');
+            const privacyNotice = document.getElementById('privacy-footer-notice');
+            const scrollContainer = document.querySelector('#logged-in-view .main-content');
 
             if (dashboard && detailView) {
-                // 1. 대시보드 확실히 숨김
-                dashboard.classList.add('hidden');
+                this.lastScrollY = scrollContainer ? scrollContainer.scrollTop : 0;
+                // 화면 전환: 대시보드 끄고 상세화면 켜기
                 dashboard.style.display = 'none';
+                if (resultsHeader) resultsHeader.style.display = 'none';
+                if (privacyNotice) privacyNotice.style.display = 'none';
 
-                // 2. 상세화면 확실히 보임
                 detailView.classList.remove('hidden');
-                detailView.style.display = 'block'; 
-                
-                // 3. 스크롤 상단 이동
-                const scrollContainer = document.querySelector('#logged-in-view .main-content');
+                detailView.style.display = 'block';
+
                 if (scrollContainer) scrollContainer.scrollTop = 0;
             }
 
-            // 나머지 텍스트 정보 채우기
+            // 데이터 바인딩 부분
+            document.getElementById('detail-app-name').textContent = app.cachedTitle || displayName;
             document.getElementById('detail-package-name').textContent = app.packageName;
-            document.getElementById('detail-sideload').textContent = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
+
+            const sideloadEl = document.getElementById('detail-sideload');
+            const bgStatusEl = document.getElementById('detail-bg');
+            const networkEl = document.getElementById('detail-network');
+
+            if (app.isApkFile) {
+                // [APK 파일인 경우]
+                if (sideloadEl) sideloadEl.textContent = app.apkPath || '경로 정보 없음';
+                if (bgStatusEl) bgStatusEl.textContent = '미설치 파일';
+                if (networkEl) networkEl.textContent = app.fileSize || '크기 정보 없음';
+
+                // 요구 권한 카운트 설정
+                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
+                document.getElementById('detail-grant-count').textContent = "-"; // 미설치라 '허용'은 대시 처리
+            } else {
+                // [일반 설치 앱인 경우 ]
+                if (sideloadEl) {
+                    const pathValue = app.apkPath && app.apkPath !== 'N/A' ? app.apkPath : '경로 정보를 불러올 수 없음';
+                    const originValue = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
+                    sideloadEl.innerHTML = `${originValue}<br><span style="font-size:11px; color:#888; font-family:monospace;">${pathValue}</span>`;
+                }
+                if (bgStatusEl) bgStatusEl.textContent = app.isRunningBg ? '실행 중' : '중지됨';
+                if (networkEl) {
+                    const usage = app.dataUsage || { rx: 0, tx: 0 };
+                    networkEl.textContent = Utils.formatBytes(usage.rx + usage.tx);
+                }
+
+                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
+                document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
+            }
+
+            const pathEl = document.getElementById('detail-sideload');
+            if (pathEl) {
+                const originStr = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
+                const pathStr = app.apkPath || '경로 정보 없음';
+                pathEl.innerHTML = `${originStr}<br><span style="font-size:11px; color:#888; font-family:monospace; word-break:break-all;">${pathStr}</span>`;
+            }
+
+            // 실행 상태 표시
             document.getElementById('detail-bg').textContent = app.isRunningBg ? '실행 중' : '중지됨';
+
+            // 권한 개수 표시
             document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
             document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
 
@@ -1502,75 +1561,53 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = iconWrapper.querySelector('.detail-real-img');
             const span = iconWrapper.querySelector('.detail-fallback-span');
 
-            const setLocalFallbackIcon = () => {
-                // 💡 assets/systemAppLogo.png 경로를 사용하여 이미지 설정
-                img.src = './assets/systemAppLogo.png';
-                img.style.display = 'block';
-                span.style.display = 'none';
-
-                // 로컬 폴백 이미지 로드 실패 시, 최종적으로 '📱' 이모지로 전환
-                img.onerror = () => {
-                    img.style.display = 'none';
-                    span.style.display = 'flex';
-                };
-            };
-
             // [Case A] 캐시된 아이콘이 있으면 즉시 표시
             if (app.cachedIconUrl) {
                 img.src = app.cachedIconUrl;
                 img.style.display = 'block';
                 span.style.display = 'none';
             } else {
-
-                setLocalFallbackIcon();
+                img.src = './assets/systemAppLogo.png';
+                img.style.display = 'block';
+                span.style.display = 'none';
+                img.onerror = () => { img.style.display = 'none'; span.style.display = 'flex'; };
             }
 
-            // [Case B] 정보가 부족하면 API 요청
-            // (아이콘이 없거나 타이틀이 없으면 요청 시도)
-            if ((!app.cachedIconUrl || !app.cachedTitle)) {
-                window.electronAPI.getAppData(app.packageName).then(result => {
-                    if (!result) return;
-
-                    // [A] 아이콘 처리 (독립적)
-                    if (result.icon) {
-                        app.cachedIconUrl = result.icon; // 캐싱
-                        img.src = result.icon;
-                        img.onload = () => {
-                            img.style.display = 'block';
-                            span.style.display = 'none';
-                        };
-                    }
-
-                    // [B] 타이틀 처리 (독립적)
-                    if (result.title) {
-                        app.cachedTitle = result.title; // 캐싱
-                        document.getElementById('detail-app-name').textContent = result.title;
-                    }
-                }).catch(() => { });
-            }
-
-            // 버튼 및 기타 정보 설정 (기존과 동일)
-            this.setupActionButton('uninstall-btn', "🗑️ 앱 강제 삭제", app, displayName);
-            this.setupActionButton('neutralize-btn', "🛡️ 무력화 (권한 박탈)", app, displayName);
-
-            const usage = app.dataUsage || { rx: 0, tx: 0 };
-            const total = usage.rx + usage.tx;
-            const netEl = document.getElementById('detail-network');
-            netEl.innerHTML = `총 ${Utils.formatBytes(total)}<br><span style="font-size:12px; color:#888;">(수신: ${Utils.formatBytes(usage.rx)} / 송신: ${Utils.formatBytes(usage.tx)})</span>`;
-
+            // 3. 권한 리스트 출력 (APK일 때는 주황색 강조 스타일)
             const list = document.getElementById('detail-permission-list');
             list.innerHTML = '';
-            if (app.requestedList && app.requestedList.length > 0) {
-                app.requestedList.forEach(perm => {
-                    const isGranted = app.grantedList.includes(perm);
+            const perms = app.requestedList || [];
+
+            if (perms.length > 0) {
+                perms.forEach(perm => {
+                    const isGranted = app.isApkFile ? false : (app.grantedList && app.grantedList.includes(perm));
                     const spanElem = document.createElement('span');
-                    spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
-                    spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
+
+                    if (app.isApkFile) {
+                        // 미설치 파일 전용 스타일
+                        spanElem.className = 'perm-item';
+                        spanElem.style.backgroundColor = "#fff3e0";
+                        spanElem.style.borderColor = "#ffe0b2";
+                        spanElem.style.color = "#e65100";
+                        spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
+                    } else {
+                        // 일반 앱 스타일
+                        spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
+                        spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
+                    }
                     list.appendChild(spanElem);
                 });
             } else {
                 list.innerHTML = '<p style="color:#999; padding:5px;">요청된 권한이 없습니다.</p>';
             }
+
+            // 액션 버튼 세팅 (삭제/무력화)
+            this.setupActionButton('uninstall-btn', app.isApkFile ? "🗑️ 파일 삭제" : "🗑️ 앱 강제 삭제", app, displayName);
+            this.setupActionButton('neutralize-btn', "🛡️ 무력화 (권한 박탈)", app, displayName);
+
+            // APK일 경우 무력화 버튼은 비활성화 (설치가 안 되어 있으므로)
+            if (app.isApkFile) document.getElementById('neutralize-btn').style.display = 'none';
+            else document.getElementById('neutralize-btn').style.display = 'flex';
 
             document.getElementById('app-detail-view').scrollTo({ top: 0 });
         },
@@ -1580,24 +1617,41 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btn) {
                 btn.dataset.package = app.packageName;
                 btn.dataset.appName = appName;
+                btn.dataset.apkPath = app.apkPath; // 파일 삭제 시 필요
                 btn.disabled = false;
                 btn.textContent = text;
             }
         }
-
     };
 
     // 뒤로가기 버튼
     document.getElementById('back-to-dashboard-btn')?.addEventListener('click', () => {
-        document.getElementById('app-detail-view').classList.add('hidden');
-        document.getElementById('results-dashboard-view').classList.remove('hidden');
+        const dashboard = document.getElementById('results-dashboard-view');
+        const detailView = document.getElementById('app-detail-view');
+        const resultsHeader = document.querySelector('.results-header');
+        const privacyNotice = document.getElementById('privacy-footer-notice');
 
+        // 1. 상세 보기 화면 숨김
+        if (detailView) {
+            detailView.classList.add('hidden');
+            detailView.style.display = 'none';
+        }
+
+        // 2. 메인 결과 대시보드 다시 켜기 
+        if (dashboard) {
+            dashboard.classList.remove('hidden');
+            dashboard.style.display = 'block';
+        }
+        if (resultsHeader) {
+            resultsHeader.style.display = 'flex';
+        }
+        if (privacyNotice) {
+            privacyNotice.style.display = 'block';
+        }
+
+        // 3. 이전 스크롤 위치로 복구
         const scrollContainer = document.querySelector('#logged-in-view .main-content');
         if (scrollContainer) {
-            // 약간의 딜레이를 주어야 화면 렌더링 후 정확히 이동함 (없어도 되면 빼도 됨)
-            // scrollContainer.scrollTop = AppDetailManager.lastScrollY; 
-
-            // 부드럽게 말고 '즉시' 이동하는게 UX상 더 자연스러울 때가 많음
             scrollContainer.scrollTo(0, AppDetailManager.lastScrollY);
         }
     });
@@ -1998,10 +2052,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     await CustomUI.alert("🚫 결과 화면에서는 변경 불가"); return;
                 }
 
-                // 현재 값 채우기
-                adminInput.value = State.androidTargetMinutes || 0;
-                adminModal.classList.remove('hidden');
-                adminInput.focus();
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+
+                // 2. 관리자 화면으로 전환
+                ViewManager.showScreen(loggedInView, 'admin-screen');
+
+                // 4. 관리자 초기 탭 설정
+                AdminManager.switchTab('admin-tab-register');
+
+                console.log("관리자 모드 진입: 모든 사이드바 탭 강조 초기화 완료");
             });
         });
 
@@ -2461,10 +2522,12 @@ document.addEventListener('DOMContentLoaded', () => {
             li.style.fontWeight = 'bold';
 
             li.addEventListener('click', () => {
-                ViewManager.activateMenu('nav-admin');
+                document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+                li.classList.add('active');
+
                 ViewManager.showScreen(document.getElementById('logged-in-view'), 'admin-screen');
-                // 기본적으로 첫 번째 탭(업체 등록) 보이기
-                this.switchTab('admin-tab-register');
+
+                AdminManager.switchTab('admin-tab-register');
             });
             navMenu.insertBefore(li, navMenu.firstChild);
 

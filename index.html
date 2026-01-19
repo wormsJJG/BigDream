@@ -86,9 +86,12 @@
                     <li class="nav-item res-tab" data-target="res-apps"><span>📲 설치된 앱</span></li>
                     <li class="nav-item res-tab" data-target="res-background"><span>🚀 백그라운드 실행 앱</span></li>
                     <li class="nav-item res-tab" data-target="res-apk"><span>📂 발견된 설치 파일</span></li>
-                    <li class="nav-item res-tab" data-target="res-privacy"><span>🔒 개인정보 유출 위협</span></li>
-                    <li class="nav-item res-tab" data-target="res-network"><span>🌐 네트워크 패킷 분석</span></li>
-                    <li class="nav-item res-tab" data-target="res-threats"><span>⚠️ 기기 보안 위협</span></li>
+                    <li class="nav-item res-tab" data-target="res-privacy" style="display: none;"><span>🔒 개인정보 유출
+                            위협</span></li>
+                    <li class="nav-item res-tab" data-target="res-network" style="display: none;"><span>🌐 네트워크 패킷
+                            분석</span></li>
+                    <li class="nav-item res-tab" data-target="res-threats" style="display: none;"><span>⚠️ 기기 보안
+                            위협</span></li>
                 </div>
             </ul>
             <div class="sidebar-footer">
@@ -263,9 +266,10 @@
                     </div>
                     <div id="res-apk" class="result-content-section">
                         <div class="content-card">
-                            <h3>📂 발견된 설치 파일(APK)</h3>
-                            <p class="sub-text">내장 메모리에서 발견된 설치 대기 중인 파일 목록입니다.</p>
-                            <ul id="res-apk-list" class="file-list"></ul>
+                            <h3>📂 발견된 설치 파일 (APK)</h3>
+                            <p class="sub-text">기기 내부 저장소에서 발견된 설치 대기 중인 파일들입니다.</p>
+
+                            <div id="apk-grid-container" class="app-grid"></div>
                         </div>
                     </div>
                 </div>
@@ -395,11 +399,13 @@
                             com.package.name</p>
                     </div>
 
-                    <div class="action-buttons" style="display: flex; gap: 10px;">
-                        <button id="neutralize-btn" class="primary-button warning-button"
-                            style="background-color: #f0ad4e;">🛡️ 무력화 (권한 박탈)</button>
-                        <button id="uninstall-btn" class="primary-button danger-button"
-                            style="background-color: #d9534f;">🗑️ 앱 강제 삭제</button>
+                    <div class="action-buttons">
+                        <button id="neutralize-btn" class="primary-button warning-button">
+                            🛡️ 무력화 (권한 박탈)
+                        </button>
+                        <button id="uninstall-btn" class="primary-button danger-button">
+                            🗑️ 앱 강제 삭제
+                        </button>
                     </div>
                 </div>
 
