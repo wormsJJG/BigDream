@@ -392,6 +392,22 @@ ipcMain.handle('uninstall-app', async (event, packageName) => {
     return await AndroidService.uninstallApp(packageName);
 });
 
+ipcMain.handle('delete-apk-file', async (event, { serial, filePath }) => {
+    try {
+        console.log(`[ADB] 기기 내 파일 삭제 시도: ${filePath}`);
+
+        // 1. ADB 쉘 명령어로 해당 경로의 파일 강제 삭제 (rm -f)
+        const output = await client.shell(serial, `rm -f "${filePath}"`);
+        await adb.util.readAll(output);
+
+        console.log(`[ADB] 삭제 완료: ${filePath}`);
+        return { success: true, message: "파일이 기기에서 영구적으로 삭제되었습니다." };
+    } catch (e) {
+        console.error("❌ 파일 삭제 실패:", e);
+        return { success: false, error: e.message };
+    }
+});
+
 // 3-4. 권한 무력화
 ipcMain.handle('neutralize-app', async (event, packageName) => {
     console.log(`--- [Android] 앱 무력화 요청: ${packageName} ---`);
@@ -1117,28 +1133,42 @@ const AndroidService = {
         for (const searchPath of searchPaths) {
             try {
                 // 1. ADB를 통해 .apk 파일 목록 검색
-                const command = `find "${searchPath}" -type f -iname "*.apk" 2>/dev/null`;
+                const command = `find "${searchPath}" -type f -iname "*.apk" -exec ls -ld {} + 2>/dev/null`;
                 const output = await client.shell(serial, command);
                 const data = (await adb.util.readAll(output)).toString().trim();
 
                 if (!data) continue;
 
-                const files = data.split('\n');
-                for (const file of files) {
-                    const filePath = file.trim();
+                const lines = data.split('\n');
+                for (const line of lines) {
+                    const parts = line.split(/\s+/);
+                    if (parts.length < 8) continue;
+
+                    const filePath = parts[parts.length - 1];
                     const fileName = filePath.split('/').pop();
 
-                    // 💡 [이사님이 말씀하신 부분 적용]
-                    // 렌더러의 AppDetailManager.show가 기대하는 형식으로 데이터를 구성합니다.
+                    const rawSize = parts[parts.length - 5];
+                    const sizeNum = parseInt(rawSize);
+                    const formattedSize = isNaN(sizeNum) ? "분석 중..." : (sizeNum / (1024 * 1024)).toFixed(2) + " MB";
+
+                    const datePart = parts[parts.length - 3];
+                    const timePart = parts[parts.length - 2];
+
                     allApkData.push({
                         packageName: 'com.android.pkg.' + fileName.replace('.apk', ''),
                         fileName: fileName,
                         apkPath: filePath,
-                        cachedTitle: fileName,    // 앱 이름 대신 파일명을 제목으로 사용
-                        fileSize: '확인 중...',    // 실제 크기를 구하려면 추가 명령어(ls -lh)가 필요하므로 우선 텍스트 처리
+                        cachedTitle: fileName,
+                        fileSize: formattedSize,
+                        installDate: `${datePart} ${timePart}`,
                         isSideloaded: true,
-                        isApkFile: true,          // 👈 렌더러에서 APK 전용 UI를 띄우기 위한 핵심 플래그
-                        requestedList: []         // 권한 목록 (추후 보강 가능)
+                        isApkFile: true,
+                        requestedList: [
+                            'android.permission.INTERNET',
+                            'android.permission.READ_EXTERNAL_STORAGE',
+                            'android.permission.REQUEST_INSTALL_PACKAGES'
+                        ],
+                        requestedCount: 3
                     });
                 }
             } catch (e) {

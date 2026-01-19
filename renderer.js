@@ -1483,8 +1483,9 @@ document.addEventListener('DOMContentLoaded', () => {
         lastScrollY: 0,
 
         show(app, displayName) {
-            console.log("상세 정보 표시 실행:", displayName, "경로:", app.apkPath);
+            console.log("상세 정보 표시 실행:", displayName, "유형:", app.isApkFile ? "APK" : "설치됨");
 
+            // 1. 화면 전환 로직
             const dashboard = document.getElementById('results-dashboard-view');
             const detailView = document.getElementById('app-detail-view');
             const resultsHeader = document.querySelector('.results-header');
@@ -1493,121 +1494,128 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (dashboard && detailView) {
                 this.lastScrollY = scrollContainer ? scrollContainer.scrollTop : 0;
-                // 화면 전환: 대시보드 끄고 상세화면 켜기
                 dashboard.style.display = 'none';
                 if (resultsHeader) resultsHeader.style.display = 'none';
                 if (privacyNotice) privacyNotice.style.display = 'none';
 
                 detailView.classList.remove('hidden');
                 detailView.style.display = 'block';
-
                 if (scrollContainer) scrollContainer.scrollTop = 0;
             }
 
-            // 데이터 바인딩 부분
+            // 2. 엘리먼트 참조
             document.getElementById('detail-app-name').textContent = app.cachedTitle || displayName;
             document.getElementById('detail-package-name').textContent = app.packageName;
 
             const sideloadEl = document.getElementById('detail-sideload');
             const bgStatusEl = document.getElementById('detail-bg');
             const networkEl = document.getElementById('detail-network');
+            const neutralizeBtnEl = document.getElementById('neutralize-btn');
+            const uninstallBtnEl = document.getElementById('uninstall-btn');
 
+            // 라벨 제어 핵심
+            const allLabels = Array.from(document.querySelectorAll('#app-detail-view .d-label'));
+            const bgLabel = allLabels.find(el => el.textContent.includes("실행 상태") || el.textContent.includes("설치 일시"));
+            const netLabel = allLabels.find(el => el.textContent.includes("데이터 사용량") || el.textContent.includes("파일 크기"));
+
+            // 3. [분기 로직]발견된 설치 파일(APK) vs 일반 앱
             if (app.isApkFile) {
-                // [APK 파일인 경우]
-                if (sideloadEl) sideloadEl.textContent = app.apkPath || '경로 정보 없음';
-                if (bgStatusEl) bgStatusEl.textContent = '미설치 파일';
-                if (networkEl) networkEl.textContent = app.fileSize || '크기 정보 없음';
+                // APK 파일
+                if (bgLabel) bgLabel.textContent = "설치 일시";
+                if (netLabel) netLabel.textContent = "파일 크기";
 
-                // 요구 권한 카운트 설정
-                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
-                document.getElementById('detail-grant-count').textContent = "-"; // 미설치라 '허용'은 대시 처리
-            } else {
-                // [일반 설치 앱인 경우 ]
                 if (sideloadEl) {
-                    const pathValue = app.apkPath && app.apkPath !== 'N/A' ? app.apkPath : '경로 정보를 불러올 수 없음';
-                    const originValue = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
-                    sideloadEl.innerHTML = `${originValue}<br><span style="font-size:11px; color:#888; font-family:monospace;">${pathValue}</span>`;
+                    sideloadEl.innerHTML = `외부 설치 (미설치 파일)<br><span style="font-size:11px; color:#888; font-family:monospace; word-break:break-all;">${app.apkPath || '-'}</span>`;
                 }
-                if (bgStatusEl) bgStatusEl.textContent = app.isRunningBg ? '실행 중' : '중지됨';
+                if (bgStatusEl) {
+                    bgStatusEl.innerHTML = `${app.installDate || '-'}<br><span style="font-size:11px; color:#d9534f;">(기기 내 파일 저장 시점)</span>`;
+                }
+                if (networkEl) {
+                    networkEl.innerHTML = `${app.fileSize || '분석 중'}<br><span style="font-size:11px; color:#888;">(APK 패키지 용량)</span>`;
+                }
+
+                // 버튼 제어
+                if (neutralizeBtnEl) neutralizeBtnEl.style.setProperty('display', 'none', 'important');
+                if (uninstallBtnEl) {
+                    uninstallBtnEl.style.display = 'flex';
+                    uninstallBtnEl.textContent = "🗑️ APK 파일 영구 삭제";
+                }
+
+                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
+                document.getElementById('detail-grant-count').textContent = "-";
+            } else {
+                // 설치된 앱 / 백그라운드 앱
+                if (bgLabel) bgLabel.textContent = "실행 상태";
+                if (netLabel) netLabel.textContent = "데이터 사용량";
+
+                if (sideloadEl) {
+                    const originValue = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
+                    sideloadEl.innerHTML = `<span style="font-weight: bold; color: #333;">${originValue}</span>`;
+                }
+                if (bgStatusEl) {
+                    bgStatusEl.textContent = app.isRunningBg ? '실행 중' : '중지됨';
+                }
                 if (networkEl) {
                     const usage = app.dataUsage || { rx: 0, tx: 0 };
-                    networkEl.textContent = Utils.formatBytes(usage.rx + usage.tx);
+                    const total = usage.rx + usage.tx;
+                    networkEl.innerHTML = `총 ${Utils.formatBytes(total)}<br><span style="font-size:12px; color:#888;">(수신: ${Utils.formatBytes(usage.rx)} / 송신: ${Utils.formatBytes(usage.tx)})</span>`;
+                }
+
+                if (neutralizeBtnEl) {
+                    neutralizeBtnEl.style.display = 'flex';
+                    neutralizeBtnEl.textContent = "🛡️ 무력화 (권한 박탈)";
+                }
+                if (uninstallBtnEl) {
+                    uninstallBtnEl.style.display = 'flex';
+                    uninstallBtnEl.textContent = "🗑️ 앱 강제 삭제";
                 }
 
                 document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
                 document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
             }
 
-            const pathEl = document.getElementById('detail-sideload');
-            if (pathEl) {
-                const originStr = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
-                const pathStr = app.apkPath || '경로 정보 없음';
-                pathEl.innerHTML = `${originStr}<br><span style="font-size:11px; color:#888; font-family:monospace; word-break:break-all;">${pathStr}</span>`;
-            }
+            // 4. 공통 데이터셋 설정
+            [neutralizeBtnEl, uninstallBtnEl].forEach(btn => {
+                if (btn) {
+                    btn.dataset.package = app.packageName;
+                    btn.dataset.appName = displayName;
+                    btn.dataset.apkPath = app.apkPath || "";
+                    btn.disabled = false;
+                }
+            });
 
-            // 실행 상태 표시
-            document.getElementById('detail-bg').textContent = app.isRunningBg ? '실행 중' : '중지됨';
-
-            // 권한 개수 표시
-            document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
-            document.getElementById('detail-grant-count').textContent = app.grantedCount || 0;
-
-            // 2. 아이콘 DOM 초기화
+            // 5. 아이콘 처리
             const iconWrapper = document.querySelector('.detail-icon-wrapper');
-            iconWrapper.innerHTML = `
-        <img class="detail-real-img" src="" style="width:100%; height:100%; object-fit:cover; display:none; border-radius: 12px;">
-        <span class="detail-fallback-span" style="font-size:32px;">📱</span>
-    `;
-            const img = iconWrapper.querySelector('.detail-real-img');
-            const span = iconWrapper.querySelector('.detail-fallback-span');
-
-            // [Case A] 캐시된 아이콘이 있으면 즉시 표시
-            if (app.cachedIconUrl) {
-                img.src = app.cachedIconUrl;
-                img.style.display = 'block';
-                span.style.display = 'none';
-            } else {
-                img.src = './assets/systemAppLogo.png';
-                img.style.display = 'block';
-                span.style.display = 'none';
-                img.onerror = () => { img.style.display = 'none'; span.style.display = 'flex'; };
+            if (iconWrapper) {
+                const iconSrc = app.cachedIconUrl || './assets/systemAppLogo.png';
+                iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
             }
 
-            // 3. 권한 리스트 출력 (APK일 때는 주황색 강조 스타일)
+            // 6. 권한 리스트 렌더링
             const list = document.getElementById('detail-permission-list');
-            list.innerHTML = '';
-            const perms = app.requestedList || [];
-
-            if (perms.length > 0) {
-                perms.forEach(perm => {
-                    const isGranted = app.isApkFile ? false : (app.grantedList && app.grantedList.includes(perm));
-                    const spanElem = document.createElement('span');
-
-                    if (app.isApkFile) {
-                        // 미설치 파일 전용 스타일
-                        spanElem.className = 'perm-item';
-                        spanElem.style.backgroundColor = "#fff3e0";
-                        spanElem.style.borderColor = "#ffe0b2";
-                        spanElem.style.color = "#e65100";
-                        spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
-                    } else {
-                        // 일반 앱 스타일
-                        spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
-                        spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
-                    }
-                    list.appendChild(spanElem);
-                });
-            } else {
-                list.innerHTML = '<p style="color:#999; padding:5px;">요청된 권한이 없습니다.</p>';
+            if (list) {
+                list.innerHTML = '';
+                const perms = app.requestedList || [];
+                if (perms.length > 0) {
+                    perms.forEach(perm => {
+                        const spanElem = document.createElement('span');
+                        if (app.isApkFile) {
+                            // APK용 분석 모드 스타일
+                            spanElem.className = 'perm-item';
+                            spanElem.style.cssText = "background:#fff3e0; border:1px solid #ffe0b2; color:#e65100; padding:4px 8px; border-radius:4px; margin:2px; display:inline-block;";
+                            spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
+                        } else {
+                            // 일반 앱용 설치 모드 스타일
+                            const isGranted = app.grantedList && app.grantedList.includes(perm);
+                            spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
+                            spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
+                        }
+                        list.appendChild(spanElem);
+                    });
+                } else {
+                    list.innerHTML = '<p style="color:#999; padding:5px;">분석된 권한 정보가 없습니다.</p>';
+                }
             }
-
-            // 액션 버튼 세팅 (삭제/무력화)
-            this.setupActionButton('uninstall-btn', app.isApkFile ? "🗑️ 파일 삭제" : "🗑️ 앱 강제 삭제", app, displayName);
-            this.setupActionButton('neutralize-btn', "🛡️ 무력화 (권한 박탈)", app, displayName);
-
-            // APK일 경우 무력화 버튼은 비활성화 (설치가 안 되어 있으므로)
-            if (app.isApkFile) document.getElementById('neutralize-btn').style.display = 'none';
-            else document.getElementById('neutralize-btn').style.display = 'flex';
 
             document.getElementById('app-detail-view').scrollTo({ top: 0 });
         },
@@ -1664,27 +1672,63 @@ document.addEventListener('DOMContentLoaded', () => {
     const uninstallBtn = document.getElementById('uninstall-btn');
     if (uninstallBtn) {
         uninstallBtn.addEventListener('click', async () => {
-            const { package: packageName, appName } = uninstallBtn.dataset;
-            if (!packageName) return;
+            // dataset에서 필요한 정보를 먼저 추출
+            const { package: packageName, appName, apkPath } = uninstallBtn.dataset;
 
-            // 기존: if (!confirm(...)) return;
-            if (!await CustomUI.confirm(`[경고] 정말로 '${appName}' 앱을 삭제하시겠습니까?\n\n패키지명: ${packageName}`)) return;
-
-            // ... (중간 생략) ...
-
-            try {
-                const result = await window.electronAPI.uninstallApp(packageName);
-                if (result.success) {
-                    await CustomUI.alert(result.message); // alert 대체
-                    document.getElementById('back-to-dashboard-btn').click();
-                } else {
-                    throw new Error(result.error);
+            // [Case A] 버튼 텍스트에 "APK"가 포함된 경우 (미설치 파일 삭제)
+            if (uninstallBtn.textContent.includes("APK")) {
+                if (!apkPath) {
+                    await CustomUI.alert("파일 경로를 찾을 수 없습니다.");
+                    return;
                 }
-            } catch (err) {
-                await CustomUI.alert(`삭제 실패: ${err.message}\n\n[기기 관리자 해제 필요] 설정 > 보안 > 기기 관리자 앱에서 '${appName}' 체크 해제 후 다시 시도하세요.`);
-            } finally {
-                uninstallBtn.disabled = false;
-                uninstallBtn.textContent = "🗑️ 앱 강제 삭제";
+
+                if (!await CustomUI.confirm(`[위험] 기기 내부의 APK 파일을 영구 삭제하시겠습니까?\n\n경로: ${apkPath}`)) return;
+
+                uninstallBtn.disabled = true;
+                uninstallBtn.textContent = "파일 삭제 중...";
+
+                try {
+                    // serial은 State 관리값 또는 마지막 검사 데이터에서 추출
+                    const serial = State.currentSerial || (window.lastScanData ? window.lastScanData.deviceInfo.serial : null);
+                    const result = await window.electronAPI.deleteApkFile({ serial, filePath: apkPath });
+
+                    if (result.success) {
+                        await CustomUI.alert("✅ APK 파일이 기기에서 삭제되었습니다.");
+                        document.getElementById('back-to-dashboard-btn').click();
+                    } else {
+                        throw new Error(result.error);
+                    }
+                } catch (err) {
+                    await CustomUI.alert(`파일 삭제 실패: ${err.message}`);
+                } finally {
+                    uninstallBtn.disabled = false;
+                    uninstallBtn.textContent = "🗑️ APK 파일 삭제";
+                }
+
+            }
+            // [Case B] 일반 앱 삭제인 경우
+            else {
+                if (!packageName) return;
+
+                if (!await CustomUI.confirm(`[경고] 정말로 '${appName}' 앱을 삭제하시겠습니까?\n\n패키지명: ${packageName}`)) return;
+
+                uninstallBtn.disabled = true;
+                uninstallBtn.textContent = "삭제 요청 중...";
+
+                try {
+                    const result = await window.electronAPI.uninstallApp(packageName);
+                    if (result.success) {
+                        await CustomUI.alert(result.message);
+                        document.getElementById('back-to-dashboard-btn').click();
+                    } else {
+                        throw new Error(result.error);
+                    }
+                } catch (err) {
+                    await CustomUI.alert(`삭제 실패: ${err.message}\n\n[기기 관리자 해제 필요] 설정 > 보안 > 기기 관리자 앱에서 '${appName}' 체크 해제 후 다시 시도하세요.`);
+                } finally {
+                    uninstallBtn.disabled = false;
+                    uninstallBtn.textContent = "🗑️ 앱 강제 삭제";
+                }
             }
         });
     }

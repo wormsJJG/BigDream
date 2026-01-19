@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld(
             console.log('--- preload.js: deleteIosBackup 호출됨');
             return ipcRenderer.invoke('delete-ios-backup', udid);
         },
+        // APK 파일 삭제 통로
+        deleteApkFile: (data) => ipcRenderer.invoke('delete-apk-file', data),
+
         saveScanResult: (data) => {
 
             console.log('--- preload.js: saveScanResult 호출됨');
@@ -87,9 +90,9 @@ contextBridge.exposeInMainWorld(
             return ipcRenderer.invoke('getLogininfo');
         },
         onUpdateStart: (callback) => ipcRenderer.on('update-start', (event, version) => callback(version)),
-    onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (event, data) => callback(data)),
-    onUpdateError: (callback) => ipcRenderer.on('update-error', (event, msg) => callback(msg)),
-    autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android')
+        onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (event, data) => callback(data)),
+        onUpdateError: (callback) => ipcRenderer.on('update-error', (event, msg) => callback(msg)),
+        autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android')
     }
 );
 
