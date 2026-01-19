@@ -716,7 +716,7 @@ ipcMain.handle('run-scan', async () => {
                     // 3. AI 엔진 분석 호출 (수동 필터 없음)
                     const aiResult = await analyzeAppWithStaticModel(aiPayload);
 
-                    if(aiResult.score >= 50){
+                    if (aiResult.score >= 50) {
                         console.log(`\n🚨 [AI 탐지 로그: ${app.packageName}]`);
                         console.log(`- 판정 점수: ${aiResult.score}점 (${aiResult.grade})`);
                         console.log(`- 앱 경로: ${app.apkPath}`);
@@ -1395,36 +1395,41 @@ const AndroidService = {
 
     // 권한 상세 분석
     async getAppPermissions(serial, packageName) {
-    try {
-        const output = await client.shell(serial, `dumpsys package ${packageName}`);
-        const dumpsys = (await adb.util.readAll(output)).toString();
+        try {
+            const output = await client.shell(serial, `dumpsys package ${packageName}`);
+            const dumpsys = (await adb.util.readAll(output)).toString();
 
-        // 1. 권한 파싱 (기존 로직 유지)
-        const requestedPerms = new Set();
-        const reqMatch = dumpsys.match(/requested permissions:\s*([\s\S]*?)(?:install permissions:|runtime permissions:)/);
-        if (reqMatch && reqMatch[1]) {
-            (reqMatch[1].match(/android\.permission\.[A-Z_]+/g) || []).forEach(p => requestedPerms.add(p));
+            const reqMatch = dumpsys.match(/requested permissions:\s*([\s\S]*?)(?:install permissions:|runtime permissions:)/);
+            const requestedPerms = new Set();
+            if (reqMatch && reqMatch[1]) {
+                reqMatch[1].match(/android\.permission\.[A-Z_]+/g)?.forEach(p => requestedPerms.add(p));
+            }
+
+            const grantedPerms = new Set();
+            const installMatch = dumpsys.match(/install permissions:\s*([\s\S]*?)(?:runtime permissions:|\n\n)/);
+            if (installMatch && installMatch[1]) {
+                installMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)?.forEach(p => grantedPerms.add(p.split(':')[0]));
+            }
+            const runtimeMatch = dumpsys.match(/runtime permissions:\s*([\s\S]*?)(?:Dex opt state:|$)/);
+            if (runtimeMatch && runtimeMatch[1]) {
+                runtimeMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)?.forEach(p => grantedPerms.add(p.split(':')[0]));
+            }
+
+            const componentPattern = new RegExp(`${packageName.replace(/\./g, '\\.')}/[\\w\\.]+\\.[\\w\\.]+`, 'g');
+            const matches = dumpsys.match(componentPattern) || [];
+            const uniqueCount = [...new Set(matches)].length;
+
+            return {
+                allPermissionsGranted: requestedPerms.size > 0 && [...requestedPerms].every(p => grantedPerms.has(p)),
+                requestedList: Array.from(requestedPerms),
+                grantedList: Array.from(grantedPerms),
+                servicesCount: Math.max(1, Math.ceil(uniqueCount / 2)),
+                receiversCount: Math.floor(uniqueCount / 2)
+            };
+        } catch (e) {
+            return { requestedList: [], grantedList: [], servicesCount: 0, receiversCount: 0 };
         }
-        const grantedPerms = new Set();
-        const installMatch = dumpsys.match(/install permissions:\s*([\s\S]*?)(?:runtime permissions:|\n\n)/);
-        if (installMatch && installMatch[1]) {
-            (installMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g) || []).forEach(p => grantedPerms.add(p.split(':')[0]));
-        }
-
-        const componentPattern = new RegExp(`${packageName.replace(/\./g, '\\.')}/[\\w\\.]+\\.[\\w\\.]+`, 'g');
-        const matches = dumpsys.match(componentPattern) || [];
-        const uniqueCount = [...new Set(matches)].length;
-
-        return {
-            requestedList: Array.from(requestedPerms),
-            grantedList: Array.from(grantedPerms),
-            servicesCount: Math.max(1, Math.ceil(uniqueCount / 2)),
-            receiversCount: Math.floor(uniqueCount / 2)
-        };
-    } catch (e) {
-        return { requestedList: [], grantedList: [], servicesCount: 0, receiversCount: 0 };
-    }
-},
+    },
 
     // 네트워크 사용량 (UID 기반)
     async getNetworkUsageMap(serial) {
