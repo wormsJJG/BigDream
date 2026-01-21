@@ -737,39 +737,44 @@ document.addEventListener('DOMContentLoaded', () => {
         setUI(status, titleText, descText, color, showBtn = true) {
             // 1. 제어할 엘리먼트들 확보
             const wrapper = document.getElementById('connection-visual-wrapper'); // 폰+케이블 래퍼
-            const icon = document.getElementById('connection-device-icon');      // 폰 내부 아이콘
+            // const icon = document.getElementById('connection-device-icon'); <-- 이 줄 삭제! (더 이상 필요 없음)
             const alertTitle = document.getElementById('connection-device-title'); // 폰 내부 텍스트
-            const title = document.getElementById('connection-status-title');    // 하단 큰 제목
-            const desc = document.getElementById('connection-status-desc');      // 하단 작은 설명
-            const btnContainer = document.getElementById('start-scan-container'); // 버튼 컨테이너
+            const title = document.getElementById('connection-status-title');      // 하단 큰 제목
+            const desc = document.getElementById('connection-status-desc');        // 하단 작은 설명
+            const btnContainer = document.getElementById('start-scan-container');  // 버튼 컨테이너
 
-            // 2. 하단 텍스트 및 버튼 업데이트
+            // 2. 하단 텍스트 및 버튼 업데이트 (공통 작업)
             title.textContent = titleText;
             title.style.color = color;
+            // 모델명이 있을 때만 굵게 표시하는 로직 유지
             desc.innerHTML = descText.includes('모델') ? descText : `<span>${descText}</span>`;
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
-            // 3. 스마트폰 프레임 클래스 초기화 및 적용
+            // 3. 스마트폰 프레임 상태 클래스 초기화 (깨끗하게 비우기)
             wrapper.classList.remove('state-disconnected', 'state-unauthorized', 'state-connected');
 
-            // 4. 상태별 비주얼 분기 처리
+            // 4. 상태별 비주얼 분기 처리 (아이콘 변경 코드 삭제됨!)
             if (status === 'connected') {
+                // ★ 핵심: 부모에게 '연결됨' 명찰만 달아줍니다.
+                // 그러면 CSS가 알아서 녹색 체크 SVG를 보여줍니다.
                 wrapper.classList.add('state-connected');
-                icon.className = 'fas fa-check-circle hack-icon'; // 체크 아이콘
-                alertTitle.innerHTML = 'DEVICE<br>READY';         // 폰 화면 멘트 변경
-                desc.innerHTML = `모델: <strong>${descText}</strong>`;
+                
+                alertTitle.innerHTML = 'DEVICE<br>READY'; // 폰 화면 멘트 변경
             } 
             else if (status === 'unauthorized') {
+                // ★ 핵심: 부모에게 '인증 대기' 명찰을 달아줍니다.
+                // CSS가 자물쇠 SVG를 보여줍니다.
                 wrapper.classList.add('state-unauthorized');
-                icon.className = 'fas fa-lock hack-icon';         // 자물쇠 아이콘
+                
                 alertTitle.innerHTML = 'WAITING<br>AUTH';
-                desc.innerHTML = `<span>${descText}</span>`;
             } 
             else {
+                // 여기가 바로 이사님이 찾으시던 '연결 전(disconnected)' 상태입니다.
+                // ★ 핵심: 부모에게 '연결 끊김' 명찰을 달아줍니다.
+                // CSS가 플러그 SVG를 보여줍니다.
                 wrapper.classList.add('state-disconnected');
-                icon.className = 'fas fa-plug hack-icon';         // 플러그 아이콘
+                
                 alertTitle.innerHTML = 'CONNECT<br>DEVICE';
-                esc.innerHTML = `<span>${descText}</span>`;
             }
         }
     };
@@ -905,6 +910,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // [추가] 레이저 애니메이션을 제어하는 함수
         toggleLaser(isVisible) {
+            // 레이저 빔 제어
             const beam = document.getElementById('scannerBeam');
             if (beam) {
                 beam.style.display = isVisible ? 'block' : 'none';
@@ -1095,44 +1101,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // [새로 추가] 스마트폰 화면을 초기 상태로 되돌리는 함수
         resetSmartphoneUI() {
-            const screen = document.querySelector('.phone-screen');
-            if (!screen) return;
+        // 1. 안전하게 요소 찾기 (유지)
+        const scanScreen = document.getElementById('scan-progress-screen');
+        if (!scanScreen) return;
+        const screen = scanScreen.querySelector('.phone-screen');
+        if (!screen) return;
 
-            // 배경색을 다시 검정색(#111)으로 원복
-            screen.style.backgroundColor = '#111';
+        // 2. 배경색 초기화 (finishScan이 칠한 녹색 배경 제거)
+        screen.style.backgroundColor = ''; 
 
-            const icon = screen.querySelector('.hack-icon');
-            const alertText = screen.querySelector('.hack-alert');
-            const statusList = screen.querySelector('div[style*="margin-top:20px"]');
+        const icon = screen.querySelector('.hack-icon');
+        const alertText = screen.querySelector('.hack-alert');
+        const statusList = screen.querySelector('div[style*="margin-top:20px"]');
 
-            // 아이콘 원복 (방패 모양/파란색/깜빡임 다시 켜기)
-            if (icon) {
-                icon.className = 'fas fa-shield-halved hack-icon'; // 원래 아이콘 클래스명 확인
-                icon.style.color = 'var(--accent)'; 
-                icon.style.animation = 'blinkRed 1s infinite'; 
-            }
+        if (icon) {
+            icon.className = 'hack-icon'; 
+            
+            // finishScan이 덧칠했던 '녹색 페인트'를 지우기
+            icon.style.color = ''; 
+            
+        }
 
-            // 문구 원복: SAFE -> SCANNING
-            if (alertText) {
-                alertText.innerHTML = 'SYSTEM<br>SCANNING';
-                alertText.style.color = 'var(--accent)';
-                alertText.style.textShadow = '0 0 15px var(--accent)';
-            }
+        // 3. 텍스트 초기화
+        if (alertText) {
+            // 문구 원복
+            alertText.innerHTML = 'SYSTEM<br>SCANNING';
+            
+            // finishScan이 덧칠했던 '녹색 페인트'와 '녹색 그림자'를 지우기
+            // 이 코드가 있어야 텍스트가 다시 원래의 파란색으로 돌아옴
+            alertText.style.color = '';
+            alertText.style.textShadow = '';
+        }
 
-            // 상태 메시지 목록 원복
-            if (statusList) {
-                statusList.innerHTML = `
-                    [!] 비정상 권한 접근 탐지...<br>
-                    [!] 실시간 프로세스 감시...<br>
-                    [!] AI 기반 지능형 위협 분석 중...`;
-            }
-        },
+        // 4. 하단 목록 초기화
+        if (statusList) {
+            statusList.innerHTML = `
+                [!] 비정상 권한 접근 탐지...<br>
+                [!] 실시간 프로세스 감시...<br>
+                [!] AI 기반 지능형 위협 분석 중...`;
+        }
+
+        // 5. 입자 재활성화
+        const particles = document.querySelectorAll('.data-particle');
+        particles.forEach(p => {
+            p.style.display = 'block';
+            p.style.opacity = '1';
+        });
+        
+        console.log("[UI] 스마트폰 화면이 초기 상태로 리셋되었습니다.");
+    },
 
         finishScan(data) {
             this.endLogTransaction('completed');
             ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
             this.toggleLaser(false);
 
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.opacity = '0';
+                p.style.display = 'none';
+            });
             // 2. 스마트폰 내부 화면을 '안전' 상태로 즉시 변경
             const scanScreen = document.getElementById('scan-progress-screen');
             const phoneScreen = scanScreen ? scanScreen.querySelector('.phone-screen') : null;
@@ -1147,7 +1175,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 아이콘을 녹색 체크 표시로 변경
                 if (icon) {
-                    icon.className = 'fas fa-check-circle hack-icon';
                     icon.style.color = '#27c93f'; 
                     icon.style.animation = 'none'; // 깜빡임 중지
                 }

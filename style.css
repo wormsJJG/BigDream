@@ -486,7 +486,7 @@ p {
 /* --- [화면 4] 기기 연결 & 검사 진행 --- */
 .scan-animation-card {
     text-align: center;
-    padding: 80px 50px;
+    padding: 80px 50px 130px;
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
 }
@@ -563,6 +563,55 @@ p {
     box-shadow: 0 30px 60px rgba(0,0,0,0.6);
     margin: 20px auto 0; /* 중앙 배치 */
     z-index: 10;
+}
+
+/* --- 네온 아이콘 공통 스타일 --- */
+.screen-icon-container {
+    margin: 20px 0; /* 위아래 간격 */
+    height: 80px;   /* 아이콘 영역 높이 고정 (화면 떨림 방지) */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.neon-svg {
+    width: 70px;   /* 기본 크기 */
+    height: auto;
+    color: #ffffff; /* 기본 색상 흰색 */
+    display: none;  /* ★중요★ 기본적으로 모두 숨김 */
+    
+    /* 기본 파란색 네온 효과 */
+    filter: drop-shadow(0 0 5px #00d2ff) drop-shadow(0 0 15px #00d2ff);
+    animation: neon-pulse 2s infinite alternate ease-in-out;
+}
+
+/* --- 상태별 아이콘 노출 로직  --- */
+
+/* 1. 연결 안 됨 상태(.state-disconnected) -> 플러그만 보여줘 */
+.state-disconnected .icon-plug {
+    display: block;
+    transform: translateY(-40px);
+}
+
+/* 2. 인증 대기 상태(.state-unauthorized) -> 자물쇠만 보여줘 */
+.state-unauthorized .icon-lock {
+    display: block;
+    /* 자물쇠는 조금 더 작게 */
+    width: 60px; 
+}
+
+/* 3. 연결 완료 상태(.state-connected) -> 체크만 보여줘 */
+.state-connected .icon-check {
+    display: block;
+    color: #27c93f; /* 체크는 녹색으로 변경 */
+    /* 녹색 네온 효과로 덮어쓰기 */
+    filter: drop-shadow(0 0 5px #27c93f) drop-shadow(0 0 15px #27c93f);
+}
+
+/* 네온 깜빡임 애니메이션 (기존에 없으면 추가) */
+@keyframes neon-pulse {
+    from { opacity: 0.8; }
+    to { opacity: 1; filter: drop-shadow(0 0 5px currentColor) drop-shadow(0 0 25px currentColor); }
 }
 
 /* 1. 연결 대기 화면 전용 위치 (#device-connection-screen) */
@@ -707,7 +756,7 @@ p {
 .dp-1 { left: 20%; top: 40%; animation-delay: 0s; }
 .dp-2 { left: 80%; top: 50%; animation-delay: 0.3s; }
 .dp-3 { left: 50%; top: 60%; animation-delay: 0.7s; }
-.dp-4 { left: 30%; top: 30%; animation-delay: 1.1s; }
+.dp-4 { left: 30%; top: 30%; animation-delay: -1.2s; }
 
 #scan-status-text {
     font-size: 18px;
@@ -1051,7 +1100,7 @@ p {
     margin: 10px auto;   /* [수정] 상단 여백을 60px에서 10px로 대폭 줄임 */
     text-align: center;
     padding-top: 20px;   /* 박스 내부 상단 여백 조절 */
-    padding-bottom: 10px;/* 박스 내부 하단 여백 조절 */
+    padding-bottom: 28px;/* 박스 내부 하단 여백 조절 */
 }
 
 /* 추가로 제목(h2)의 마진도 줄여야 박스가 더 올라갑니다 */

@@ -16,7 +16,7 @@
   "license": "ISC",
   "devDependencies": {
     "@electron-forge/maker-squirrel": "^7.10.2",
-    "electron": "^39.2.6",
+    "electron": "^39.2.7",
     "electron-builder": "^26.0.12"
   },
   "config": {
@@ -78,12 +78,16 @@
       {
         "from": "platform-tools/",
         "to": "platform-tools/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "ios-tools/",
         "to": "ios-tools/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "pcap_receiver.py",
@@ -99,5 +103,5 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/wormsJJG/BigDream"
- }
+  }
 }
