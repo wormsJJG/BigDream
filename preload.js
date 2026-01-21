@@ -89,7 +89,20 @@ contextBridge.exposeInMainWorld(
         onUpdateStart: (callback) => ipcRenderer.on('update-start', (event, version) => callback(version)),
     onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (event, data) => callback(data)),
     onUpdateError: (callback) => ipcRenderer.on('update-error', (event, msg) => callback(msg)),
-    autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android')
+    autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android'),
+    startFullScan: () => ipcRenderer.invoke('start-full-scan'),
+
+    // [추가해야 할 부분] 🔥 AI 결과 수신 리스너 정의
+    onAiScanResult: (callback) => {
+        // 메인 프로세스에서 'ai-scan-result' 채널로 보낸 데이터를 잡아서
+        // 렌더러의 콜백 함수(callback)에게 전달합니다.
+        ipcRenderer.on('ai-scan-result', (_event, value) => callback(value));
+    },
+    
+    // (선택 사항) 리스너 해제 기능이 필요하다면
+    removeAiScanResultListener: () => {
+        ipcRenderer.removeAllListeners('ai-scan-result');
+    }
     }
 );
 

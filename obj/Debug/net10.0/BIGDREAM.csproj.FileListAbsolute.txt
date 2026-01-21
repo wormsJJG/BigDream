@@ -1,0 +1,4 @@
+C:\Users\lll\source\repos\BIGDREAM\BIGDREAM\obj\Debug\net10.0\BIGDREAM.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\lll\source\repos\BIGDREAM\BIGDREAM\obj\Debug\net10.0\BIGDREAM.AssemblyInfoInputs.cache
+C:\Users\lll\source\repos\BIGDREAM\BIGDREAM\obj\Debug\net10.0\BIGDREAM.AssemblyInfo.cs
+C:\Users\lll\source\repos\BIGDREAM\BIGDREAM\obj\Debug\net10.0\BIGDREAM.csproj.CoreCompileInputs.cache
