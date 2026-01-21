@@ -416,12 +416,12 @@ ipcMain.handle('run-scan', async () => {
         // 결과 필터링 (위험한 것만 추출)
         const suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
 
-        // [Step E] (선택) VirusTotal 2차 정밀 검사 - “정책 통과한 것만” + “공식스토어는 기본 스킵” 추천
-        // if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
-        //   const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
-        //   console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
-        //   await AndroidService.runVirusTotalCheck(serial, vtTargets);
-        // }
+        // [Step E] (선택) VirusTotal 2차 정밀 검사
+        if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
+          const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
+          console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
+          await AndroidService.runVirusTotalCheck(serial, vtTargets);
+        }
 
         return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
 

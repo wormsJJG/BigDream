@@ -18,6 +18,21 @@ const FEATURE_COLS = [
  */
 function buildStaticFeatures(payload) {
     const perms = payload.permissions || [];
+
+    // 💡 [추가] 백그라운드 상시 동작 필수 권한 체크 (BD_SFA 핵심 로직)
+    const background_perms = [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.BIND_ACCESSIBILITY_SERVICE"
+    ];
+    const hasBgPower = perms.some(p => background_perms.includes(p));
+
+    // 백그라운드 권한이 아예 없으면 분석 대상에서 제외 (물리적 불가능)
+    if (!hasBgPower) {
+        return null; 
+    }
+
     let dangerous_perms_cnt = perms.length;
     let comp_count = (payload.services_cnt || 0) + (payload.receivers_cnt || 0);
 
@@ -77,6 +92,10 @@ async function analyzeAppWithStaticModel(payload) {
     try {
         const s = await initModel();
         const f = buildStaticFeatures(payload);
+
+        if (!f) {
+            return { prob: 0, score: 0, grade: "SAFE", reason: null };
+        }
 
         // 💡 핵심 수정: 모든 값을 Number()로 강제 형변환하여 BigInt 충돌 방지
         const x = [
