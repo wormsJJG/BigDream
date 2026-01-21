@@ -1221,7 +1221,7 @@ const AndroidService = {
             }
         }
         return allApkData;
-
+    },
 
     // 의심 앱 필터링 로직
     filterSuspiciousApps(apps) {
