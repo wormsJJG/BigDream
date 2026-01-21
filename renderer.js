@@ -454,15 +454,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const inputId = document.getElementById('username').value.trim();
+            const loginBtn = loginForm.querySelector('.primary-button');
+            const loginLoader = document.getElementById('login-loader');
+            const usernameEl = document.getElementById('username');
+            const passwordEl = document.getElementById('password');
+            const sidebar = document.querySelector('#logged-out-view .sidebar');
+
+            const inputId = usernameEl.value.trim();
             const email = inputId + ID_DOMAIN;
-            const password = document.getElementById('password').value.trim();
+            const password = passwordEl.value.trim();
             const errorMsg = document.getElementById('login-error');
             const remember = document.getElementById('remember-me').checked;
 
             const loginData = { id: inputId, pw: password, remember: remember };
 
             errorMsg.textContent = "로그인 중...";
+
+            // --- 로딩 시작 상태로 전환 ---
+            loginBtn.style.display = 'none';
+            loginLoader.style.display = 'flex';
+            errorMsg.textContent = "";
+
+            // --- 클릭 차단 ---
+            usernameEl.disabled = true;
+            passwordEl.disabled = true;
+            if (sidebar) sidebar.classList.add('ui-lock');
 
             try {
                 // 1. Firebase 로그인
@@ -516,6 +532,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     errorMsg.textContent = "로그인 오류: " + error.code;
                 }
+            }
+
+            finally {
+                loginLoader.style.display = 'none';
+                loginBtn.style.display = 'block';
+
+                usernameEl.disabled = false;
+                passwordEl.disabled = false;
+                if (sidebar) sidebar.classList.remove('ui-lock');
             }
         });
     }
@@ -801,49 +826,95 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const ui = {
-                icon: document.getElementById('connection-status-icon'),
-                title: document.getElementById('connection-status-title'),
-                desc: document.getElementById('connection-status-desc')
-            };
-
             // 1. Android 확인
             try {
                 const android = await window.electronAPI.checkDeviceConnection();
                 if (android.status === 'connected') {
                     State.currentDeviceMode = 'android';
-                    this.setUI(ui, '✅', 'Android 연결됨', android.model, '#5CB85C');
-                    return; // 💡 [중요] 안드로이드가 연결되면 아래 iOS 체크는 실행하지 않음!
+                    // 상태('connected'), 제목, 모델명, 색상, 버튼 표시 순서입니다.
+                    this.setUI('connected', 'Android 연결됨', android.model, '#5CB85C', true);
+                    return;
+                } else if (android.status === 'unauthorized') {
+                    State.currentDeviceMode = null;
+                    this.setUI('unauthorized', '승인 대기 중', '휴대폰에서 USB 디버깅을 허용해주세요.', '#F0AD4E', false);
+                    return;
+                } else if (android.status === 'error' || android.status === 'offline') {
+                    State.currentDeviceMode = null;
+                    const errorMessage = android.error || 'ADB 도구 실행 오류. 프로그램 재시작 필요.';
+                    this.setUI('disconnected', 'Android 도구 오류', errorMessage, '#D9534F', false);
+                    return;
                 }
-            } catch (e) { }
+            } catch (e) {
+                this.setUI('disconnected', '통신 오류', 'Android 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
+                return;
+            }
 
+            // 2. iOS 확인
             try {
                 const ios = await window.electronAPI.checkIosConnection();
                 if (ios.status === 'connected') {
                     State.currentDeviceMode = 'ios';
                     State.currentUdid = ios.udid;
-                    this.setUI(ui, '🍎', 'iPhone 연결됨', ios.model, '#5CB85C');
+                    this.setUI('connected', 'iPhone 연결됨', ios.model, '#5CB85C', true);
+                    return;
+                } else if (ios.status === 'error') {
+                    State.currentDeviceMode = null;
+                    const errorMessage = ios.error || 'iOS 도구 실행 오류. iTunes 설치 상태 확인 필요.';
+                    this.setUI('disconnected', 'iOS 도구 오류', errorMessage, '#D9534F', false);
                     return;
                 }
-            } catch (e) { }
+            } catch (e) {
+                this.setUI('disconnected', '통신 오류', 'iOS 도구 연결 중 알 수 없는 오류 발생.', '#D9534F', false);
+                return;
+            }
 
             // 3. 연결 없음 (기존 로직 유지)
             State.currentDeviceMode = null;
-            this.setUI(ui, '🔌', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
+            this.setUI('disconnected', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
         },
 
-        setUI(ui, iconText, titleText, descText, color, showBtn = true) {
-            // ... (setUI 함수는 변경 없음)
-            ui.icon.textContent = iconText;
-            ui.title.textContent = titleText;
-            ui.title.style.color = color;
-            ui.desc.innerHTML = descText.includes('연결') || descText.includes('허용') || descText.includes('오류') ? `<span style="color:${color};">${descText}</span>` : `모델: <strong>${descText}</strong>`;
+        // ★★★ [중요] 비주얼 연출을 위해 완전히 새로워진 setUI 함수 ★★★
+        setUI(status, titleText, descText, color, showBtn = true) {
+            // 1. 제어할 엘리먼트들 확보
+            const wrapper = document.getElementById('connection-visual-wrapper'); // 폰+케이블 래퍼
+            // const icon = document.getElementById('connection-device-icon'); <-- 이 줄 삭제! (더 이상 필요 없음)
+            const alertTitle = document.getElementById('connection-device-title'); // 폰 내부 텍스트
+            const title = document.getElementById('connection-status-title');      // 하단 큰 제목
+            const desc = document.getElementById('connection-status-desc');        // 하단 작은 설명
+            const btnContainer = document.getElementById('start-scan-container');  // 버튼 컨테이너
 
-            const btnContainer = document.getElementById('start-scan-container');
+            // 2. 하단 텍스트 및 버튼 업데이트 (공통 작업)
+            title.textContent = titleText;
+            title.style.color = color;
+            // 모델명이 있을 때만 굵게 표시하는 로직 유지
+            desc.innerHTML = descText.includes('모델') ? descText : `<span>${descText}</span>`;
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
-            if (showBtn && !btnContainer.dataset.visible) {
-                btnContainer.dataset.visible = "true";
+            // 3. 스마트폰 프레임 상태 클래스 초기화 (깨끗하게 비우기)
+            wrapper.classList.remove('state-disconnected', 'state-unauthorized', 'state-connected');
+
+            // 4. 상태별 비주얼 분기 처리 (아이콘 변경 코드 삭제됨!)
+            if (status === 'connected') {
+                // ★ 핵심: 부모에게 '연결됨' 명찰만 달아줍니다.
+                // 그러면 CSS가 알아서 녹색 체크 SVG를 보여줍니다.
+                wrapper.classList.add('state-connected');
+                
+                alertTitle.innerHTML = 'DEVICE<br>READY'; // 폰 화면 멘트 변경
+            } 
+            else if (status === 'unauthorized') {
+                // ★ 핵심: 부모에게 '인증 대기' 명찰을 달아줍니다.
+                // CSS가 자물쇠 SVG를 보여줍니다.
+                wrapper.classList.add('state-unauthorized');
+                
+                alertTitle.innerHTML = 'WAITING<br>AUTH';
+            } 
+            else {
+                // 여기가 바로 이사님이 찾으시던 '연결 전(disconnected)' 상태입니다.
+                // ★ 핵심: 부모에게 '연결 끊김' 명찰을 달아줍니다.
+                // CSS가 플러그 SVG를 보여줍니다.
+                wrapper.classList.add('state-disconnected');
+                
+                alertTitle.innerHTML = 'CONNECT<br>DEVICE';
             }
         }
     };
@@ -924,6 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ViewManager.showScreen(loggedInView, 'scan-progress-screen');
 
             if (State.currentDeviceMode === 'android') {
+
                 await ScanController.startAndroidScan();
             } else if (State.currentDeviceMode === 'ios') {
                 await ScanController.startIosScan();
@@ -978,45 +1050,84 @@ document.addEventListener('DOMContentLoaded', () => {
     const ScanController = {
         currentLogId: null,
 
+        // [추가] 레이저 애니메이션을 제어하는 함수
+        toggleLaser(isVisible) {
+            // 레이저 빔 제어
+            const beam = document.getElementById('scannerBeam');
+            if (beam) {
+                beam.style.display = isVisible ? 'block' : 'none';
+            }
+        },
+        // ★★★ [수정됨] 실제 앱 목록을 활용한 정밀 검사 연출 ★★★
         async startAndroidScan() {
-            ViewManager.updateProgress(1, "디바이스 파일 시스템 접근 중...");
+            this.toggleLaser(true);
+            this.resetSmartphoneUI();
 
             try {
-                // 1. 실제 데이터를 먼저 확실히 가져옵니다.
+                // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
+                ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
+
+                // 2. 데이터 확
                 const scanData = await window.electronAPI.runScan();
-                console.log("검사 데이터 수신 완료:", scanData);
+                const apps = scanData.allApps || [];
+                const totalApps = apps.length;
 
-                const targetMinutes = State.androidTargetMinutes || 0;
-
-                if (targetMinutes === 0) {
-                    // 🔴 즉시 완료 모드일 때 데이터를 넘겨줍니다.
+                // 앱이 하나도 없는 경우(예외)는 바로 종료
+                if (totalApps === 0) {
+                    this.toggleLaser(false);
                     this.finishScan(scanData);
-                } else {
-                    // 2. 연출(Theater Mode) 로직
-                    const apps = scanData.allApps || [];
-                    const totalApps = apps.length;
-                    const totalDurationMs = targetMinutes * 60 * 1000;
-                    const timePerApp = totalDurationMs / Math.max(totalApps, 1);
-                    let currentIndex = 0;
-
-                    const processNextApp = () => {
-                        if (currentIndex >= totalApps) {
-                            // 🔴 연출이 완전히 끝난 후 데이터를 넘겨줍니다.
-                            this.finishScan(scanData);
-                            return;
-                        }
-                        const app = apps[currentIndex];
-                        const appName = Utils.formatAppName(app.packageName);
-                        const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
-
-                        ViewManager.updateProgress(percent, `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`);
-                        currentIndex++;
-                        setTimeout(processNextApp, timePerApp);
-                    };
-                    processNextApp();
+                    return;
                 }
+
+                // 시간 계산
+                // [시간 계산 로직]
+                const targetMinutes = State.androidTargetMinutes || 0;
+                const totalDurationMs = targetMinutes * 60 * 1000;
+
+                // 앱 하나당 보여줄 분석 시간
+                const timePerApp = targetMinutes > 0 
+                    ? Math.max(35, totalDurationMs / totalApps) 
+                    : 35;
+
+                console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp / 1000).toFixed(2)}초 소요`);
+
+                let currentIndex = 0;
+
+                // ★ 애니메이션 루프 함수
+                // [3단계] 애니메이션 루프 함수
+                const processNextApp = () => {
+                    // 종료 조건: 모든 앱 분석이 끝났을 때
+                    if (currentIndex >= totalApps) {
+                        console.log(`[Theater Mode] 검사 완료: 총 ${totalApps}개 분석됨`);
+                        this.toggleLaser(false); // 레이저 정지
+                        this.finishScan(scanData); // 완료 처리 (여기서 'SCAN COMPLETED'로 변경)
+                        return;
+                    }
+
+                    const app = apps[currentIndex];
+                    // UI 가독성을 위해 앱 이름만 포맷팅
+                    const appName = Utils.formatAppName(app.packageName);
+
+                    // 진행률 계산 (최대 99%까지)
+                    const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
+
+                    // 화면 갱신: 스마트폰 내부와 외부 프로그레스 바 동기화
+                    ViewManager.updateProgress(
+                        Math.min(99, percent),
+                        `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`
+                    );
+
+                    currentIndex++;
+
+                    // 계산된 시간만큼 대기 후 다음 앱으로 이동
+                    setTimeout(processNextApp, timePerApp);
+                };
+
+                // 루프 시작
+                processNextApp();
             } catch (error) {
-                console.error("검사 실행 오류:", error);
+                // 에러 발생 시 레이저를 끄고 에러 핸들링
+                this.toggleLaser(false);
                 this.handleError(error);
             }
         },
@@ -1130,17 +1241,111 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
+        // [새로 추가] 스마트폰 화면을 초기 상태로 되돌리는 함수
+        resetSmartphoneUI() {
+        // 1. 안전하게 요소 찾기 (유지)
+        const scanScreen = document.getElementById('scan-progress-screen');
+        if (!scanScreen) return;
+        const screen = scanScreen.querySelector('.phone-screen');
+        if (!screen) return;
+
+        // 2. 배경색 초기화 (finishScan이 칠한 녹색 배경 제거)
+        screen.style.backgroundColor = ''; 
+
+        const icon = screen.querySelector('.hack-icon');
+        const alertText = screen.querySelector('.hack-alert');
+        const statusList = screen.querySelector('div[style*="margin-top:20px"]');
+
+        if (icon) {
+            icon.className = 'hack-icon'; 
+            
+            // finishScan이 덧칠했던 '녹색 페인트'를 지우기
+            icon.style.color = ''; 
+            
+        }
+
+        // 3. 텍스트 초기화
+        if (alertText) {
+            // 문구 원복
+            alertText.innerHTML = 'SYSTEM<br>SCANNING';
+            
+            // finishScan이 덧칠했던 '녹색 페인트'와 '녹색 그림자'를 지우기
+            // 이 코드가 있어야 텍스트가 다시 원래의 파란색으로 돌아옴
+            alertText.style.color = '';
+            alertText.style.textShadow = '';
+        }
+
+        // 4. 하단 목록 초기화
+        if (statusList) {
+            statusList.innerHTML = `
+                [!] 비정상 권한 접근 탐지...<br>
+                [!] 실시간 프로세스 감시...<br>
+                [!] AI 기반 지능형 위협 분석 중...`;
+        }
+
+        // 5. 입자 재활성화
+        const particles = document.querySelectorAll('.data-particle');
+        particles.forEach(p => {
+            p.style.display = 'block';
+            p.style.opacity = '1';
+        });
+        
+        console.log("[UI] 스마트폰 화면이 초기 상태로 리셋되었습니다.");
+    },
+
         finishScan(data) {
             console.log("--- 검사 종료: 결과 대시보드 준비 ---");
             this.endLogTransaction('completed');
+            ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
+            this.toggleLaser(false);
+
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.opacity = '0';
+                p.style.display = 'none';
+            });
+            // 2. 스마트폰 내부 화면을 '안전' 상태로 즉시 변경
+            const scanScreen = document.getElementById('scan-progress-screen');
+            const phoneScreen = scanScreen ? scanScreen.querySelector('.phone-screen') : null;
+
+            if (phoneScreen) {
+                const icon = phoneScreen.querySelector('.hack-icon');
+                const alertText = phoneScreen.querySelector('.hack-alert');
+                const statusList = phoneScreen.querySelector('div[style*="margin-top:20px"]');
+
+                // 배경색을 신뢰감 있는 짙은 색으로 변경
+                phoneScreen.style.backgroundColor = '#0f172a';
+                
+                // 아이콘을 녹색 체크 표시로 변경
+                if (icon) {
+                    icon.style.color = '#27c93f'; 
+                    icon.style.animation = 'none'; // 깜빡임 중지
+                }
+                
+                // 문구 변경: SCANNING -> SAFE
+                if (alertText) {
+                    alertText.innerHTML = 'SCAN<br>COMPLETED';
+                    alertText.style.color = '#27c93f';
+                    alertText.style.textShadow = '0 0 15px rgba(39, 201, 63, 0.5)';
+                }
+
+                // 하단 상태 메시지 업데이트
+                if (statusList) {
+                    statusList.innerHTML = '<span style="color:#27c93f"> 보안 검사가 완료되었습니다.</span>';
+                }
+            }
+
+            ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
             State.lastScanData = data;
             window.lastScanData = data;
 
             ViewManager.updateProgress(100, "분석 완료! 리포트를 생성합니다.");
 
             setTimeout(() => {
+              
                 ResultsRenderer.render(data);
-            }, 500);
+                ViewManager.showScreen(loggedInView, 'scan-results-screen');
+            }, 1500); // 1초 뒤 결과 화면으로 전환
         },
 
         handleError(error) {
