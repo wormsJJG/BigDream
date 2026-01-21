@@ -1821,3 +1821,57 @@ p {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-10px); }
 }
+
+.result-content-section {
+    width: 100%;
+    display: none
+}
+
+/* active 클래스가 붙은 섹션만 보여줌 */
+.result-content-section.active {
+    display: block !important;
+}
+
+.screen {
+    display: none; 
+    width: 100%;
+    height: 100%;
+    position: relative; /* 고정 위치 해제 */
+    z-index: 1;
+}
+
+/* 관리자 스크린 전용 (혹시 모를 겹침 방지) */
+#admin-screen {
+    background-color: var(--secondary-bg-color);
+    min-height: 100%;
+}
+
+/* 결과 대시보드 뷰 */
+#results-dashboard-view {
+    width: 100%;
+    height: 100%;
+}
+
+/* 상세보기 내 액션 버튼 전용 스타일 */
+#app-detail-view .action-buttons {
+    display: flex !important;
+    gap: 12px !important;
+    justify-content: flex-end;
+    width: auto;
+}
+
+#app-detail-view .action-buttons button {
+    width: 180px !important;
+    height: 48px !important;
+    padding: 0 !important; 
+    
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    border: none !important;
+    white-space: nowrap !important;
+}

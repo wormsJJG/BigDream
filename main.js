@@ -441,6 +441,22 @@ ipcMain.handle('uninstall-app', async (event, packageName) => {
     return await AndroidService.uninstallApp(packageName);
 });
 
+ipcMain.handle('delete-apk-file', async (event, { serial, filePath }) => {
+    try {
+        console.log(`[ADB] 기기 내 파일 삭제 시도: ${filePath}`);
+
+        // 1. ADB 쉘 명령어로 해당 경로의 파일 강제 삭제 (rm -f)
+        const output = await client.shell(serial, `rm -f "${filePath}"`);
+        await adb.util.readAll(output);
+
+        console.log(`[ADB] 삭제 완료: ${filePath}`);
+        return { success: true, message: "파일이 기기에서 영구적으로 삭제되었습니다." };
+    } catch (e) {
+        console.error("❌ 파일 삭제 실패:", e);
+        return { success: false, error: e.message };
+    }
+});
+
 // 3-4. 권한 무력화
 ipcMain.handle('neutralize-app', async (event, packageName) => {
     console.log(`--- [Android] 앱 무력화 요청: ${packageName} ---`);
@@ -1155,34 +1171,57 @@ const AndroidService = {
 
     // APK 파일 검색
     async findApkFiles(serial) {
-        const searchPaths = [
-            '/storage/emulated/0/Download',
-            '/storage/emulated/0/Documents',
-            '/storage/emulated/0/Android/data',
-            '/storage/emulated/0',
-            '/data/local/tmp'
-        ];
 
-        let allApkPaths = new Set();
-
-        console.log('🔄 [Android] APK 파일 검색 시작: 내부 저장소 주요 경로 검색');
+        // 💡 경로 중복 제거: /sdcard와 /storage/emulated/0는 같은 곳입니다.
+        // 하나만 남기거나, 결과에서 경로 중복을 체크해야 합니다.
+        const searchPaths = ['/sdcard/Download', '/data/local/tmp'];
+        let allApkData = [];
+        const seenPaths = new Set(); // 💡 중복 체크를 위한 세트
 
         for (const searchPath of searchPaths) {
             try {
-                const command = `find "${searchPath}" -type f -iname "*.apk" 2>/dev/null`;
+                const command = `find "${searchPath}" -type f -iname "*.apk" -exec ls -ld {} + 2>/dev/null`;
                 const output = await client.shell(serial, command);
-                const data = (await adb.util.readAll(output)).toString();
+                const data = (await adb.util.readAll(output)).toString().trim();
 
-                const foundFiles = data.trim().split('\n').filter(l => l.length > 0 && l.endsWith('.apk'));
-                foundFiles.forEach(file => allApkPaths.add(file.trim()));
+                if (!data) continue;
 
+                const lines = data.split('\n');
+                for (const line of lines) {
+                    const parts = line.split(/\s+/);
+                    if (parts.length < 7) continue;
+
+                    const filePath = parts[parts.length - 1];
+
+                    if (seenPaths.has(filePath)) continue;
+                    seenPaths.add(filePath);
+
+                    const timePart = parts[parts.length - 2];
+                    const datePart = parts[parts.length - 3];
+                    const rawSize = parts[parts.length - 4];
+
+                    const fileName = filePath.split('/').pop();
+                    const sizeNum = parseInt(rawSize);
+                    const formattedSize = isNaN(sizeNum) ? "분석 중" : (sizeNum / (1024 * 1024)).toFixed(2) + " MB";
+
+                    allApkData.push({
+                        packageName: fileName,
+                        apkPath: filePath,
+                        fileSize: formattedSize,
+                        installDate: `${datePart} ${timePart}`,
+                        isApkFile: true,
+                        isRunningBg: false,
+                        isSideloaded: true,
+                        requestedCount: 3,
+                        requestedList: ['android.permission.INTERNET', 'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.REQUEST_INSTALL_PACKAGES']
+                    });
+                }
             } catch (e) {
-                console.warn(`⚠️ [Android] APK 검색 중 통신 오류 (${searchPath}): ${e.message}`);
+                console.error(`${searchPath} 검색 실패:`, e.message);
             }
         }
+        return allApkData;
 
-        return Array.from(allApkPaths);
-    },
 
     // 의심 앱 필터링 로직
     filterSuspiciousApps(apps) {
