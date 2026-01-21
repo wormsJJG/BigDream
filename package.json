@@ -51,6 +51,7 @@
     "firebase": "^12.6.0",
     "firebase-admin": "^13.6.0",
     "google-play-scraper": "^10.1.2",
+    "onnxruntime-node": "^1.23.2",
     "xml2js": "^0.6.2"
   },
   "build": {
@@ -78,16 +79,24 @@
       {
         "from": "platform-tools/",
         "to": "platform-tools/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "ios-tools/",
         "to": "ios-tools/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "pcap_receiver.py",
         "to": "pcap_receiver.py"
+      },
+      {
+        "from": "assets/models",
+        "to": "assets/models"
       }
     ],
     "publish": {
@@ -99,5 +108,5 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/wormsJJG/BigDream"
- }
+  }
 }
