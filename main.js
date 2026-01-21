@@ -1127,12 +1127,14 @@ const AndroidService = {
 
     // APK 파일 검색
     async findApkFiles(serial) {
-        const searchPaths = ['/storage/emulated/0/Download', '/data/local/tmp'];
+        // 💡 경로 중복 제거: /sdcard와 /storage/emulated/0는 같은 곳입니다.
+        // 하나만 남기거나, 결과에서 경로 중복을 체크해야 합니다.
+        const searchPaths = ['/sdcard/Download', '/data/local/tmp'];
         let allApkData = [];
+        const seenPaths = new Set(); // 💡 중복 체크를 위한 세트
 
         for (const searchPath of searchPaths) {
             try {
-                // 1. ADB를 통해 .apk 파일 목록 검색
                 const command = `find "${searchPath}" -type f -iname "*.apk" -exec ls -ld {} + 2>/dev/null`;
                 const output = await client.shell(serial, command);
                 const data = (await adb.util.readAll(output)).toString().trim();
@@ -1142,37 +1144,35 @@ const AndroidService = {
                 const lines = data.split('\n');
                 for (const line of lines) {
                     const parts = line.split(/\s+/);
-                    if (parts.length < 8) continue;
+                    if (parts.length < 7) continue;
 
                     const filePath = parts[parts.length - 1];
-                    const fileName = filePath.split('/').pop();
 
-                    const rawSize = parts[parts.length - 5];
-                    const sizeNum = parseInt(rawSize);
-                    const formattedSize = isNaN(sizeNum) ? "분석 중..." : (sizeNum / (1024 * 1024)).toFixed(2) + " MB";
+                    if (seenPaths.has(filePath)) continue;
+                    seenPaths.add(filePath);
 
-                    const datePart = parts[parts.length - 3];
                     const timePart = parts[parts.length - 2];
+                    const datePart = parts[parts.length - 3];
+                    const rawSize = parts[parts.length - 4];
+
+                    const fileName = filePath.split('/').pop();
+                    const sizeNum = parseInt(rawSize);
+                    const formattedSize = isNaN(sizeNum) ? "분석 중" : (sizeNum / (1024 * 1024)).toFixed(2) + " MB";
 
                     allApkData.push({
-                        packageName: 'com.android.pkg.' + fileName.replace('.apk', ''),
-                        fileName: fileName,
+                        packageName: fileName,
                         apkPath: filePath,
-                        cachedTitle: fileName,
                         fileSize: formattedSize,
                         installDate: `${datePart} ${timePart}`,
-                        isSideloaded: true,
                         isApkFile: true,
-                        requestedList: [
-                            'android.permission.INTERNET',
-                            'android.permission.READ_EXTERNAL_STORAGE',
-                            'android.permission.REQUEST_INSTALL_PACKAGES'
-                        ],
-                        requestedCount: 3
+                        isRunningBg: false,
+                        isSideloaded: true,
+                        requestedCount: 3,
+                        requestedList: ['android.permission.INTERNET', 'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.REQUEST_INSTALL_PACKAGES']
                     });
                 }
             } catch (e) {
-                console.error(`${searchPath} 검색 실패:`, e);
+                console.error(`${searchPath} 검색 실패:`, e.message);
             }
         }
         return allApkData;

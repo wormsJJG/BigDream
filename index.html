@@ -80,18 +80,23 @@
             <ul class="nav-menu">
                 <li id="nav-create" class="nav-item active"><span>검사생성</span></li>
                 <li id="nav-open" class="nav-item"><span>검사열기</span></li>
+                <div id="ios-sub-menu" class="hidden" style="display: none;">
+                    <li class="nav-item res-tab" data-target="res-summary"><span>📊 검사 결과 </span></li>
+                    <li class="nav-item res-tab" data-target="res-threats"><span>🔍 iOS 5대 핵심 영역</span></li>
+                    <li class="nav-item res-tab" data-target="res-apps"><span>📲 검사 대상 앱 목록</span></li>
+                </div>
 
                 <div id="result-sub-menu" class="hidden">
                     <li class="nav-item res-tab" data-target="res-summary"><span>📊 기기 정보 및 탐지 결과</span></li>
                     <li class="nav-item res-tab" data-target="res-apps"><span>📲 설치된 앱</span></li>
-                    <li class="nav-item res-tab" data-target="res-background"><span>🚀 백그라운드 실행 앱</span></li>
-                    <li class="nav-item res-tab" data-target="res-apk"><span>📂 발견된 설치 파일</span></li>
-                    <li class="nav-item res-tab" data-target="res-privacy" style="display: none;"><span>🔒 개인정보 유출
-                            위협</span></li>
-                    <li class="nav-item res-tab" data-target="res-network" style="display: none;"><span>🌐 네트워크 패킷
-                            분석</span></li>
-                    <li class="nav-item res-tab" data-target="res-threats" style="display: none;"><span>⚠️ 기기 보안
-                            위협</span></li>
+                    <li class="res-tab nav-item" data-target="res-background"><span>🚀 백그라운드 실행 앱</span></li>
+                    <li class="res-tab nav-item" data-target="res-apk"><span>📂 발견된 설치 파일</span></li>
+                    <li class="res-tab nav-item" data-target="res-privacy" style="display: none !important;"><span>🔒
+                            개인정보 유출 위협</span></li>
+                    <li class="res-tab nav-item" data-target="res-network" style="display: none !important;"><span>🌐
+                            네트워크 패킷 분석</span></li>
+                    <li class="res-tab nav-item" data-target="res-threats" style="display: none !important;"><span>⚠️ 기기
+                            보안 위협</span></li>
                 </div>
             </ul>
             <div class="sidebar-footer">
@@ -230,6 +235,8 @@
                     <div id="res-apps" class="result-content-section">
                         <div class="content-card">
                             <h3>📲 설치된 애플리케이션</h3>
+                            <p id="ios-app-list-description" class="sub-text"
+                                style="display: none; margin-bottom: 15px; color: #666;"></p>
                             <div id="app-grid-container" class="app-grid"></div>
                         </div>
                     </div>
@@ -259,8 +266,9 @@
 
                     <div id="res-threats" class="result-content-section">
                         <div class="content-card">
-                            <h3>⚠️ 기기 보안 위협</h3>
-                            <p class="sub-text">시스템 설정 취약점 및 MVT 포렌식 분석 결과입니다.</p>
+                            <h3 id="res-threats-title">⚠️ 기기 보안 위협</h3>
+                            <p id="res-threats-desc" class="sub-text">시스템 설정 취약점 및 MVT 포렌식 분석 결과입니다.</p>
+
                             <div id="mvt-analysis-container">분석 준비 중...</div>
                         </div>
                     </div>
