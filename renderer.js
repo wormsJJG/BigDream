@@ -20,7 +20,6 @@ import {
     limit  // ★ [수정 1] 비정상 로그 불러올 때 필요한 limit 추가
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-const CURRENT_APP_VERSION = '1.0.1'
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
@@ -616,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const privacyNotice = document.getElementById('privacy-footer-notice');
             if (privacyNotice) {
-                privacyNotice.style.display = 'block'; 
+                privacyNotice.style.display = 'block';
             }
             console.log(`[Tab Switch] ${targetId} 전환 성공`);
         });
@@ -898,22 +897,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 // ★ 핵심: 부모에게 '연결됨' 명찰만 달아줍니다.
                 // 그러면 CSS가 알아서 녹색 체크 SVG를 보여줍니다.
                 wrapper.classList.add('state-connected');
-                
+
                 alertTitle.innerHTML = 'DEVICE<br>READY'; // 폰 화면 멘트 변경
-            } 
+            }
             else if (status === 'unauthorized') {
                 // ★ 핵심: 부모에게 '인증 대기' 명찰을 달아줍니다.
                 // CSS가 자물쇠 SVG를 보여줍니다.
                 wrapper.classList.add('state-unauthorized');
-                
+
                 alertTitle.innerHTML = 'WAITING<br>AUTH';
-            } 
+            }
             else {
                 // 여기가 바로 이사님이 찾으시던 '연결 전(disconnected)' 상태입니다.
                 // ★ 핵심: 부모에게 '연결 끊김' 명찰을 달아줍니다.
                 // CSS가 플러그 SVG를 보여줍니다.
                 wrapper.classList.add('state-disconnected');
-                
+
                 alertTitle.innerHTML = 'CONNECT<br>DEVICE';
             }
         }
@@ -1085,8 +1084,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const totalDurationMs = targetMinutes * 60 * 1000;
 
                 // 앱 하나당 보여줄 분석 시간
-                const timePerApp = targetMinutes > 0 
-                    ? Math.max(35, totalDurationMs / totalApps) 
+                const timePerApp = targetMinutes > 0
+                    ? Math.max(35, totalDurationMs / totalApps)
                     : 35;
 
                 console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp / 1000).toFixed(2)}초 소요`);
@@ -1243,55 +1242,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // [새로 추가] 스마트폰 화면을 초기 상태로 되돌리는 함수
         resetSmartphoneUI() {
-        // 1. 안전하게 요소 찾기 (유지)
-        const scanScreen = document.getElementById('scan-progress-screen');
-        if (!scanScreen) return;
-        const screen = scanScreen.querySelector('.phone-screen');
-        if (!screen) return;
+            // 1. 안전하게 요소 찾기 (유지)
+            const scanScreen = document.getElementById('scan-progress-screen');
+            if (!scanScreen) return;
+            const screen = scanScreen.querySelector('.phone-screen');
+            if (!screen) return;
 
-        // 2. 배경색 초기화 (finishScan이 칠한 녹색 배경 제거)
-        screen.style.backgroundColor = ''; 
+            // 2. 배경색 초기화 (finishScan이 칠한 녹색 배경 제거)
+            screen.style.backgroundColor = '';
 
-        const icon = screen.querySelector('.hack-icon');
-        const alertText = screen.querySelector('.hack-alert');
-        const statusList = screen.querySelector('div[style*="margin-top:20px"]');
+            const icon = screen.querySelector('.hack-icon');
+            const alertText = screen.querySelector('.hack-alert');
+            const statusList = screen.querySelector('div[style*="margin-top:20px"]');
 
-        if (icon) {
-            icon.className = 'hack-icon'; 
-            
-            // finishScan이 덧칠했던 '녹색 페인트'를 지우기
-            icon.style.color = ''; 
-            
-        }
+            if (icon) {
+                icon.className = 'hack-icon';
 
-        // 3. 텍스트 초기화
-        if (alertText) {
-            // 문구 원복
-            alertText.innerHTML = 'SYSTEM<br>SCANNING';
-            
-            // finishScan이 덧칠했던 '녹색 페인트'와 '녹색 그림자'를 지우기
-            // 이 코드가 있어야 텍스트가 다시 원래의 파란색으로 돌아옴
-            alertText.style.color = '';
-            alertText.style.textShadow = '';
-        }
+                // finishScan이 덧칠했던 '녹색 페인트'를 지우기
+                icon.style.color = '';
 
-        // 4. 하단 목록 초기화
-        if (statusList) {
-            statusList.innerHTML = `
+            }
+
+            // 3. 텍스트 초기화
+            if (alertText) {
+                // 문구 원복
+                alertText.innerHTML = 'SYSTEM<br>SCANNING';
+
+                // finishScan이 덧칠했던 '녹색 페인트'와 '녹색 그림자'를 지우기
+                // 이 코드가 있어야 텍스트가 다시 원래의 파란색으로 돌아옴
+                alertText.style.color = '';
+                alertText.style.textShadow = '';
+            }
+
+            // 4. 하단 목록 초기화
+            if (statusList) {
+                statusList.innerHTML = `
                 [!] 비정상 권한 접근 탐지...<br>
                 [!] 실시간 프로세스 감시...<br>
                 [!] AI 기반 지능형 위협 분석 중...`;
-        }
+            }
 
-        // 5. 입자 재활성화
-        const particles = document.querySelectorAll('.data-particle');
-        particles.forEach(p => {
-            p.style.display = 'block';
-            p.style.opacity = '1';
-        });
-        
-        console.log("[UI] 스마트폰 화면이 초기 상태로 리셋되었습니다.");
-    },
+            // 5. 입자 재활성화
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.display = 'block';
+                p.style.opacity = '1';
+            });
+
+            console.log("[UI] 스마트폰 화면이 초기 상태로 리셋되었습니다.");
+        },
 
         finishScan(data) {
             console.log("--- 검사 종료: 결과 대시보드 준비 ---");
@@ -1315,13 +1314,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 배경색을 신뢰감 있는 짙은 색으로 변경
                 phoneScreen.style.backgroundColor = '#0f172a';
-                
+
                 // 아이콘을 녹색 체크 표시로 변경
                 if (icon) {
-                    icon.style.color = '#27c93f'; 
+                    icon.style.color = '#27c93f';
                     icon.style.animation = 'none'; // 깜빡임 중지
                 }
-                
+
                 // 문구 변경: SCANNING -> SAFE
                 if (alertText) {
                     alertText.innerHTML = 'SCAN<br>COMPLETED';
@@ -1342,7 +1341,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ViewManager.updateProgress(100, "분석 완료! 리포트를 생성합니다.");
 
             setTimeout(() => {
-              
+
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
             }, 1500); // 1초 뒤 결과 화면으로 전환
@@ -1452,23 +1451,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // (4) 발견된 설치 파일(APK) (설치 파일 탭)
                     if (apkGrid) {
-                        apkGrid.innerHTML = '';
-                        const apkFiles = data.apkFiles || [];
-                        const seenPaths = new Set();
-                        if (apkFiles.length > 0) {
-                            apkFiles.forEach((apkObject) => {
-                                if (seenPaths.has(apkObject.apkPath)) return;
-                                seenPaths.add(apkObject.apkPath);
-
-                                apkObject.cachedTitle = apkObject.packageName;
-
-                                apkObject.cachedIconUrl = './assets/systemAppLogo.png';
-
-                                this.createAppIcon(apkObject, apkGrid);
-                            });
-                        } else {
-                            apkGrid.innerHTML = '<p style="padding:20px; color:#999; text-align:center; width:100%;">발견된 APK 설치 파일이 없습니다.</p>';
-                        }
+                        this.renderApkList(data.apkFiles || [], apkGrid)
                     }
 
                     // 초기 화면 설정: 요약 섹션만 보이고 나머지는 숨김
@@ -1492,6 +1475,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 현재 모드에 맞는 첫 번째 탭만 활성화
                 firstTab.classList.add('active');
             }
+        },
+
+        renderApkList(apkFiles, container) {
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (!apkFiles || apkFiles.length === 0) {
+                container.innerHTML = '<p style="padding:20px; color:#999; text-align:center; width:100%;">발견된 APK 설치 파일이 없습니다.</p>';
+                return;
+            }
+
+            apkFiles.forEach(apk => {
+                const div = document.createElement('div');
+                div.className = 'app-item apk-file-item'; // APK 전용 스타일 구분 가능하도록 클래스 추가
+
+                // 권한 이름만 추출하여 콤마로 연결 (상세보기 전 요약용)
+                const permSummary = apk.requestedList && apk.requestedList.length > 0
+                    ? apk.requestedList.map(p => p.split('.').pop()).slice(0, 3).join(', ') + '...'
+                    : '요구 권한 없음';
+
+                div.innerHTML = `
+            <div class="app-icon-wrapper">
+                <img src="./assets/systemAppLogo.png" style="width:100%; height:100%; object-fit:contain;">
+            </div>
+            <div class="app-display-name">${apk.packageName}</div>
+            <div class="app-package-sub">${apk.fileSize || '용량 확인 중'}</div>
+            <div style="font-size:10px; color:#f0ad4e; margin-top:4px;">요구권한 ${apk.requestedCount}개</div>
+        `;
+
+                // 클릭 시 AppDetailManager를 통해 상세 권한 목록 표시
+                div.addEventListener('click', () => {
+                    // 기존 상세 로직에 apk.isApkFile = true가 있으므로 
+                    // AppDetailManager.show가 권한 리스트를 한글로 잘 보여줄 것입니다.
+                    AppDetailManager.show(apk, apk.packageName);
+                });
+
+                container.appendChild(div);
+            });
         },
 
         // [MVT 분석 박스 렌더링 함수]
@@ -1851,35 +1872,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 3. [분기 로직]발견된 설치 파일(APK) vs 일반 앱
             if (app.isApkFile) {
-                // --- A. APK 파일 (미설치 파일) 상세 설정 ---
 
-                // 라벨 텍스트 변경 (사용자에게 더 정확한 정보 제공)
                 if (bgLabel) bgLabel.textContent = "저장 일시";
                 if (netLabel) netLabel.textContent = "파일 크기";
 
-                // 설치 출처 영역에 파일 경로 표시
                 if (sideloadEl) {
                     sideloadEl.innerHTML = `외부 설치 (미설치 파일)<br><span style="font-size:11px; color:#888; font-family:monospace; word-break:break-all;">${app.apkPath || '-'}</span>`;
                 }
-
-                // 저장 일시 표시 (ResultsRenderer에서 보낸 installDate 연결)
                 if (bgStatusEl) {
                     bgStatusEl.innerHTML = `${app.installDate || '-'}<br><span style="font-size:11px; color:#d9534f;">(기기 내 파일 저장 시점)</span>`;
                 }
-
-                // 파일 크기 표시 (ResultsRenderer에서 보낸 fileSize 연결)
                 if (networkEl) {
                     networkEl.innerHTML = `${app.fileSize || '분석 중'}<br><span style="font-size:11px; color:#888;">(APK 패키지 용량)</span>`;
                 }
 
-                // 버튼 제어: 무력화는 숨기고 '영구 삭제' 노출
                 if (neutralizeBtnEl) neutralizeBtnEl.style.setProperty('display', 'none', 'important');
                 if (uninstallBtnEl) {
                     uninstallBtnEl.style.display = 'flex';
                     uninstallBtnEl.textContent = "🗑️ APK 파일 영구 삭제";
                 }
 
-                // 권한 숫자 표시 (주입한 가상 데이터 기반)
                 document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
                 document.getElementById('detail-grant-count').textContent = "-";
 

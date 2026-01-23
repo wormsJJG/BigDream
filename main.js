@@ -17,6 +17,7 @@ const { exec, spawn } = require('child_process');
 const { autoUpdater } = require("electron-updater");
 const log = require('electron-log');
 const { EventEmitter } = require('events');
+const ApkReader = require('adbkit-apkreader');
 
 const aiEvents = new EventEmitter();
 aiEvents.setMaxListeners(0);
@@ -210,7 +211,7 @@ function createWindow() {
         width: 1280,
         height: 850,
         webPreferences: {
-            devTools: false,
+            devTools: true,
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false
@@ -333,6 +334,15 @@ ipcMain.handle('run-scan', async () => {
         const apkFiles = await AndroidService.findApkFiles(serial);
         const networkMap = await AndroidService.getNetworkUsageMap(serial);
 
+        const processedApks = await Promise.all(apkFiles.map(async (apk) => {
+        const perms = await AndroidService.getApkPermissionsOnly(serial, apk.apkPath);
+        return {
+            ...apk,
+            requestedList: perms, // 화면에 보여줄 권한 리스트
+            requestedCount: perms.length
+        };
+        }));
+
         const processedApps = [];
 
         // 20개씩 병렬 처리
@@ -418,12 +428,12 @@ ipcMain.handle('run-scan', async () => {
 
         // [Step E] (선택) VirusTotal 2차 정밀 검사
         if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
-          const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
-          console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
-          await AndroidService.runVirusTotalCheck(serial, vtTargets);
+            const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
+            console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
+            await AndroidService.runVirusTotalCheck(serial, vtTargets);
         }
 
-        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles };
+        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles: processedApks };
 
     } catch (err) {
         console.error(err);
@@ -1302,123 +1312,40 @@ const AndroidService = {
             }
         }
     },
-    // (추가) 해당 패키지가 접근성 활성인지
-    async isAccessibilityEnabledForPackage(serial, packageName, cachedServicesString = null) {
-        let s = cachedServicesString;
 
-        if (s == null) {
-            s = await AndroidService.getEnabledAccessibilityServices(serial);
-        }
-
-        // 무조건 문자열로 강제
-        if (typeof s !== "string") {
-            try { s = String(s); } catch { return false; }
-        }
-
-        if (!s || s === "null") return false;
-
-        const items = s.split(":").map(x => x.trim()).filter(Boolean);
-        return items.some(x => x.startsWith(packageName + "/") || x === packageName);
-    },
-
-    // ---------------------------
-    // (추가, 옵션) AppOps가 실제 허용인지 확인
-    // overlay는 "SYSTEM_ALERT_WINDOW"
-    async getAppOpAllowed(serial, packageName, op) {
-        // appops 출력은 기기/버전에 따라 다름.
-        // 예) "SYSTEM_ALERT_WINDOW: allow"
-        // 예) "SYSTEM_ALERT_WINDOW: deny"
-        // 예) "SYSTEM_ALERT_WINDOW: default"
+    async getApkPermissionsOnly(serial, remotePath) {
+        let tempPath = null;
         try {
-            const out = await this.adbShell(serial, `appops get ${packageName} ${op}`);
-            const line = (out || "").toLowerCase();
-            if (line.includes("allow")) return true;
-            if (line.includes("deny")) return false;
-            // default면 확정 불가 -> false 취급(오탐 방지)
-            return false;
-        } catch {
-            // 접근 불가/실패 -> false 취급(오탐 방지)
-            return false;
-        }
-    },
-    async getEnabledAccessibilityServices(serial) {
-        try {
-            const s = await AndroidService.adbShell(
-                serial,
-                "settings get secure enabled_accessibility_services"
-            );
+            // 1. 임시 파일 경로 설정
+            tempPath = path.join(os.tmpdir(), `extract_${Date.now()}.apk`);
+            
+            // 2. ADB Pull로 기기 내 APK를 PC 임시 폴더로 복사
+            const transfer = await client.pull(serial, remotePath);
+            await new Promise((resolve, reject) => {
+                const fn = fs.createWriteStream(tempPath);
+                transfer.on('end', () => fn.end());
+                transfer.on('error', reject);
+                fn.on('finish', resolve);
+                transfer.pipe(fn);
+            });
 
-            if (!s || s === "null") return "";
-            return String(s);
+            // 3. APK Manifest 읽기
+            const reader = await ApkReader.open(tempPath);
+            const manifest = await reader.readManifest();
+            
+            // 4. 권한 리스트 추출
+            const permissions = (manifest.usesPermissions || []).map(p => p.name);
+            
+            // 5. 임시 파일 삭제
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+
+            return permissions;
         } catch (e) {
-            return "";
-        }
-    },
-    async getSigningInfo(serial, packageName) {
-        try {
-            const dumpsys = await AndroidService.adbShell(serial, `dumpsys package ${packageName}`);
-
-            // 1) SigningInfo 영역에서 certificate digest 패턴 찾기
-            // 예: "SHA-256 digest: 12:34:..."
-            const sha256Match = dumpsys.match(/SHA-256 digest:\s*([0-9A-Fa-f:]+)/);
-            const sha256 = sha256Match ? sha256Match[1].replace(/:/g, "").toLowerCase() : null;
-
-            // 2) Subject / Issuer 같은 문자열이 있는 경우(일부 기기)
-            const issuerMatch = dumpsys.match(/Issuer:\s*(.*)/i);
-            const subjectMatch = dumpsys.match(/Subject:\s*(.*)/i);
-
-            const issuer = issuerMatch ? issuerMatch[1].trim() : null;
-            const subject = subjectMatch ? subjectMatch[1].trim() : null;
-
-            return { sha256, issuer, subject };
-        } catch {
-            return { sha256: null, issuer: null, subject: null };
-        }
-    },
-    async hasLauncherActivity(serial, packageName) {
-        try {
-            // cmd package resolve-activity는 일부 기기에서 잘 됨
-            const out = await AndroidService.adbShell(
-                serial,
-                `cmd package resolve-activity --brief ${packageName}`
-            );
-
-            // 정상이라면 컴포넌트가 찍힘
-            // 결과가 empty/No activity면 런처 없음으로 봄
-            if (!out) return false;
-            const low = out.toLowerCase();
-            if (low.includes("no activity") || low.includes("not found")) return false;
-
-            return true;
-        } catch {
-            // 실패하면 런처 있음으로 보수 처리(오탐 방지)
-            return true;
-        }
-    },
-    // ✅ Device Admin 활성 여부(강한 악성 신호)
-    async isDeviceAdminActive(serial, packageName) {
-        try {
-            const out = await AndroidService.adbShell(serial, "dumpsys device_policy");
-            const low = (out || "").toLowerCase();
-            return low.includes(packageName.toLowerCase());
-        } catch {
-            return false;
-        }
-    },
-    // ✅ Notification Listener 활성 여부
-    async isNotificationListenerEnabled(serial, packageName) {
-        try {
-            const s = await AndroidService.adbShell(
-                serial,
-                "settings get secure enabled_notification_listeners"
-            );
-            if (!s || s === "null") return false;
-            return String(s).toLowerCase().includes(packageName.toLowerCase());
-        } catch {
-            return false;
+            console.error(`APK 권한 추출 실패 (${remotePath}):`, e);
+            if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            return [];
         }
     }
-
 };
 
 // ============================================================
