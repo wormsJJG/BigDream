@@ -1049,7 +1049,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ScanController = {
         currentLogId: null,
 
-        // [추가] 레이저 애니메이션을 제어하는 함수
+        // 레이저 애니메이션을 제어하는 함수
         toggleLaser(isVisible) {
             // 레이저 빔 제어
             const beam = document.getElementById('scannerBeam');
@@ -1057,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 beam.style.display = isVisible ? 'block' : 'none';
             }
         },
-        // ★★★ [수정됨] 실제 앱 목록을 활용한 정밀 검사 연출 ★★★
+        //실제 앱 목록을 활용한 정밀 검사 연출 
         async startAndroidScan() {
             this.toggleLaser(true);
             this.resetSmartphoneUI();
@@ -1066,7 +1066,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
                 ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
 
-                // 2. 데이터 확
+                // 2. 실제 데이터 수집
                 const scanData = await window.electronAPI.runScan();
                 const apps = scanData.allApps || [];
                 const totalApps = apps.length;
@@ -1079,10 +1079,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // 시간 계산
-                // [시간 계산 로직]
-                const targetMinutes = State.androidTargetMinutes || 0;
-                const totalDurationMs = targetMinutes * 60 * 1000;
+                let targetMinutes;
+                
+                if (State.userRole === 'user') {
+                    // 일반 계정: 보안 정책상 20~30분 사이의 랜덤값 강제 부여
+                    targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
+                    console.log(`[Security Policy] 일반 업체 - 랜덤 시간 적용: ${targetMinutes}분`);
+                } else {
+                    // 관리자(admin) 및 총판(distributor): 설정된 히든 메뉴 값 사용 (없으면 0)
+                    targetMinutes = State.androidTargetMinutes || 0;
+                    console.log(`[Security Policy] 특권 계정 - 설정 시간 적용: ${targetMinutes}분`);
+                }
 
+                const totalDurationMs = targetMinutes * 60 * 1000;
                 // 앱 하나당 보여줄 분석 시간
                 const timePerApp = targetMinutes > 0
                     ? Math.max(35, totalDurationMs / totalApps)
@@ -1092,14 +1101,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 let currentIndex = 0;
 
-                // ★ 애니메이션 루프 함수
+                // 애니메이션 루프 함수
                 // [3단계] 애니메이션 루프 함수
                 const processNextApp = () => {
                     // 종료 조건: 모든 앱 분석이 끝났을 때
                     if (currentIndex >= totalApps) {
                         console.log(`[Theater Mode] 검사 완료: 총 ${totalApps}개 분석됨`);
                         this.toggleLaser(false); // 레이저 정지
-                        this.finishScan(scanData); // 완료 처리 (여기서 'SCAN COMPLETED'로 변경)
+                        this.finishScan(scanData); // 완료 처리 
                         return;
                     }
 
@@ -1124,6 +1133,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 루프 시작
                 processNextApp();
+                
             } catch (error) {
                 // 에러 발생 시 레이저를 끄고 에러 핸들링
                 this.toggleLaser(false);
@@ -2427,44 +2437,45 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     if (adminTriggers.length > 0 && adminModal) {
-        console.log(`✅ 히든 메뉴 시스템 활성화됨`);
+        console.log(`✅ 히든 메뉴 시스템 활성화됨 (시간 설정 전용)`);
 
-        // 더블클릭 트리거
         adminTriggers.forEach(trigger => {
             trigger.style.userSelect = 'none';
             trigger.style.cursor = 'default';
 
             trigger.addEventListener('dblclick', async () => {
-                // 로그인 & 상태 체크 (기존과 동일)
+                // 1. 로그인 상태 확인
                 const loggedInView = document.getElementById('logged-in-view');
-                if (!loggedInView.classList.contains('active')) return;
+                if (!loggedInView || !loggedInView.classList.contains('active')) return;
 
+                // 2. 검사 중 또는 결과 화면 시 차단 (안전 장치)
                 const progressScreen = document.getElementById('scan-progress-screen');
-                if (progressScreen && progressScreen.classList.contains('active')) {
-                    await CustomUI.alert("🚫 검사 중에는 변경 불가"); return;
-                }
                 const resultScreen = document.getElementById('scan-results-screen');
+
+                if (progressScreen && progressScreen.classList.contains('active')) {
+                    await CustomUI.alert("🚫 검사 중에는 설정을 변경할 수 없습니다.");
+                    return;
+                }
                 if (resultScreen && resultScreen.classList.contains('active')) {
-                    await CustomUI.alert("🚫 결과 화면에서는 변경 불가"); return;
+                    await CustomUI.alert("🚫 결과 화면에서는 설정을 변경할 수 없습니다.");
+                    return;
                 }
 
-                document.querySelectorAll('.nav-item').forEach(item => {
-                    item.classList.remove('active');
-                });
+                // 3. 권한별 분기 로직
+                // 💡 관리자(admin)와 총판(distributor) 둘 다 '시간 설정 모달'만 띄웁니다.
+                if (State.userRole === 'admin' || State.userRole === 'distributor') {
+                    const adminModalEl = document.getElementById('admin-modal');
+                    const adminInputEl = document.getElementById('admin-input');
 
-                const privacyNotice = document.getElementById('privacy-footer-notice');
-                if (privacyNotice) {
-                    privacyNotice.style.display = 'none';
+                    if (adminModalEl && adminInputEl) {
+                        adminInputEl.value = State.androidTargetMinutes || 0;
+                        adminModalEl.classList.remove('hidden');
+                        console.log(`[${State.userRole}] 검사 시간 설정창 오픈`);
+                    }
+                } else {
+                    console.log("일반 업체 계정: 설정 변경 권한이 없습니다.");
                 }
-
-                // 2. 관리자 화면으로 전환
-                ViewManager.showScreen(loggedInView, 'admin-screen');
-
-                // 4. 관리자 초기 탭 설정
-                AdminManager.switchTab('admin-tab-register');
-
-                console.log("관리자 모드 진입: 모든 사이드바 탭 강조 초기화 완료");
-            });
+            }); // addEventListener 닫기
         });
 
         // 저장 버튼 이벤트 교체
@@ -3095,22 +3106,25 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
 
             // 1. 입력값 가져오기
-            const nameInput = document.getElementById('new-user-name'); // 업체명 요소
+            const nameInput = document.getElementById('new-user-name');
             const idInput = document.getElementById('new-user-id');
             const pwdInput = document.getElementById('new-user-pwd');
             const quotaInput = document.getElementById('new-user-quota');
+            const roleSelect = document.getElementById('user-role-select');
 
-            const companyName = nameInput.value.trim(); // ★ 업체명
+            const companyName = nameInput.value.trim(); // 업체명
             const inputId = idInput.value.trim();
             const password = pwdInput.value;
+            const selectedRole = roleSelect.value; // 'user', 'distributor', 'admin'
 
-            // ★ 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
+            // 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
             let quota = parseInt(quotaInput.value, 10);
             if (isNaN(quota)) quota = 40;
 
             const fullEmail = inputId + ID_DOMAIN;
 
-            // 확인창
+            // 생성 확인 메시지에 유형 정보 포함
+            const roleText = roleSelect.options[roleSelect.selectedIndex].text;
             if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n기본 횟수: ${quota}회`)) return;
 
             // 보조 앱을 이용한 생성
@@ -3123,14 +3137,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const userCred = await createUserWithEmailAndPassword(secondaryAuth, fullEmail, password);
                 const newUser = userCred.user;
 
-                // ★★★ [수정됨] Firestore에 업체명과 횟수 저장 ★★★
+                // Firestore에 업체명과 횟수 저장
                 await setDoc(doc(db, "users", newUser.uid), {
-                    companyName: companyName, // [추가] 업체명
+                    companyName: companyName, // 업체명
                     userId: inputId,          // 아이디
                     email: fullEmail,         // 이메일(풀버전)
-                    role: 'user',             // 권한
+                    role: selectedRole,             // 권한
                     isLocked: false,          // 잠금여부
-                    quota: quota,             // [확인] 검사 횟수 저장
+                    quota: quota,             // 검사 횟수 저장
                     android_scan_duration: 0,
                     createdAt: new Date(),
                     lastScanDate: null
