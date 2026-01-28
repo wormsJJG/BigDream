@@ -1697,7 +1697,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 listHtml += `
                 <div class="ios-app-item">
                     <strong class="app-title">${displayName}</strong>
-                    <span class="app-package">${app.packageName}</span>
                 </div>
             `;
             });
@@ -1720,7 +1719,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="app-fallback-icon" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:24px;">📱</span>
                 </div>
                 <div class="app-display-name">${initialName}</div>
-                <div class="app-package-sub">${app.packageName}</div>
             `;
 
             const imgTag = div.querySelector('.app-real-icon');
