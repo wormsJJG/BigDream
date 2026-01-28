@@ -774,6 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
             if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+                // 1. 네비게이션 메뉴 상태 복구
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
 
@@ -789,16 +790,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     subMenu.classList.remove('active');
                 }
 
+                const iosSubMenu = document.getElementById('ios-sub-menu');
+                if (iosSubMenu) {
+                    iosSubMenu.classList.add('hidden');
+                    iosSubMenu.style.display = 'none';
+                }
+
+                // 화면에 그려진 리스트 컨테이너들을 물리적으로 비움
+                const containers = [
+                    'app-grid-container',
+                    'bg-app-grid-container',
+                    'apk-grid-container',
+                    'suspicious-list-container',
+                    'mvt-analysis-container'
+                ];
+
+                containers.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '';
+                });
+
+                // 기기 정보 텍스트들도 초기화
+                const infoFields = ['res-model', 'res-serial', 'res-phone', 'res-root'];
+                infoFields.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = '-';
+                });
+
+                // 2. 상태값 및 화면 전환
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'create-scan-screen');
 
+                // 3. 버튼 상태 복구 및 입력폼 초기화
                 const realStartScanBtn = document.getElementById('real-start-scan-btn');
                 if (realStartScanBtn) {
                     realStartScanBtn.disabled = false;
                     realStartScanBtn.textContent = '검사 시작하기';
                 }
+
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
+
+                console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
             }
         });
     }
@@ -1080,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 시간 계산
                 let targetMinutes;
-                
+
                 if (State.userRole === 'user') {
                     // 일반 계정: 보안 정책상 20~30분 사이의 랜덤값 강제 부여
                     targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
@@ -1133,7 +1166,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 루프 시작
                 processNextApp();
-                
+
             } catch (error) {
                 // 에러 발생 시 레이저를 끄고 에러 핸들링
                 this.toggleLaser(false);
@@ -1370,6 +1403,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const ResultsRenderer = {
         render(data) {
             console.log("ResultsRenderer.render 시작", data);
+
+            const containers = [
+                'app-grid-container',
+                'bg-app-grid-container',
+                'apk-grid-container',
+                'suspicious-list-container',
+                'mvt-analysis-container'
+            ];
+            containers.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '';
+            });
+
+            // 2. 모든 결과 섹션을 일단 숨김 처리 
+            document.querySelectorAll('.result-content-section').forEach(sec => {
+                sec.style.display = 'none';
+                sec.classList.remove('active');
+            });
+
+            // 3. 기기 정보 텍스트 초기화
+            ['res-model', 'res-serial', 'res-phone', 'res-root'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '-';
+            });
+
             const isIos = State.currentDeviceMode === 'ios';
 
             // 1. 공통 기기 정보 바인딩 (모델명, 시리얼 등)
@@ -1431,7 +1489,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // --- [Android 전용 렌더링 및 문구 복구] ---
                     // ==========================================
 
-                    // 1. 안드로이드 원래 문구로 복구 (iOS에서 바뀐 것 되돌리기)
+                    // 1. 안드로이드 원래 문구로 복구 
                     if (threatsTitle) threatsTitle.textContent = "⚠️ 기기 보안 위협";
                     if (threatsDesc) threatsDesc.textContent = "시스템 설정 취약점 및 분석 결과입니다.";
                     if (iosAppDesc) iosAppDesc.style.display = 'none'; // 안드로이드에선 숨김
@@ -1845,6 +1903,13 @@ document.addEventListener('DOMContentLoaded', () => {
         show(app, displayName) {
             console.log("상세 정보 표시 실행:", displayName, "유형:", app.isApkFile ? "APK" : "설치됨");
 
+            const iconWrapper = document.querySelector('.detail-icon-wrapper');
+
+            if (iconWrapper) {
+                iconWrapper.classList.remove('suspicious');
+                iconWrapper.innerHTML = '';
+            }
+
             // 1. 화면 전환 로직
             const dashboard = document.getElementById('results-dashboard-view');
             const detailView = document.getElementById('app-detail-view');
@@ -1945,12 +2010,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 5. 아이콘 처리
-            const iconWrapper = document.querySelector('.detail-icon-wrapper');
             if (iconWrapper) {
-                const iconSrc = app.cachedIconUrl || './assets/systemAppLogo.png';
+                const iconSrc = app.reason
+                    ? './assets/SpyAppLogo.png'
+                    : (app.cachedIconUrl || './assets/systemAppLogo.png');
+
+                if (app.reason) {
+                    iconWrapper.classList.add('suspicious');
+                }
+
+                // 데이터 세팅 완료 후 이미지 삽입
                 iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
             }
-
+        
             // 6. 권한 리스트 렌더링
             const list = document.getElementById('detail-permission-list');
             if (list) {
