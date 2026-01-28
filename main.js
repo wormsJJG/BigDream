@@ -39,6 +39,7 @@ autoUpdater.allowPrerelease = false;
 
 const CONFIG = {
     IS_DEV_MODE: false,
+    KEEP_BACKUP: false,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
     VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
     PATHS: {
         ADB: path.join(RESOURCE_DIR, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
@@ -46,7 +47,7 @@ const CONFIG = {
         IOS_ID: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevice_id.exe' : 'idevice_id'),
         IOS_INFO: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'ideviceinfo.exe' : 'ideviceinfo'),
         IOS_BACKUP: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevicebackup2.exe' : 'idevicebackup2'),
-        TEMP_BACKUP: path.join(app.getPath('temp'), 'bd_ios_backup'),
+        TEMP_BACKUP: path.join(app.getPath('userData'), 'iphone_backups'),
         MVT_RESULT: path.join(app.getPath('userData'), 'mvt_results'),
         LOGIN_CONFIG_PATH: path.join(app.getPath('userData'), 'login-info.json')
     }
@@ -335,12 +336,12 @@ ipcMain.handle('run-scan', async () => {
         const networkMap = await AndroidService.getNetworkUsageMap(serial);
 
         const processedApks = await Promise.all(apkFiles.map(async (apk) => {
-        const perms = await AndroidService.getApkPermissionsOnly(serial, apk.apkPath);
-        return {
-            ...apk,
-            requestedList: perms, // 화면에 보여줄 권한 리스트
-            requestedCount: perms.length
-        };
+            const perms = await AndroidService.getApkPermissionsOnly(serial, apk.apkPath);
+            return {
+                ...apk,
+                requestedList: perms, // 화면에 보여줄 권한 리스트
+                requestedCount: perms.length
+            };
         }));
 
         const processedApps = [];
@@ -464,6 +465,36 @@ ipcMain.handle('delete-apk-file', async (event, { serial, filePath }) => {
     } catch (e) {
         console.error("❌ 파일 삭제 실패:", e);
         return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('delete-ios-backup', async (event, udid) => {
+    console.log(`--- [Security] 삭제 요청 수신 (전달된 UDID: ${udid}) ---`);
+
+    // UDID가 비어있는지 가장 먼저 확인 (방어 코드)
+    if (!udid) {
+        console.error("❌ 삭제 실패: 전달받은 UDID가 없습니다. (State.currentUdid 확인 필요)");
+        return { success: false, error: "No UDID provided" };
+    }
+
+    // 💡 KEEP_BACKUP이 true면 그냥 리턴 (삭제 안 함)
+    if (CONFIG.KEEP_BACKUP) {
+        console.log(`[Maintenance] KEEP_BACKUP 활성화 상태: 파일을 유지합니다.`);
+        return { success: true };
+    }
+
+    try {
+        // 💡 위에서 정의한 CONFIG 경로를 그대로 사용
+        const specificPath = path.join(CONFIG.PATHS.TEMP_BACKUP, udid);
+
+        if (fs.existsSync(specificPath)) {
+            fs.rmSync(specificPath, { recursive: true, force: true });
+            console.log(`[Security] 배포 모드: 백업 데이터 파기 성공.`);
+        }
+        return { success: true };
+    } catch (err) {
+        console.error('[Security] 삭제 오류:', err.message);
+        return { success: false, error: err.message };
     }
 });
 
@@ -612,7 +643,10 @@ async function getIosDeviceInfo(udid) {
     };
 
     try {
-        const cmd = `ideviceinfo -u ${udid}`;
+        const toolDir = path.dirname(CONFIG.PATHS.IOS_BACKUP);
+        const ideviceinfoPath = path.join(toolDir, 'ideviceinfo.exe');
+        const cmd = `"${ideviceinfoPath}" -u ${udid}`;
+
         const output = await Utils.runCommand(cmd);
 
         const rawMap = {};
@@ -664,73 +698,89 @@ ipcMain.handle('run-ios-scan', async (event, udid) => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosScanResult();
 
     const { TEMP_BACKUP, MVT_RESULT, IOS_BACKUP } = CONFIG.PATHS;
+    const specificBackupPath = path.join(TEMP_BACKUP, udid);
 
     try {
-        // [Step 1] 기기 정보 먼저 가져오기 (백업 전에 수행해야 함)
-        const deviceInfo = await getIosDeviceInfo(udid);
-        console.log(`✅ [iOS] 기기 정보 획득: ${deviceInfo.model} (${deviceInfo.serial})`);
+        // [Step 1] 기존에 '완전한' 백업이 이미 있는지 체크
+        let isBackupComplete = fs.existsSync(path.join(specificBackupPath, 'Status.plist'));
 
-        // [Step 2] 폴더 초기화
-        Utils.cleanDirectory(MVT_RESULT);
-        if (!fs.existsSync(MVT_RESULT)) fs.mkdirSync(MVT_RESULT);
-        if (!fs.existsSync(TEMP_BACKUP)) fs.mkdirSync(TEMP_BACKUP);
+        if (!isBackupComplete) {
+            console.log("[iOS] 신규 검사를 위해 백업을 시작합니다...");
 
-        const specificBackupPath = path.join(TEMP_BACKUP, udid);
-        const isBackupExists = fs.existsSync(path.join(specificBackupPath, 'Info.plist')) ||
-            fs.existsSync(path.join(specificBackupPath, 'Status.plist'));
+            // 💡 [좀비 프로세스 방지] 시작 전 관련 도구가 돌고 있다면 강제 종료
+            try {
+                await Utils.runCommand('taskkill /F /IM idevicebackup2.exe /T').catch(() => { });
+                await Utils.runCommand('taskkill /F /IM ideviceinfo.exe /T').catch(() => { });
+            } catch (e) { }
 
-        // [Step 3] 백업 수행 (없으면 새로, 있으면 패스)
-        if (isBackupExists) {
-            console.log(`[iOS] 기존 백업 발견됨. 백업 과정을 건너뜁니다.`);
+            // 폴더 초기화
+            if (fs.existsSync(specificBackupPath)) {
+                fs.rmSync(specificBackupPath, { recursive: true, force: true });
+            }
+            if (!fs.existsSync(TEMP_BACKUP)) fs.mkdirSync(TEMP_BACKUP, { recursive: true });
 
-            if (deviceInfo.phoneNumber === '-') {
-                try {
-                    const plistContent = fs.readFileSync(path.join(specificBackupPath, 'Info.plist'), 'utf8');
-                    const phoneMatch = plistContent.match(/<key>PhoneNumber<\/key>\s*<string>(.*?)<\/string>/);
-                    if (phoneMatch && phoneMatch[1]) {
-                        deviceInfo.phoneNumber = phoneMatch[1];
-                        console.log(`✅ [iOS] 백업 파일에서 전화번호 추가 확보: ${deviceInfo.phoneNumber}`);
-                    }
-                } catch (err) { }
+            // 10~20분 소요
+            const backupCmd = `"${IOS_BACKUP}" backup --full "${TEMP_BACKUP}" -u ${udid}`;
+
+            try {
+                await Utils.runCommand(backupCmd);
+                console.log("[iOS] 백업 명령어 수행 완료.");
+            } catch (backupErr) {
+                // 에러가 났더라도 Status.plist만 생겼다면 무시하고 진행
+                console.warn("[iOS] 백업 종료 과정에서 경고가 발생했으나, 데이터 무결성을 확인합니다...");
             }
 
-        } else {
-            console.log('[iOS] 기존 백업 없음. 새 백업 시작...');
-            Utils.cleanDirectory(specificBackupPath);
-            await Utils.runCommand(`"${IOS_BACKUP}" backup --full "${TEMP_BACKUP}" -u ${udid}`);
-            console.log('[iOS] 백업 완료.');
+            // 백업 완료 여부 재확인
+            isBackupComplete = fs.existsSync(path.join(specificBackupPath, 'Status.plist'));
         }
 
-        // [Step 4] MVT 분석 실행
-        console.log('3. MVT 분석 시작...');
-        let mvtCmd = `mvt-ios`;
+        // [Step 2] 백업 파일만 있다면 즉시 분석 엔진 가동 
+        if (isBackupComplete) {
+            console.log("[iOS] 🚀 데이터 확보 확인! 즉시 정밀 분석 단계로 전환합니다.");
 
-        const finalCmd = `${mvtCmd} check-backup --output "${MVT_RESULT}" "${specificBackupPath}"`;
+            // 분석에 필요한 기기 정보 로드 (에러 잘 나는 실시간 조회 대신 백업 파일에서 추출)
+            let deviceInfo = { model: 'iPhone', serial: udid, phoneNumber: '-', os: 'iOS' };
+            try {
+                const plistPath = path.join(specificBackupPath, 'Info.plist');
+                if (fs.existsSync(plistPath)) {
+                    const content = fs.readFileSync(plistPath, 'utf8');
+                    deviceInfo.model = content.match(/<key>Product Type<\/key>\s*<string>(.*?)<\/string>/)?.[1] || "iPhone";
+                    deviceInfo.phoneNumber = content.match(/<key>PhoneNumber<\/key>\s*<string>(.*?)<\/string>/)?.[1] || "-";
+                    const version = content.match(/<key>Product Version<\/key>\s*<string>(.*?)<\/string>/)?.[1];
+                    if (version) deviceInfo.os = `iOS ${version}`;
+                }
+            } catch (e) {
+                console.warn("기기 정보 추출 실패(무시하고 진행):", e.message);
+            }
 
-        try { await Utils.runCommand(finalCmd); } catch (e) { console.warn("MVT 실행 중 경고(무시가능):", e.message); }
+            // [Step 3] MVT 분석 실행
+            Utils.cleanDirectory(MVT_RESULT);
+            if (!fs.existsSync(MVT_RESULT)) fs.mkdirSync(MVT_RESULT);
 
-        // [Step 5] 결과 파싱
-        const results = IosService.parseMvtResults(MVT_RESULT);
+            console.log('3. MVT 분석 엔진 가동...');
+            const mvtCmd = `mvt-ios check-backup --output "${MVT_RESULT}" "${specificBackupPath}"`;
 
-        console.log('[iOS] 전체 프로세스 완료. 결과 반환.');
-        return results;
+            // 분석 도중 발생하는 사소한 경고는 무시하고 진행
+            await Utils.runCommand(mvtCmd).catch(e => console.warn("MVT 실행 중 경고 무시"));
+
+            // [Step 4] 결과 파싱 및 반환
+            const results = IosService.parseMvtResults(MVT_RESULT, deviceInfo);
+            console.log('[iOS] 전체 프로세스 완료. 결과 화면으로 넘어갑니다.');
+            return results;
+
+        } else {
+            // 백업 파일이 아예 생성되지 않은 진짜 에러 상황
+            throw new Error("백업 데이터가 생성되지 않았습니다. 아이폰 연결 상태를 확인해주세요.");
+        }
 
     } catch (err) {
-        console.error('iOS 검사 실패:', err);
-
-        let userMsg = err.message;
-        if (err.message.includes('not recognized') || err.message.includes('ideviceinfo')) {
-            userMsg = "필수 드라이버(iTunes/idevice) 또는 분석 도구가 설치되지 않았습니다.";
-        } else if (err.message.includes('python')) {
-            userMsg = "Python 또는 MVT가 설치되지 않았습니다.";
-        }
-
-        return { error: userMsg };
+        console.error('iOS 검사 프로세스 오류:', err.message);
+        return { error: "검사 실패: " + err.message };
     }
 });
 
 ipcMain.handle('saveScanResult', async (event, data) => {
-    // 💡 data: { deviceInfo: {...}, allApps: [...], ... } 전체 검사 결과 객체
+    // data: { deviceInfo: {...}, allApps: [...], ... } 전체 검사 결과 객체
     try {
         const { dialog } = require('electron');
 
@@ -1318,7 +1368,7 @@ const AndroidService = {
         try {
             // 1. 임시 파일 경로 설정
             tempPath = path.join(os.tmpdir(), `extract_${Date.now()}.apk`);
-            
+
             // 2. ADB Pull로 기기 내 APK를 PC 임시 폴더로 복사
             const transfer = await client.pull(serial, remotePath);
             await new Promise((resolve, reject) => {
@@ -1332,10 +1382,10 @@ const AndroidService = {
             // 3. APK Manifest 읽기
             const reader = await ApkReader.open(tempPath);
             const manifest = await reader.readManifest();
-            
+
             // 4. 권한 리스트 추출
             const permissions = (manifest.usesPermissions || []).map(p => p.name);
-            
+
             // 5. 임시 파일 삭제
             if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 

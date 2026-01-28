@@ -867,12 +867,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 3. 연결 없음 (기존 로직 유지)
+            // 3. 연결 없음 
             State.currentDeviceMode = null;
             this.setUI('disconnected', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
         },
 
-        // ★★★ [중요] 비주얼 연출을 위해 완전히 새로워진 setUI 함수 ★★★
         setUI(status, titleText, descText, color, showBtn = true) {
             // 1. 제어할 엘리먼트들 확보
             const wrapper = document.getElementById('connection-visual-wrapper'); // 폰+케이블 래퍼
@@ -882,35 +881,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const desc = document.getElementById('connection-status-desc');        // 하단 작은 설명
             const btnContainer = document.getElementById('start-scan-container');  // 버튼 컨테이너
 
-            // 2. 하단 텍스트 및 버튼 업데이트 (공통 작업)
+            // 2. 하단 텍스트 및 버튼 업데이트 
             title.textContent = titleText;
             title.style.color = color;
             // 모델명이 있을 때만 굵게 표시하는 로직 유지
             desc.innerHTML = descText.includes('모델') ? descText : `<span>${descText}</span>`;
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
-            // 3. 스마트폰 프레임 상태 클래스 초기화 (깨끗하게 비우기)
+            // 3. 스마트폰 프레임 상태 클래스 초기화 
             wrapper.classList.remove('state-disconnected', 'state-unauthorized', 'state-connected');
 
-            // 4. 상태별 비주얼 분기 처리 (아이콘 변경 코드 삭제됨!)
+            // 4. 상태별 비주얼 분기 처리 
             if (status === 'connected') {
-                // ★ 핵심: 부모에게 '연결됨' 명찰만 달아줍니다.
-                // 그러면 CSS가 알아서 녹색 체크 SVG를 보여줍니다.
+
                 wrapper.classList.add('state-connected');
 
-                alertTitle.innerHTML = 'DEVICE<br>READY'; // 폰 화면 멘트 변경
+                alertTitle.innerHTML = 'DEVICE<br>READY';
             }
             else if (status === 'unauthorized') {
-                // ★ 핵심: 부모에게 '인증 대기' 명찰을 달아줍니다.
-                // CSS가 자물쇠 SVG를 보여줍니다.
+
                 wrapper.classList.add('state-unauthorized');
 
                 alertTitle.innerHTML = 'WAITING<br>AUTH';
             }
             else {
-                // 여기가 바로 이사님이 찾으시던 '연결 전(disconnected)' 상태입니다.
-                // ★ 핵심: 부모에게 '연결 끊김' 명찰을 달아줍니다.
-                // CSS가 플러그 SVG를 보여줍니다.
+
                 wrapper.classList.add('state-disconnected');
 
                 alertTitle.innerHTML = 'CONNECT<br>DEVICE';
@@ -929,7 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 버튼을 즉시 비활성화하여 중복 클릭 방지
             realStartScanBtn.disabled = true;
-            realStartScanBtn.textContent = '검사 준비 중...';
+            realStartScanBtn.textContent = '검사 진행 중...';
 
             const hasQuota = await ScanController.checkQuota();
 
@@ -1080,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 시간 계산
                 let targetMinutes;
-                
+
                 if (State.userRole === 'user') {
                     // 일반 계정: 보안 정책상 20~30분 사이의 랜덤값 강제 부여
                     targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
@@ -1133,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 루프 시작
                 processNextApp();
-                
+
             } catch (error) {
                 // 에러 발생 시 레이저를 끄고 에러 핸들링
                 this.toggleLaser(false);
@@ -1231,26 +1226,35 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         async startIosScan() {
-            ViewManager.updateProgress(5, "아이폰 백업 준비 중... (시간이 소요됩니다)");
+            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
-                // 실제 검사 수행
-                const rawData = await window.electronAPI.runIosScan(State.currentUdid);
+                // 1. 실제 검사 수행
+                const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
                 if (rawData.error) throw new Error(rawData.error);
-                const data = Utils.transformIosData(rawData); //데이터 변환
-                console.log("아이폰 분석 완료, 개인정보 보호를 위해 백업 파일을 삭제합니다..."); //분석 이후 PC에 남은 백업 파일 삭제 요청
-                // await window.electronAPI.deleteIosBackup(State.currentUdid);
-                this.finishScan(data); //결과 화면 렌더링
+
+                // 2. 데이터 변환 및 결과 화면 렌더링
+                const data = Utils.transformIosData(rawData);
+                this.finishScan(data);
+
+                // 3. [성공 시에만 삭제] 10초 뒤 보안 파기 실행
+                console.log(`[Security] 검사 성공. 10초 후 백업 파기를 시도합니다.`);
+
+                setTimeout(() => {
+                    console.log(`[Renderer] 삭제 요청 발송 -> 대상 UDID: ${State.currentUdid}`);
+
+                    window.electronAPI.deleteIosBackup(State.currentUdid)
+                        .then(res => {
+                            if (res.success) console.log("✅ [Security] 메인 프로세스에서 삭제 완료 응답을 받았습니다.");
+                        })
+                        .catch(err => console.error("❌ [Renderer] 삭제 명령 전달 실패:", err));
+                }, 10000);
+
             } catch (error) {
                 this.handleError(error);
-
-                // 에러가 발생해도 백업이 남아있을 수 있으므로 삭제 시도
-                if (State.currentUdid) {
-                    await window.electronAPI.deleteIosBackup(State.currentUdid);
-                }
             }
         },
 
-        // [새로 추가] 스마트폰 화면을 초기 상태로 되돌리는 함수
+        //  스마트폰 화면을 초기 상태로 되돌리는 함수
         resetSmartphoneUI() {
             // 1. 안전하게 요소 찾기 (유지)
             const scanScreen = document.getElementById('scan-progress-screen');
@@ -1268,18 +1272,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) {
                 icon.className = 'hack-icon';
 
-                // finishScan이 덧칠했던 '녹색 페인트'를 지우기
                 icon.style.color = '';
 
             }
 
             // 3. 텍스트 초기화
             if (alertText) {
-                // 문구 원복
                 alertText.innerHTML = 'SYSTEM<br>SCANNING';
-
-                // finishScan이 덧칠했던 '녹색 페인트'와 '녹색 그림자'를 지우기
-                // 이 코드가 있어야 텍스트가 다시 원래의 파란색으로 돌아옴
                 alertText.style.color = '';
                 alertText.style.textShadow = '';
             }
@@ -1328,7 +1327,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 아이콘을 녹색 체크 표시로 변경
                 if (icon) {
                     icon.style.color = '#27c93f';
-                    icon.style.animation = 'none'; // 깜빡임 중지
+                    icon.style.animation = 'none'; 
                 }
 
                 // 문구 변경: SCANNING -> SAFE
@@ -1354,7 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
-            }, 1500); // 1초 뒤 결과 화면으로 전환
+            }, 1500); 
         },
 
         handleError(error) {
