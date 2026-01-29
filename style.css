@@ -1875,3 +1875,11 @@ p {
     border: none !important;
     white-space: nowrap !important;
 }
+
+.app-item.warning {
+    border: 3px solid #F0AD4E !important; 
+    background-color: #fffdf5 !important;
+}
+.app-item.warning .app-icon-wrapper {
+    border: 1.5px solid #F0AD4E !important;
+}

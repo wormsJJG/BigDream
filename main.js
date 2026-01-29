@@ -335,12 +335,12 @@ ipcMain.handle('run-scan', async () => {
         const networkMap = await AndroidService.getNetworkUsageMap(serial);
 
         const processedApks = await Promise.all(apkFiles.map(async (apk) => {
-        const perms = await AndroidService.getApkPermissionsOnly(serial, apk.apkPath);
-        return {
-            ...apk,
-            requestedList: perms, // 화면에 보여줄 권한 리스트
-            requestedCount: perms.length
-        };
+            const perms = await AndroidService.getApkPermissionsOnly(serial, apk.apkPath);
+            return {
+                ...apk,
+                requestedList: perms, // 화면에 보여줄 권한 리스트
+                requestedCount: perms.length
+            };
         }));
 
         const processedApps = [];
@@ -424,7 +424,7 @@ ipcMain.handle('run-scan', async () => {
 
         // ---------------------------------------------------------
         // 결과 필터링 (위험한 것만 추출)
-        const suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
+        let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
 
         // [Step E] (선택) VirusTotal 2차 정밀 검사
         if (suspiciousApps.length > 0 && CONFIG.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
@@ -433,7 +433,19 @@ ipcMain.handle('run-scan', async () => {
             await AndroidService.runVirusTotalCheck(serial, vtTargets);
         }
 
-        return { deviceInfo, allApps: processedApps, suspiciousApps, apkFiles: processedApks };
+        let privacyThreatApps = [];
+
+        // 💡 1. filter를 사용하여 '개인정보'가 포함된 앱만 따로 추출합니다.
+        privacyThreatApps = suspiciousApps.filter(app =>
+            app.reason && app.reason.includes("개인정보")
+        );
+
+        // 💡 2. 원본 배열에서는 '개인정보'가 포함되지 않은 앱들만 남깁니다 (삭제 효과).
+        suspiciousApps = suspiciousApps.filter(app =>
+            !app.reason || !app.reason.includes("개인정보")
+        );
+
+        return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks };
 
     } catch (err) {
         console.error(err);
@@ -1303,7 +1315,7 @@ const AndroidService = {
                 if (vtResult && vtResult.malicious > 0) {
                     app.reason = `[VT 확진] 악성(${vtResult.malicious}/${vtResult.total}) + ` + app.reason;
                 } else if (vtResult && vtResult.not_found) {
-                    app.reason = `[VT 미확인] 신종 의심 + ` + app.reason;
+                    app.reason = `[개인정보 유출 위협] ` + app.reason;
                 }
                 fs.unlinkSync(tempPath);
             } catch (e) {
@@ -1318,7 +1330,7 @@ const AndroidService = {
         try {
             // 1. 임시 파일 경로 설정
             tempPath = path.join(os.tmpdir(), `extract_${Date.now()}.apk`);
-            
+
             // 2. ADB Pull로 기기 내 APK를 PC 임시 폴더로 복사
             const transfer = await client.pull(serial, remotePath);
             await new Promise((resolve, reject) => {
@@ -1332,10 +1344,10 @@ const AndroidService = {
             // 3. APK Manifest 읽기
             const reader = await ApkReader.open(tempPath);
             const manifest = await reader.readManifest();
-            
+
             // 4. 권한 리스트 추출
             const permissions = (manifest.usesPermissions || []).map(p => p.name);
-            
+
             // 5. 임시 파일 삭제
             if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
