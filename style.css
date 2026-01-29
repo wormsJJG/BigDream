@@ -968,6 +968,15 @@ p {
     align-items: center;
     justify-content: center;
     margin-right: 20px;
+    transition: all 0.3s ease; 
+    border: 3px solid transparent; 
+}
+
+/* 스파이앱일 때 적용될 스타일 */
+.detail-icon-wrapper.suspicious {
+    border-color: #d9534f; 
+    background-color: #fff5f5; 
+    box-shadow: 0 0 10px rgba(217, 83, 79, 0.2); 
 }
 
 .detail-app-icon {
