@@ -119,7 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 'scan-results-screen',
                 'admin-screen',
                 'admin-report-detail-screen',
-                'app-detail-view'
+                'app-detail-view',
+                'res-privacy'
             ];
 
             allScreens.forEach(id => {
@@ -144,44 +145,57 @@ document.addEventListener('DOMContentLoaded', () => {
             const navOpen = document.getElementById('nav-open');
             const isIos = State.currentDeviceMode === 'ios';
 
-            const shouldShowResultMenu = (screenId === 'scan-results-screen' || (window.lastScanData && (screenId === 'admin-screen' || screenId === 'app-detail-view')));
+            // 💡 탭 메뉴를 보여줘야 하는 '모든 상황'을 정의 (res-privacy 추가)
+            const shouldShowResultMenu = (
+                screenId === 'scan-results-screen' ||
+                screenId === 'app-detail-view' ||
+                screenId === 'res-privacy' || // ← 이 화면일 때도 메뉴는 보여야 합니다.
+                (window.lastScanData && screenId === 'admin-screen')
+            );
+
+            console.log("📍 [Debug] 최종 판단 - shouldShowResultMenu:", shouldShowResultMenu);
 
             if (shouldShowResultMenu) {
+                // --- 1. 결과 메뉴 노출 로직 ---
                 if (isIos) {
-                    // --- iOS: 전용 메뉴 노출 ---
-                    if (subMenu) subMenu.style.display = 'none';
+                    if (subMenu) subMenu.style.setProperty('display', 'none', 'important');
                     if (iosSubMenu) {
                         iosSubMenu.classList.remove('hidden');
                         iosSubMenu.style.setProperty('display', 'block', 'important');
                     }
-                    if (navCreate) navCreate.style.display = 'none';
-                    if (navOpen) navOpen.style.display = 'none';
                 } else {
-                    // --- Android: 6개 탭 시스템 중 선택 노출 ---
-                    if (iosSubMenu) iosSubMenu.style.display = 'none';
+                    if (iosSubMenu) iosSubMenu.style.setProperty('display', 'none', 'important');
                     if (subMenu) {
                         subMenu.classList.remove('hidden');
                         subMenu.style.setProperty('display', 'block', 'important');
 
-                        // 안 쓰는 탭들은 명시적으로 숨김 처리
+                        // 안 쓰는 탭 제어
                         const tabs = subMenu.querySelectorAll('li.res-tab');
                         tabs.forEach(tab => {
                             const target = tab.dataset.target;
-                            // 사용하지 않는 탭 리스트 (개인정보, 네트워크, 보안위협)
-                            if (target === 'res-privacy' || target === 'res-network' || target === 'res-threats') {
+                            if (target === 'res-network' || target === 'res-threats') {
                                 tab.style.setProperty('display', 'none', 'important');
                             } else {
-                                tab.style.display = 'block';
+                                tab.style.setProperty('display', 'block', 'important');
                             }
                         });
                     }
-                    if (navCreate) navCreate.style.display = 'block';
-                    if (navOpen) navOpen.style.display = 'block';
                 }
+                // 사이드바 상단 기본 메뉴는 숨김
+                if (navCreate) navCreate.style.display = 'none';
+                if (navOpen) navOpen.style.display = 'none';
+
             } else {
-                // 검사 전이나 다른 화면일 때 모든 결과 탭 숨김
-                if (subMenu) subMenu.style.display = 'none';
-                if (iosSubMenu) iosSubMenu.style.display = 'none';
+                // --- 2. 결과 메뉴 숨김 로직 (초기 화면 등) ---
+                if (subMenu) {
+                    subMenu.classList.add('hidden');
+                    subMenu.style.setProperty('display', 'none', 'important');
+                }
+                if (iosSubMenu) {
+                    iosSubMenu.classList.add('hidden');
+                    iosSubMenu.style.setProperty('display', 'none', 'important');
+                }
+                // 초기 메뉴 다시 표시
                 if (navCreate) navCreate.style.display = 'block';
                 if (navOpen) navOpen.style.display = 'block';
             }
@@ -1080,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 시간 계산
                 let targetMinutes;
-                
+
                 if (State.userRole === 'user') {
                     // 일반 계정: 보안 정책상 20~30분 사이의 랜덤값 강제 부여
                     targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
@@ -1133,7 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 루프 시작
                 processNextApp();
-                
+
             } catch (error) {
                 // 에러 발생 시 레이저를 끄고 에러 핸들링
                 this.toggleLaser(false);
@@ -1376,6 +1390,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('res-model')) document.getElementById('res-model').textContent = data.deviceInfo?.model || '-';
             if (document.getElementById('res-serial')) document.getElementById('res-serial').textContent = data.deviceInfo?.serial || '-';
             if (document.getElementById('res-phone')) document.getElementById('res-phone').textContent = data.deviceInfo?.phoneNumber || '-';
+            if (document.getElementById('res-root')) document.getElementById('res-root').textContent = data.deviceInfo?.isRooted ? "O" : 'X';
+            
 
             // 주요 섹션 및 그리드 요소 가져오기
             const summarySection = document.getElementById('res-summary');
@@ -1439,7 +1455,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // 2. 데이터 렌더링 호출
                     // (1) 위협 탐지 목록 (요약 탭 상단)
+
                     this.renderSuspiciousList(data.suspiciousApps || [], false);
+                    this.renderPrivacyThreatList(data.privacyThreatApps || []);
 
                     // (2) 모든 설치된 앱 (앱 목록 탭)
                     if (appGrid) {
@@ -1725,9 +1743,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const imgTag = div.querySelector('.app-real-icon');
             const spanTag = div.querySelector('.app-fallback-icon');
+            
+            // 1. 위협 수준 판별
+            const isSpyApp = app.reason && app.reason.includes('[VT 확진]');
+            const isPrivacyRisk = app.reason && !app.reason.includes('[VT 확진]');
 
+            // 2. 테두리 클래스 결정 
+            let riskClass = '';
+            if (isSpyApp) riskClass = 'suspicious';      // 빨간 테두리
+            else if (isPrivacyRisk) riskClass = 'warning'; // 노란 테두리
+
+            div.className = `app-item ${riskClass}`;
+
+            // 3. 아이콘 이미지 결정 로직
             const getLocalIconPath = (appData) => {
-                if (appData.reason) return './assets/SpyAppLogo.png';
+                if (isSpyApp) return './assets/SpyAppLogo.png';
+
                 return './assets/systemAppLogo.png';
             };
 
@@ -1834,6 +1865,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p style="color:#666; font-size:14px; margin:0;">${safeMessage}</p>
                     </div>
                 `;
+            }
+        },
+        renderPrivacyThreatList(privacyApps) {
+            const container = document.getElementById('privacy-threat-list-container');
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            if (privacyApps && privacyApps.length > 0) {
+                let html = '<ul style="list-style:none; padding:0;">';
+                privacyApps.forEach(app => {
+                    const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
+                    html += `
+                <li style="padding:15px; border-bottom:1px solid #eee; border-left: 4px solid #f0ad4e; background-color: #fcf8e3; margin-bottom: 10px; border-radius: 4px;">
+                    <div style="color:#8a6d3b; font-weight:bold; font-size: 15px; margin-bottom: 4px;">
+                        ⚠️ ${dName} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
+                    </div>
+                    <div style="font-size:13px; color:#666;">${app.reason}</div>
+                </li>`;
+                });
+                container.innerHTML = html + '</ul>';
+            } else {
+                container.innerHTML = `
+            <div style="text-align:center; padding:30px; background:#f9f9f9; border-radius:8px; color:#999;">
+                ✅ 탐지된 개인정보 유출 위협이 없습니다.
+            </div>`;
             }
         }
     };
@@ -2522,20 +2579,23 @@ document.addEventListener('DOMContentLoaded', () => {
         transformAndroidData: (scanData) => {
             const transformedApps = scanData.allApps || [];
 
-            // 💡 [핵심 수정] VT 확진 앱만 위협 목록으로 분류
-            // app.reason 필드에 "[VT 확진]"이 포함된 앱만 필터링합니다.
-            const suspiciousApps = transformedApps.filter(app => {
-                // reason 필드가 있고, 그 안에 "[VT 확진]" 문자열이 포함된 경우만 true
-                return app.reason && app.reason.includes('[VT 확진]');
-            });
+            // 1. 진짜 스파이앱 (VT 확진된 것만)
+            const spyApps = transformedApps.filter(app =>
+                // app.reason && app.reason.includes('[VT 확진]')
+                false
+            );
 
+            // 2. 개인정보 유출 위협 (권한이 과도하거나 VT 결과가 애매한 의심 앱)
+            const privacyThreats = transformedApps.filter(app =>
+                app.reason // && !app.reason.includes('[VT 확진]')
+            );
 
             return {
                 deviceInfo: scanData.deviceInfo,
                 allApps: transformedApps,
                 apkFiles: scanData.apkFiles || [],
-                suspiciousApps: suspiciousApps
-                // networkUsageMap 등 다른 필드는 필요에 따라 추가
+                suspiciousApps: spyApps,      // [스파이앱 탭으로]
+                privacyThreatApps: privacyThreats // [개인정보 유출 위협 탭으로]
             };
         },
 
