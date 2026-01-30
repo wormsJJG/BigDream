@@ -39,7 +39,7 @@ autoUpdater.allowPrerelease = false;
 
 const CONFIG = {
     IS_DEV_MODE: false,
-    KEEP_BACKUP: false,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
+    KEEP_BACKUP: true,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
     VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
     PATHS: {
         ADB: path.join(RESOURCE_DIR, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
@@ -253,11 +253,34 @@ autoUpdater.on('update-downloaded', (info) => {
     autoUpdater.quitAndInstall();
 });
 
+function initializeAutoUpdater() {
+    // 개발 모드에서는 업데이트 확인을 건너뜁니다 (API 차단 방지)
+    if (CONFIG.IS_DEV_MODE) {
+        log.info("[Update] 개발 모드: 업데이트 체크를 생략합니다.");
+        return;
+    }
+
+    autoUpdater.on('error', (err) => {
+        log.error('업데이트 에러 상세:', err);
+        // API 제한 에러 발생 시 사용자에게 불필요한 오류 팝업을 띄우지 않도록 제어
+        if (err.message.includes('403') || err.message.includes('429')) {
+            console.warn("⚠️ GitHub API 속도 제한에 도달했습니다. 나중에 다시 시도합니다.");
+        }
+    });
+
+    // 앱 시작 5초 후에 딱 한 번만 확인하도록 딜레이 (리소스 충돌 방지)
+    setTimeout(() => {
+        autoUpdater.checkForUpdatesAndNotify().catch(e => {
+            log.error("최초 업데이트 확인 실패:", e.message);
+        });
+    }, 5000);
+}
+
 app.whenReady().then(async () => {
     createWindow();
     const mainWindow = BrowserWindow.getAllWindows()[0];
     await Utils.checkAndInstallPrerequisites(mainWindow);
-    await autoUpdater.checkForUpdatesAndNotify();
+    initializeAutoUpdater()
 }).catch(err => {
     console.log(err)
 });
@@ -446,7 +469,9 @@ ipcMain.handle('run-scan', async () => {
             !app.reason || !app.reason.includes("개인정보")
         );
 
-        return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks };
+        const runningAppsCount = processedApps.filter(app => app.isRunningBg).length;
+
+        return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
 
     } catch (err) {
         console.error(err);
