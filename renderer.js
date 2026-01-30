@@ -2099,6 +2099,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
             }
 
+            const totalPermsArr = app.requestedList || app.permissions || [];
+            const totalCount = totalPermsArr.length;
+            const grantedCount = (app.grantedList || []).length;
+
+            const reqCountEl = document.getElementById('detail-req-count');
+            const grantCountEl = document.getElementById('detail-grant-count');
+
+            if (reqCountEl) reqCountEl.textContent = totalCount;
+            if (grantCountEl) {
+                grantCountEl.textContent = app.isApkFile ? "-" : grantedCount;
+            }
+
             // 6. 권한 리스트 렌더링
             const list = document.getElementById('detail-permission-list');
             if (list) {
