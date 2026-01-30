@@ -1374,7 +1374,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 아이콘을 녹색 체크 표시로 변경
                 if (icon) {
                     icon.style.color = '#27c93f';
-                    icon.style.animation = 'none'; 
+                    icon.style.animation = 'none';
                 }
 
                 // 문구 변경: SCANNING -> SAFE
@@ -1400,7 +1400,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
-            }, 1500); 
+            }, 1500);
         },
 
         handleError(error) {
@@ -1448,7 +1448,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('res-serial')) document.getElementById('res-serial').textContent = data.deviceInfo?.serial || '-';
             if (document.getElementById('res-phone')) document.getElementById('res-phone').textContent = data.deviceInfo?.phoneNumber || '-';
             if (document.getElementById('res-root')) document.getElementById('res-root').textContent = data.deviceInfo?.isRooted ? "O" : 'X';
-            
+
 
             // 주요 섹션 및 그리드 요소 가져오기
             const summarySection = document.getElementById('res-summary');
@@ -1508,7 +1508,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (threatsTitle) threatsTitle.textContent = "⚠️ 기기 보안 위협";
                     if (threatsDesc) threatsDesc.textContent = "시스템 설정 취약점 및 분석 결과입니다.";
                     if (iosAppDesc) iosAppDesc.style.display = 'none'; // 안드로이드에선 숨김
-                    if (appsHeader) appsHeader.textContent = "📲 설치된 애플리케이션";
+
+                    const totalApps = data.allApps ? data.allApps.length : 0; // 전체 앱 개수 계산
+                    const runningApps = data.runningCount || 0;
+                    if (appsHeader) {
+                        appsHeader.textContent = `📲 설치된 애플리케이션 (총 ${totalApps}개)`;
+                    }
+
+                    const bgHeader = document.querySelector('#res-background h3');
+                    if (bgHeader) {
+                        bgHeader.textContent = `🚀 실행 중인 백그라운드 앱 (총 ${runningApps}개)`;
+                    }
 
                     // 2. 데이터 렌더링 호출
                     // (1) 위협 탐지 목록 (요약 탭 상단)
@@ -1798,7 +1808,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const imgTag = div.querySelector('.app-real-icon');
             const spanTag = div.querySelector('.app-fallback-icon');
-            
+
             // 1. 위협 수준 판별
             const isSpyApp = app.reason && app.reason.includes('[VT 확진]');
             const isPrivacyRisk = app.reason && !app.reason.includes('[VT 확진]');
@@ -2021,7 +2031,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     uninstallBtnEl.textContent = "🗑️ APK 파일 영구 삭제";
                 }
 
-                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
+                document.getElementById('detail-req-count').textContent = (app.requestedList || app.permissions || []).length;
                 document.getElementById('detail-grant-count').textContent = "-";
 
             } else {
@@ -2078,12 +2088,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 데이터 세팅 완료 후 이미지 삽입
                 iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
             }
-        
+
             // 6. 권한 리스트 렌더링
             const list = document.getElementById('detail-permission-list');
             if (list) {
                 list.innerHTML = '';
-                const perms = app.requestedList || [];
+                const perms = app.requestedList || app.permissions || [];
                 if (perms.length > 0) {
                     perms.forEach(perm => {
                         const spanElem = document.createElement('span');
