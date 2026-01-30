@@ -1546,6 +1546,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // (4) 발견된 설치 파일(APK) (설치 파일 탭)
                     if (apkGrid) {
+                        // 💡 APK 섹션 제목 엘리먼트 참조
+                        const apkHeader = document.querySelector('#res-apk h3');
+
+                        if (apkHeader) {
+                            // 개수 계산 (데이터가 없으면 0개)
+                            const apkCount = data.apkFiles ? data.apkFiles.length : 0;
+
+                            apkHeader.textContent = `📁 발견된 APK 파일 (총 ${apkCount}개)`;
+                        }
+
                         this.renderApkList(data.apkFiles || [], apkGrid)
                     }
 
