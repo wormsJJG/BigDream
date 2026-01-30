@@ -309,16 +309,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const modalOverlay = document.createElement('div');
                 modalOverlay.style.cssText = `
                     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background-color: rgba(0,0,0,0.5); display: flex;
-                    justify-content: center; align-items: center; z-index: 10000;
+            background-color: rgba(0,0,0,0.5); display: flex;
+            justify-content: center; align-items: center; z-index: 10000;
                 `;
 
                 // 2. 모달 박스 생성
                 const modalBox = document.createElement('div');
                 modalBox.style.cssText = `
                     background: white; padding: 20px; border-radius: 8px;
-                    width: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                    text-align: center; font-family: sans-serif;
+            width: 350px; 
+            max-height: 80vh; /* 화면 높이의 80%까지만 커짐 */
+            overflow-y: auto;  /* 내용이 길면 내부 스크롤 생성 */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center; font-family: sans-serif;
+            display: flex; flex-direction: column; /* 버튼을 하단에 고정하기 위함 */
                 `;
 
                 // 3. 내용물 (텍스트, 입력창, 버튼)
@@ -1374,7 +1378,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 아이콘을 녹색 체크 표시로 변경
                 if (icon) {
                     icon.style.color = '#27c93f';
-                    icon.style.animation = 'none'; 
+                    icon.style.animation = 'none';
                 }
 
                 // 문구 변경: SCANNING -> SAFE
@@ -1400,7 +1404,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
-            }, 1500); 
+            }, 1500);
         },
 
         handleError(error) {
@@ -1448,7 +1452,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('res-serial')) document.getElementById('res-serial').textContent = data.deviceInfo?.serial || '-';
             if (document.getElementById('res-phone')) document.getElementById('res-phone').textContent = data.deviceInfo?.phoneNumber || '-';
             if (document.getElementById('res-root')) document.getElementById('res-root').textContent = data.deviceInfo?.isRooted ? "O" : 'X';
-            
+
 
             // 주요 섹션 및 그리드 요소 가져오기
             const summarySection = document.getElementById('res-summary');
@@ -1508,7 +1512,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (threatsTitle) threatsTitle.textContent = "⚠️ 기기 보안 위협";
                     if (threatsDesc) threatsDesc.textContent = "시스템 설정 취약점 및 분석 결과입니다.";
                     if (iosAppDesc) iosAppDesc.style.display = 'none'; // 안드로이드에선 숨김
-                    if (appsHeader) appsHeader.textContent = "📲 설치된 애플리케이션";
+
+                    const totalApps = data.allApps ? data.allApps.length : 0; // 전체 앱 개수 계산
+                    const runningApps = data.runningCount || 0;
+                    if (appsHeader) {
+                        appsHeader.textContent = `📲 설치된 애플리케이션 (총 ${totalApps}개)`;
+                    }
+
+                    const bgHeader = document.querySelector('#res-background h3');
+                    if (bgHeader) {
+                        bgHeader.textContent = `🚀 실행 중인 백그라운드 앱 (총 ${runningApps}개)`;
+                    }
 
                     // 2. 데이터 렌더링 호출
                     // (1) 위협 탐지 목록 (요약 탭 상단)
@@ -1536,6 +1550,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // (4) 발견된 설치 파일(APK) (설치 파일 탭)
                     if (apkGrid) {
+                        // 💡 APK 섹션 제목 엘리먼트 참조
+                        const apkHeader = document.querySelector('#res-apk h3');
+
+                        if (apkHeader) {
+                            // 개수 계산 (데이터가 없으면 0개)
+                            const apkCount = data.apkFiles ? data.apkFiles.length : 0;
+
+                            apkHeader.textContent = `📁 발견된 APK 파일 (총 ${apkCount}개)`;
+                        }
+
                         this.renderApkList(data.apkFiles || [], apkGrid)
                     }
 
@@ -1798,7 +1822,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const imgTag = div.querySelector('.app-real-icon');
             const spanTag = div.querySelector('.app-fallback-icon');
-            
+
             // 1. 위협 수준 판별
             const isSpyApp = app.reason && app.reason.includes('[VT 확진]');
             const isPrivacyRisk = app.reason && !app.reason.includes('[VT 확진]');
@@ -2021,7 +2045,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     uninstallBtnEl.textContent = "🗑️ APK 파일 영구 삭제";
                 }
 
-                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
+                document.getElementById('detail-req-count').textContent = (app.requestedList || app.permissions || []).length;
                 document.getElementById('detail-grant-count').textContent = "-";
 
             } else {
@@ -2078,12 +2102,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 데이터 세팅 완료 후 이미지 삽입
                 iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
             }
-        
+
+            const totalPermsArr = app.requestedList || app.permissions || [];
+            const totalCount = totalPermsArr.length;
+            const grantedCount = (app.grantedList || []).length;
+
+            const reqCountEl = document.getElementById('detail-req-count');
+            const grantCountEl = document.getElementById('detail-grant-count');
+
+            if (reqCountEl) reqCountEl.textContent = totalCount;
+            if (grantCountEl) {
+                grantCountEl.textContent = app.isApkFile ? "-" : grantedCount;
+            }
+
             // 6. 권한 리스트 렌더링
             const list = document.getElementById('detail-permission-list');
             if (list) {
                 list.innerHTML = '';
-                const perms = app.requestedList || [];
+                const perms = app.requestedList || app.permissions || [];
                 if (perms.length > 0) {
                     perms.forEach(perm => {
                         const spanElem = document.createElement('span');
