@@ -309,16 +309,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const modalOverlay = document.createElement('div');
                 modalOverlay.style.cssText = `
                     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background-color: rgba(0,0,0,0.5); display: flex;
-                    justify-content: center; align-items: center; z-index: 10000;
+            background-color: rgba(0,0,0,0.5); display: flex;
+            justify-content: center; align-items: center; z-index: 10000;
                 `;
 
                 // 2. 모달 박스 생성
                 const modalBox = document.createElement('div');
                 modalBox.style.cssText = `
                     background: white; padding: 20px; border-radius: 8px;
-                    width: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                    text-align: center; font-family: sans-serif;
+            width: 350px; 
+            max-height: 80vh; /* 화면 높이의 80%까지만 커짐 */
+            overflow-y: auto;  /* 내용이 길면 내부 스크롤 생성 */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center; font-family: sans-serif;
+            display: flex; flex-direction: column; /* 버튼을 하단에 고정하기 위함 */
                 `;
 
                 // 3. 내용물 (텍스트, 입력창, 버튼)

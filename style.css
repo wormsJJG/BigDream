@@ -1252,8 +1252,23 @@ p {
     padding: 25px;
     border-radius: 8px;
     width: 300px;
+    
+    /* 추가된 부분 */
+    max-height: 70vh;    /* 너무 길어지지 않게 제한 */
+    overflow-y: auto;    /* 내용이 길면 스크롤 발생 */
+    
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     animation: slideDown 0.3s ease;
+}
+
+/* 스크롤바가 너무 투박하다면 깔끔하게 디자인 가능 */
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
 }
 
 @keyframes slideDown {
