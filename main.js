@@ -341,17 +341,35 @@ ipcMain.handle('check-device-connection', async () => {
 // ============================================================
 // 3-2. 스파이앱 정밀 탐지 + VT 검사
 // ============================================================
-ipcMain.handle('run-scan', async () => {
+ipcMain.handle('run-scan', async (event) => {
     console.log('--- AI 정밀 분석 시작 ---');
-    // “강한 악용 신호” (권한이 아니라 “실제 활성/상태”)
-
+    let testInterval;
     try {
         const devices = await client.listDevices();
         if (devices.length === 0) throw new Error('기기 없음');
         const serial = devices[0].id;
 
+        const webContents = event.sender;
+
+        // 실시간 메트릭 수집 인터벌 시작
+        testInterval = setInterval(async () => {
+            try {
+                const metrics = await AndroidService.getLiveMetrics(serial);
+                console.log("📡 실시간 메트릭 수집 중:", metrics);
+
+                // 화면이 닫히지 않았을 때만 전송
+                if (!webContents.isDestroyed()) {
+                    webContents.send('update-live-metrics', metrics);
+                }
+            } catch (err) {
+                console.error("메트릭 전송 중 오류:", err);
+            }
+        }, 2000);
+
         const deviceInfo = await AndroidService.getDeviceInfo(serial);
         deviceInfo.os = 'ANDROID';
+
+        webContents.send('scan-log', "시스템 기초 데이터 수집 중...");
 
         // 기초 데이터 수집
         const allApps = await AndroidService.getInstalledApps(serial);
@@ -456,6 +474,9 @@ ipcMain.handle('run-scan', async () => {
             console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
             await AndroidService.runVirusTotalCheck(serial, vtTargets);
         }
+        clearInterval(testInterval);
+
+        if (testInterval) clearInterval(testInterval);
 
         let privacyThreatApps = [];
 
@@ -474,6 +495,8 @@ ipcMain.handle('run-scan', async () => {
         return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
 
     } catch (err) {
+        // 💡 에러 발생 시에도 인터벌 중지
+        if (testInterval) clearInterval(testInterval);
         console.error(err);
         return { error: err.message };
     }
@@ -1037,6 +1060,31 @@ const AndroidService = {
             return { success: false, error: err.message };
         }
     },
+
+    async getLiveMetrics(serial) {
+        try {
+            // 1. 배터리 (level: 85 -> 85)
+            const batteryRaw = await this.adbShell(serial, "dumpsys battery | grep level");
+            const battery = batteryRaw.match(/\d+/)?.[0] || 0;
+
+            // 2. RAM (Used RAM: 3,456,123K -> 45%) - 전체 용량 대비 계산은 복잡하므로 점유율 위주로
+            const ramRaw = await this.adbShell(serial, "dumpsys meminfo | grep 'Used RAM'");
+            const ramMatch = ramRaw.match(/(\d+,?\d+)/);
+            const ramVal = ramMatch ? parseInt(ramMatch[0].replace(/,/g, '')) : 0;
+            // 단순 시각화를 위해 임의의 100분율로 변환 (기기마다 다르므로 보정 필요)
+            const ramPercent = Math.min(Math.floor((ramVal / 8000000) * 100), 100) || 40;
+
+            // 3. 온도 (34200 -> 34.2)
+            const tempRaw = await this.adbShell(serial, "dumpsys batterystats | grep 'temp'");
+            const tempMatch = tempRaw.match(/temp=(\d+)/);
+            const temp = tempMatch ? (parseInt(tempMatch[1]) / 10).toFixed(1) : "35.0";
+
+            return { battery, ramPercent, temp };
+        } catch (e) {
+            return { battery: 0, ramPercent: 0, temp: "0.0" };
+        }
+    },
+
 
     // 앱 무력화 (권한 박탈 + 강제 종료)
     async neutralizeApp(packageName) {

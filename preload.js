@@ -95,6 +95,10 @@ contextBridge.exposeInMainWorld(
         onUpdateError: (callback) => ipcRenderer.on('update-error', (event, msg) => callback(msg)),
         autoPushReportToAndroid: () => ipcRenderer.invoke('auto-push-report-to-android'),
         startFullScan: () => ipcRenderer.invoke('start-full-scan'),
+
+        onUpdateLiveMetrics: (callback) => ipcRenderer.on('update-live-metrics', (event, value) => callback(value)),
+
+        onScanLog: (callback) => ipcRenderer.on('scan-log', (event, value) => callback(value)),
     }
 );
 

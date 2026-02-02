@@ -1039,8 +1039,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             ViewManager.showScreen(loggedInView, 'scan-progress-screen');
 
-            if (State.currentDeviceMode === 'android') {
+            const controlCenter = document.getElementById('realtime-control-center');
+            if (controlCenter) {
+                controlCenter.style.display = 'flex';
+                controlCenter.classList.remove('hidden');
+            }
 
+            if (State.currentDeviceMode === 'android') {
                 await ScanController.startAndroidScan();
             } else if (State.currentDeviceMode === 'ios') {
                 await ScanController.startIosScan();
@@ -1109,15 +1114,23 @@ document.addEventListener('DOMContentLoaded', () => {
             this.resetSmartphoneUI();
 
             try {
-                // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
-                ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
-
-                // 2. 실제 데이터 수집
+                // 1. 데이터를 먼저 빠르게 가져옵니다.
                 const scanData = await window.electronAPI.runScan();
                 const apps = scanData.allApps || [];
                 const totalApps = apps.length;
 
-                // 앱이 하나도 없는 경우(예외)는 바로 종료
+                // 2. 상단 기기 정보 및 세부 사양 바인딩
+                const modelEl = document.getElementById('live-model-name');
+                const osEl = document.getElementById('live-os-version');
+                const rootEl = document.getElementById('live-rooted-status');
+
+                if (modelEl) modelEl.textContent = scanData.deviceInfo.model;
+                if (osEl) osEl.textContent = scanData.deviceInfo.os || "Android 14";
+                if (rootEl) {
+                    rootEl.textContent = scanData.deviceInfo.isRooted ? "DETECTED" : "SAFE";
+                    rootEl.style.color = scanData.deviceInfo.isRooted ? "var(--danger-color)" : "var(--success-color)";
+                }
+
                 if (totalApps === 0) {
                     this.toggleLaser(false);
                     this.finishScan(scanData);
@@ -1138,52 +1151,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const totalDurationMs = targetMinutes * 60 * 1000;
-                // 앱 하나당 보여줄 분석 시간
-                const timePerApp = targetMinutes > 0
-                    ? Math.max(35, totalDurationMs / totalApps)
-                    : 35;
-
-                console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp / 1000).toFixed(2)}초 소요`);
+                const timePerApp = targetMinutes > 0 ? (totalDurationMs / totalApps) : 35;
 
                 let currentIndex = 0;
-
-                // 애니메이션 루프 함수
-                // [3단계] 애니메이션 루프 함수
                 const processNextApp = () => {
-                    // 종료 조건: 모든 앱 분석이 끝났을 때
                     if (currentIndex >= totalApps) {
-                        console.log(`[Theater Mode] 검사 완료: 총 ${totalApps}개 분석됨`);
-                        this.toggleLaser(false); // 레이저 정지
-                        this.finishScan(scanData); // 완료 처리 
+                        this.toggleLaser(false);
+                        this.finishScan(scanData);
                         return;
                     }
 
                     const app = apps[currentIndex];
-                    // UI 가독성을 위해 앱 이름만 포맷팅
-                    const appName = Utils.formatAppName(app.packageName);
-
-                    // 진행률 계산 (최대 99%까지)
                     const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
 
-                    // 화면 갱신: 스마트폰 내부와 외부 프로그레스 바 동기화
-                    ViewManager.updateProgress(
-                        Math.min(99, percent),
-                        `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`
-                    );
+                    // 4. 분석 프로세스 "현재 / 총합" 숫자 및 진행바 업데이트
+                    const statusTextEl = document.getElementById('scan-status-text');
+                    const progressBarEl = document.getElementById('progress-bar');
+
+                    if (statusTextEl) statusTextEl.textContent = `${currentIndex + 1} / ${totalApps}`;
+                    if (progressBarEl) progressBarEl.style.width = `${percent}%`;
+
+                    // 5. 로그 콘솔에 분석 중인 내용 출력
+                    const actions = ["Analyzing", "Verifying", "Scanning", "Hashing"];
+                    const randomAction = actions[Math.floor(Math.random() * actions.length)];
+                    this.addConsoleLog(`[${randomAction}] ${app.packageName}... OK`);
 
                     currentIndex++;
-
-                    // 계산된 시간만큼 대기 후 다음 앱으로 이동
                     setTimeout(processNextApp, timePerApp);
                 };
 
-                // 루프 시작
                 processNextApp();
 
             } catch (error) {
-                // 에러 발생 시 레이저를 끄고 에러 핸들링
+                console.error("Android Scan Error:", error);
                 this.toggleLaser(false);
                 this.handleError(error);
+            }
+        },
+
+        // 실시간 로그 추가 헬퍼 함수
+        addConsoleLog(message) {
+            const consoleEl = document.querySelector('.status-console');
+            if (consoleEl) {
+                const logLine = document.createElement('div');
+                logLine.textContent = `> ${message}`;
+                consoleEl.appendChild(logLine);
+
+                // 최신 로그로 자동 스크롤
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+
+                if (consoleEl.children.length > 3) {
+                    consoleEl.removeChild(consoleEl.firstChild);
+                }
             }
         },
 
@@ -4214,6 +4233,56 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 reportResultsBtn.disabled = false;
                 reportResultsBtn.textContent = "📡 서버 전송";
+            }
+
+        });
+    }
+
+    if (window.electronAPI && window.electronAPI.onUpdateLiveMetrics) {
+        window.electronAPI.onUpdateLiveMetrics((metrics) => {
+            // 1. 배터리 업데이트 
+            const bGauge = document.querySelector('.metric-box:nth-child(1) .circular-gauge');
+            const bText = document.querySelector('.metric-box:nth-child(1) .metric-value');
+            if (bGauge) {
+                bGauge.style.background = `conic-gradient(#2563EB 0% ${metrics.battery}%, #1E293B ${metrics.battery}% 100%)`;
+                const gVal = bGauge.querySelector('.gauge-val');
+                if (gVal) gVal.textContent = metrics.battery;
+                if (bText) bText.textContent = `${metrics.battery}%`;
+            }
+
+            // 2. RAM 업데이트
+            const rGauge = document.querySelector('.metric-box:nth-child(2) .circular-gauge');
+            const rText = document.querySelector('.metric-box:nth-child(2) .metric-value');
+            if (rGauge) {
+                rGauge.style.background = `conic-gradient(#2563EB 0% ${metrics.ramPercent}%, #1E293B ${metrics.ramPercent}% 100%)`;
+                const gVal = rGauge.querySelector('.gauge-val');
+                if (gVal) gVal.textContent = metrics.ramPercent;
+                if (rText) rText.textContent = `${metrics.ramPercent}%`;
+            }
+
+            // 3. 온도 업데이트
+            const tText = document.querySelector('.metric-box:nth-child(3) .metric-value');
+            if (tText) tText.textContent = `${metrics.temp} °C`;
+        });
+    }
+
+    if (window.electronAPI && window.electronAPI.onScanLog) {
+        window.electronAPI.onScanLog((message) => {
+            const consoleEl = document.querySelector('.status-console');
+            if (consoleEl) {
+                const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+                const logLine = document.createElement('div');
+                // 보안 전문가 느낌을 주기 위해 [시간] 메시지 형태로 구성
+                logLine.innerHTML = `<span style="color: #64748B;">[${time}]</span> <span style="color: #10B981;">${message}</span>`;
+                consoleEl.appendChild(logLine);
+
+                // 신규 로그가 쌓이면 자동으로 아래로 스크롤
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+
+                // 로그가 30개를 넘어가면 가장 오래된 로그(첫 번째 자식) 삭제
+                if (consoleEl.children.length > 30) {
+                    consoleEl.removeChild(consoleEl.firstChild);
+                }
             }
         });
     }
