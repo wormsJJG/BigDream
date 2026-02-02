@@ -63,6 +63,9 @@
       "target": [
         "nsis"
       ],
+      "signingHashAlgorithms": ["sha256"],
+      "certificateSubjectName": "GlobalSign GCC R45 EV CodeSigning CA 2020",
+      "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1",
       "icon": "assets/setUpIcon.ico"
     },
     "nsis": {
