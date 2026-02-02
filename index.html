@@ -71,7 +71,7 @@
                     </p>
                     <div class="support-contact">
                         <p><strong>사용 문의 및 기술 지원</strong></p>
-                        <span>010-8119-1837</span>
+                        <span>031-778-8810</span>
                     </div>
                 </div>
             </section>
@@ -95,9 +95,8 @@
                     <li class="nav-item res-tab" data-target="res-summary"><span>📊 기기 정보 및 탐지 결과</span></li>
                     <li class="nav-item res-tab" data-target="res-apps"><span>📲 설치된 앱</span></li>
                     <li class="res-tab nav-item" data-target="res-background"><span>🚀 백그라운드 실행 앱</span></li>
-                    <li class="res-tab nav-item" data-target="res-apk"><span>📂 발견된 설치 파일</span></li>
-                    <li class="res-tab nav-item" data-target="res-privacy" style="display: none !important;"><span>🔒
-                            개인정보 유출 위협</span></li>
+                    <li class="res-tab nav-item" data-target="res-apk"><span>📂 발견된 APK 파일</span></li>
+                    <li class="res-tab nav-item" data-target="res-privacy"><span>🔒 개인정보 유출 위협</span></li>
                     <li class="res-tab nav-item" data-target="res-network" style="display: none !important;"><span>🌐
                             네트워크 패킷 분석</span></li>
                     <li class="res-tab nav-item" data-target="res-threats" style="display: none !important;"><span>⚠️ 기기
@@ -109,7 +108,7 @@
                     <div class="support-text-group">
                         <p class="support-company">(주)빅드림</p>
                         <p class="support-title">기술 문의</p>
-                        <p class="support-phone">010-8119-1837</p>
+                        <p class="support-phone">031-778-8810</p>
                     </div>
                 </div>
 
@@ -313,6 +312,7 @@
                 <div class="results-header">
                     <h2>정밀 검사 결과 보고서</h2>
                     <div class="header-buttons">
+                        <button id="save-results-btn" class="secondary-button">💾 로컬 저장</button>
                         <button id="print-results-btn" type="button" class="secondary-button">PDF 출력</button>
                         <button id="report-results-btn" type="button" class="secondary-button send-button">결과
                             전송</button>
@@ -357,7 +357,7 @@
                         <div class="content-card">
                             <h3>🔒 개인정보 유출 위협</h3>
                             <p class="sub-text">민감한 권한을 과도하게 사용하는 앱 분석 결과입니다.</p>
-                            <div id="privacy-threat-container">분석 데이터 로딩 중...</div>
+                            <div id="privacy-threat-list-container">분석 데이터 로딩 중...</div>
                         </div>
                     </div>
 
@@ -379,7 +379,7 @@
                     </div>
                     <div id="res-apk" class="result-content-section">
                         <div class="content-card">
-                            <h3>📂 발견된 설치 파일 (APK)</h3>
+                            <h3>📂 발견된 APK 파일 (APK)</h3>
                             <p class="sub-text">기기 내부 저장소에서 발견된 설치 대기 중인 파일들입니다.</p>
 
                             <div id="apk-grid-container" class="app-grid"></div>

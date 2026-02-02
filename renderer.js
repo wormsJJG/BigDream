@@ -119,7 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 'scan-results-screen',
                 'admin-screen',
                 'admin-report-detail-screen',
-                'app-detail-view'
+                'app-detail-view',
+                'res-privacy'
             ];
 
             allScreens.forEach(id => {
@@ -144,44 +145,57 @@ document.addEventListener('DOMContentLoaded', () => {
             const navOpen = document.getElementById('nav-open');
             const isIos = State.currentDeviceMode === 'ios';
 
-            const shouldShowResultMenu = (screenId === 'scan-results-screen' || (window.lastScanData && (screenId === 'admin-screen' || screenId === 'app-detail-view')));
+            // 💡 탭 메뉴를 보여줘야 하는 '모든 상황'을 정의 (res-privacy 추가)
+            const shouldShowResultMenu = (
+                screenId === 'scan-results-screen' ||
+                screenId === 'app-detail-view' ||
+                screenId === 'res-privacy' || // ← 이 화면일 때도 메뉴는 보여야 합니다.
+                (window.lastScanData && screenId === 'admin-screen')
+            );
+
+            console.log("📍 [Debug] 최종 판단 - shouldShowResultMenu:", shouldShowResultMenu);
 
             if (shouldShowResultMenu) {
+                // --- 1. 결과 메뉴 노출 로직 ---
                 if (isIos) {
-                    // --- iOS: 전용 메뉴 노출 ---
-                    if (subMenu) subMenu.style.display = 'none';
+                    if (subMenu) subMenu.style.setProperty('display', 'none', 'important');
                     if (iosSubMenu) {
                         iosSubMenu.classList.remove('hidden');
                         iosSubMenu.style.setProperty('display', 'block', 'important');
                     }
-                    if (navCreate) navCreate.style.display = 'none';
-                    if (navOpen) navOpen.style.display = 'none';
                 } else {
-                    // --- Android: 6개 탭 시스템 중 선택 노출 ---
-                    if (iosSubMenu) iosSubMenu.style.display = 'none';
+                    if (iosSubMenu) iosSubMenu.style.setProperty('display', 'none', 'important');
                     if (subMenu) {
                         subMenu.classList.remove('hidden');
                         subMenu.style.setProperty('display', 'block', 'important');
 
-                        // 안 쓰는 탭들은 명시적으로 숨김 처리
+                        // 안 쓰는 탭 제어
                         const tabs = subMenu.querySelectorAll('li.res-tab');
                         tabs.forEach(tab => {
                             const target = tab.dataset.target;
-                            // 사용하지 않는 탭 리스트 (개인정보, 네트워크, 보안위협)
-                            if (target === 'res-privacy' || target === 'res-network' || target === 'res-threats') {
+                            if (target === 'res-network' || target === 'res-threats') {
                                 tab.style.setProperty('display', 'none', 'important');
                             } else {
-                                tab.style.display = 'block';
+                                tab.style.setProperty('display', 'block', 'important');
                             }
                         });
                     }
-                    if (navCreate) navCreate.style.display = 'block';
-                    if (navOpen) navOpen.style.display = 'block';
                 }
+                // 사이드바 상단 기본 메뉴는 숨김
+                if (navCreate) navCreate.style.display = 'none';
+                if (navOpen) navOpen.style.display = 'none';
+
             } else {
-                // 검사 전이나 다른 화면일 때 모든 결과 탭 숨김
-                if (subMenu) subMenu.style.display = 'none';
-                if (iosSubMenu) iosSubMenu.style.display = 'none';
+                // --- 2. 결과 메뉴 숨김 로직 (초기 화면 등) ---
+                if (subMenu) {
+                    subMenu.classList.add('hidden');
+                    subMenu.style.setProperty('display', 'none', 'important');
+                }
+                if (iosSubMenu) {
+                    iosSubMenu.classList.add('hidden');
+                    iosSubMenu.style.setProperty('display', 'none', 'important');
+                }
+                // 초기 메뉴 다시 표시
                 if (navCreate) navCreate.style.display = 'block';
                 if (navOpen) navOpen.style.display = 'block';
             }
@@ -295,16 +309,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const modalOverlay = document.createElement('div');
                 modalOverlay.style.cssText = `
                     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background-color: rgba(0,0,0,0.5); display: flex;
-                    justify-content: center; align-items: center; z-index: 10000;
+            background-color: rgba(0,0,0,0.5); display: flex;
+            justify-content: center; align-items: center; z-index: 10000;
                 `;
 
                 // 2. 모달 박스 생성
                 const modalBox = document.createElement('div');
                 modalBox.style.cssText = `
                     background: white; padding: 20px; border-radius: 8px;
-                    width: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                    text-align: center; font-family: sans-serif;
+            width: 350px; 
+            max-height: 80vh; /* 화면 높이의 80%까지만 커짐 */
+            overflow-y: auto;  /* 내용이 길면 내부 스크롤 생성 */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center; font-family: sans-serif;
+            display: flex; flex-direction: column; /* 버튼을 하단에 고정하기 위함 */
                 `;
 
                 // 3. 내용물 (텍스트, 입력창, 버튼)
@@ -520,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error(error);
                 if (error.message === "LOCKED_ACCOUNT") {
-                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다. \n(문의: 010-8119-1837)";
+                    errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다. \n(문의: 031-778-8810)";
                     await signOut(auth); // Firebase 세션도 즉시 로그아웃
                     return;
                 }
@@ -774,6 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
             if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+                // 1. 네비게이션 메뉴 상태 복구
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
 
@@ -789,16 +808,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     subMenu.classList.remove('active');
                 }
 
+                const iosSubMenu = document.getElementById('ios-sub-menu');
+                if (iosSubMenu) {
+                    iosSubMenu.classList.add('hidden');
+                    iosSubMenu.style.display = 'none';
+                }
+
+                // 화면에 그려진 리스트 컨테이너들을 물리적으로 비움
+                const containers = [
+                    'app-grid-container',
+                    'bg-app-grid-container',
+                    'apk-grid-container',
+                    'suspicious-list-container',
+                    'mvt-analysis-container'
+                ];
+
+                containers.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '';
+                });
+
+                // 기기 정보 텍스트들도 초기화
+                const infoFields = ['res-model', 'res-serial', 'res-phone', 'res-root'];
+                infoFields.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = '-';
+                });
+
+                // 2. 상태값 및 화면 전환
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'create-scan-screen');
 
+                // 3. 버튼 상태 복구 및 입력폼 초기화
                 const realStartScanBtn = document.getElementById('real-start-scan-btn');
                 if (realStartScanBtn) {
                     realStartScanBtn.disabled = false;
                     realStartScanBtn.textContent = '검사 시작하기';
                 }
+
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
+
+                console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
             }
         });
     }
@@ -867,12 +918,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 3. 연결 없음 (기존 로직 유지)
+            // 3. 연결 없음 
             State.currentDeviceMode = null;
             this.setUI('disconnected', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
         },
 
-        // ★★★ [중요] 비주얼 연출을 위해 완전히 새로워진 setUI 함수 ★★★
         setUI(status, titleText, descText, color, showBtn = true) {
             // 1. 제어할 엘리먼트들 확보
             const wrapper = document.getElementById('connection-visual-wrapper'); // 폰+케이블 래퍼
@@ -882,35 +932,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const desc = document.getElementById('connection-status-desc');        // 하단 작은 설명
             const btnContainer = document.getElementById('start-scan-container');  // 버튼 컨테이너
 
-            // 2. 하단 텍스트 및 버튼 업데이트 (공통 작업)
+            // 2. 하단 텍스트 및 버튼 업데이트 
             title.textContent = titleText;
             title.style.color = color;
             // 모델명이 있을 때만 굵게 표시하는 로직 유지
             desc.innerHTML = descText.includes('모델') ? descText : `<span>${descText}</span>`;
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
-            // 3. 스마트폰 프레임 상태 클래스 초기화 (깨끗하게 비우기)
+            // 3. 스마트폰 프레임 상태 클래스 초기화 
             wrapper.classList.remove('state-disconnected', 'state-unauthorized', 'state-connected');
 
-            // 4. 상태별 비주얼 분기 처리 (아이콘 변경 코드 삭제됨!)
+            // 4. 상태별 비주얼 분기 처리 
             if (status === 'connected') {
-                // ★ 핵심: 부모에게 '연결됨' 명찰만 달아줍니다.
-                // 그러면 CSS가 알아서 녹색 체크 SVG를 보여줍니다.
+
                 wrapper.classList.add('state-connected');
 
-                alertTitle.innerHTML = 'DEVICE<br>READY'; // 폰 화면 멘트 변경
+                alertTitle.innerHTML = 'DEVICE<br>READY';
             }
             else if (status === 'unauthorized') {
-                // ★ 핵심: 부모에게 '인증 대기' 명찰을 달아줍니다.
-                // CSS가 자물쇠 SVG를 보여줍니다.
+
                 wrapper.classList.add('state-unauthorized');
 
                 alertTitle.innerHTML = 'WAITING<br>AUTH';
             }
             else {
-                // 여기가 바로 이사님이 찾으시던 '연결 전(disconnected)' 상태입니다.
-                // ★ 핵심: 부모에게 '연결 끊김' 명찰을 달아줍니다.
-                // CSS가 플러그 SVG를 보여줍니다.
+
                 wrapper.classList.add('state-disconnected');
 
                 alertTitle.innerHTML = 'CONNECT<br>DEVICE';
@@ -929,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 버튼을 즉시 비활성화하여 중복 클릭 방지
             realStartScanBtn.disabled = true;
-            realStartScanBtn.textContent = '검사 준비 중...';
+            realStartScanBtn.textContent = '검사 진행 중...';
 
             const hasQuota = await ScanController.checkQuota();
 
@@ -1091,10 +1137,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // 3. 시간 설정 계산
-                let targetMinutes = State.userRole === 'user'
-                    ? Math.floor(Math.random() * 11 + 20)
-                    : (State.androidTargetMinutes || 0);
+                // 시간 계산
+                let targetMinutes;
+
+                if (State.userRole === 'user') {
+                    // 일반 계정: 보안 정책상 20~30분 사이의 랜덤값 강제 부여
+                    targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
+                    console.log(`[Security Policy] 일반 업체 - 랜덤 시간 적용: ${targetMinutes}분`);
+                } else {
+                    // 관리자(admin) 및 총판(distributor): 설정된 히든 메뉴 값 사용 (없으면 0)
+                    targetMinutes = State.androidTargetMinutes || 0;
+                    console.log(`[Security Policy] 특권 계정 - 설정 시간 적용: ${targetMinutes}분`);
+                }
 
                 const totalDurationMs = targetMinutes * 60 * 1000;
                 const timePerApp = targetMinutes > 0 ? (totalDurationMs / totalApps) : 35;
@@ -1242,26 +1296,35 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         async startIosScan() {
-            ViewManager.updateProgress(5, "아이폰 백업 준비 중... (시간이 소요됩니다)");
+            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
-                // 실제 검사 수행
-                const rawData = await window.electronAPI.runIosScan(State.currentUdid);
+                // 1. 실제 검사 수행
+                const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
                 if (rawData.error) throw new Error(rawData.error);
-                const data = Utils.transformIosData(rawData); //데이터 변환
-                console.log("아이폰 분석 완료, 개인정보 보호를 위해 백업 파일을 삭제합니다..."); //분석 이후 PC에 남은 백업 파일 삭제 요청
-                // await window.electronAPI.deleteIosBackup(State.currentUdid);
-                this.finishScan(data); //결과 화면 렌더링
+
+                // 2. 데이터 변환 및 결과 화면 렌더링
+                const data = Utils.transformIosData(rawData);
+                this.finishScan(data);
+
+                // 3. [성공 시에만 삭제] 10초 뒤 보안 파기 실행
+                console.log(`[Security] 검사 성공. 10초 후 백업 파기를 시도합니다.`);
+
+                setTimeout(() => {
+                    console.log(`[Renderer] 삭제 요청 발송 -> 대상 UDID: ${State.currentUdid}`);
+
+                    window.electronAPI.deleteIosBackup(State.currentUdid)
+                        .then(res => {
+                            if (res.success) console.log("✅ [Security] 메인 프로세스에서 삭제 완료 응답을 받았습니다.");
+                        })
+                        .catch(err => console.error("❌ [Renderer] 삭제 명령 전달 실패:", err));
+                }, 10000);
+
             } catch (error) {
                 this.handleError(error);
-
-                // 에러가 발생해도 백업이 남아있을 수 있으므로 삭제 시도
-                if (State.currentUdid) {
-                    await window.electronAPI.deleteIosBackup(State.currentUdid);
-                }
             }
         },
 
-        // [새로 추가] 스마트폰 화면을 초기 상태로 되돌리는 함수
+        //  스마트폰 화면을 초기 상태로 되돌리는 함수
         resetSmartphoneUI() {
             // 1. 안전하게 요소 찾기 (유지)
             const scanScreen = document.getElementById('scan-progress-screen');
@@ -1279,18 +1342,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) {
                 icon.className = 'hack-icon';
 
-                // finishScan이 덧칠했던 '녹색 페인트'를 지우기
                 icon.style.color = '';
 
             }
 
             // 3. 텍스트 초기화
             if (alertText) {
-                // 문구 원복
                 alertText.innerHTML = 'SYSTEM<br>SCANNING';
-
-                // finishScan이 덧칠했던 '녹색 페인트'와 '녹색 그림자'를 지우기
-                // 이 코드가 있어야 텍스트가 다시 원래의 파란색으로 돌아옴
                 alertText.style.color = '';
                 alertText.style.textShadow = '';
             }
@@ -1339,7 +1397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 아이콘을 녹색 체크 표시로 변경
                 if (icon) {
                     icon.style.color = '#27c93f';
-                    icon.style.animation = 'none'; // 깜빡임 중지
+                    icon.style.animation = 'none';
                 }
 
                 // 문구 변경: SCANNING -> SAFE
@@ -1365,7 +1423,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
-            }, 1500); // 1초 뒤 결과 화면으로 전환
+            }, 1500);
         },
 
         handleError(error) {
@@ -1381,12 +1439,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const ResultsRenderer = {
         render(data) {
             console.log("ResultsRenderer.render 시작", data);
+
+            const containers = [
+                'app-grid-container',
+                'bg-app-grid-container',
+                'apk-grid-container',
+                'suspicious-list-container',
+                'mvt-analysis-container'
+            ];
+            containers.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '';
+            });
+
+            // 2. 모든 결과 섹션을 일단 숨김 처리 
+            document.querySelectorAll('.result-content-section').forEach(sec => {
+                sec.style.display = 'none';
+                sec.classList.remove('active');
+            });
+
+            // 3. 기기 정보 텍스트 초기화
+            ['res-model', 'res-serial', 'res-phone', 'res-root'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '-';
+            });
+
             const isIos = State.currentDeviceMode === 'ios';
 
             // 1. 공통 기기 정보 바인딩 (모델명, 시리얼 등)
             if (document.getElementById('res-model')) document.getElementById('res-model').textContent = data.deviceInfo?.model || '-';
             if (document.getElementById('res-serial')) document.getElementById('res-serial').textContent = data.deviceInfo?.serial || '-';
             if (document.getElementById('res-phone')) document.getElementById('res-phone').textContent = data.deviceInfo?.phoneNumber || '-';
+            if (document.getElementById('res-root')) document.getElementById('res-root').textContent = data.deviceInfo?.isRooted ? "O" : 'X';
+
 
             // 주요 섹션 및 그리드 요소 가져오기
             const summarySection = document.getElementById('res-summary');
@@ -1442,15 +1527,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     // --- [Android 전용 렌더링 및 문구 복구] ---
                     // ==========================================
 
-                    // 1. 안드로이드 원래 문구로 복구 (iOS에서 바뀐 것 되돌리기)
+                    // 1. 안드로이드 원래 문구로 복구 
                     if (threatsTitle) threatsTitle.textContent = "⚠️ 기기 보안 위협";
                     if (threatsDesc) threatsDesc.textContent = "시스템 설정 취약점 및 분석 결과입니다.";
                     if (iosAppDesc) iosAppDesc.style.display = 'none'; // 안드로이드에선 숨김
-                    if (appsHeader) appsHeader.textContent = "📲 설치된 애플리케이션";
+
+                    const totalApps = data.allApps ? data.allApps.length : 0; // 전체 앱 개수 계산
+                    const runningApps = data.runningCount || 0;
+                    if (appsHeader) {
+                        appsHeader.textContent = `📲 설치된 애플리케이션 (총 ${totalApps}개)`;
+                    }
+
+                    const bgHeader = document.querySelector('#res-background h3');
+                    if (bgHeader) {
+                        bgHeader.textContent = `🚀 실행 중인 백그라운드 앱 (총 ${runningApps}개)`;
+                    }
 
                     // 2. 데이터 렌더링 호출
                     // (1) 위협 탐지 목록 (요약 탭 상단)
+
                     this.renderSuspiciousList(data.suspiciousApps || [], false);
+                    this.renderPrivacyThreatList(data.privacyThreatApps || []);
 
                     // (2) 모든 설치된 앱 (앱 목록 탭)
                     if (appGrid) {
@@ -1472,6 +1569,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // (4) 발견된 설치 파일(APK) (설치 파일 탭)
                     if (apkGrid) {
+                        // 💡 APK 섹션 제목 엘리먼트 참조
+                        const apkHeader = document.querySelector('#res-apk h3');
+
+                        if (apkHeader) {
+                            // 개수 계산 (데이터가 없으면 0개)
+                            const apkCount = data.apkFiles ? data.apkFiles.length : 0;
+
+                            apkHeader.textContent = `📁 발견된 APK 파일 (총 ${apkCount}개)`;
+                        }
+
                         this.renderApkList(data.apkFiles || [], apkGrid)
                     }
 
@@ -1708,7 +1815,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 listHtml += `
                 <div class="ios-app-item">
                     <strong class="app-title">${displayName}</strong>
-                    <span class="app-package">${app.packageName}</span>
                 </div>
             `;
             });
@@ -1731,14 +1837,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="app-fallback-icon" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:24px;">📱</span>
                 </div>
                 <div class="app-display-name">${initialName}</div>
-                <div class="app-package-sub">${app.packageName}</div>
             `;
 
             const imgTag = div.querySelector('.app-real-icon');
             const spanTag = div.querySelector('.app-fallback-icon');
 
+            // 1. 위협 수준 판별
+            const isSpyApp = app.reason && app.reason.includes('[VT 확진]');
+            const isPrivacyRisk = app.reason && !app.reason.includes('[VT 확진]');
+
+            // 2. 테두리 클래스 결정 
+            let riskClass = '';
+            if (isSpyApp) riskClass = 'suspicious';      // 빨간 테두리
+            else if (isPrivacyRisk) riskClass = 'warning'; // 노란 테두리
+
+            div.className = `app-item ${riskClass}`;
+
+            // 3. 아이콘 이미지 결정 로직
             const getLocalIconPath = (appData) => {
-                if (appData.reason) return './assets/SpyAppLogo.png';
+                if (isSpyApp) return './assets/SpyAppLogo.png';
+
                 return './assets/systemAppLogo.png';
             };
 
@@ -1846,6 +1964,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
             }
+        },
+        renderPrivacyThreatList(privacyApps) {
+            const container = document.getElementById('privacy-threat-list-container');
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            if (privacyApps && privacyApps.length > 0) {
+                let html = '<ul style="list-style:none; padding:0;">';
+                privacyApps.forEach(app => {
+                    const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
+                    html += `
+                <li style="padding:15px; border-bottom:1px solid #eee; border-left: 4px solid #f0ad4e; background-color: #fcf8e3; margin-bottom: 10px; border-radius: 4px;">
+                    <div style="color:#8a6d3b; font-weight:bold; font-size: 15px; margin-bottom: 4px;">
+                        ⚠️ ${dName} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
+                    </div>
+                    <div style="font-size:13px; color:#666;">${app.reason}</div>
+                </li>`;
+                });
+                container.innerHTML = html + '</ul>';
+            } else {
+                container.innerHTML = `
+            <div style="text-align:center; padding:30px; background:#f9f9f9; border-radius:8px; color:#999;">
+                ✅ 탐지된 개인정보 유출 위협이 없습니다.
+            </div>`;
+            }
         }
     };
 
@@ -1857,6 +2001,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         show(app, displayName) {
             console.log("상세 정보 표시 실행:", displayName, "유형:", app.isApkFile ? "APK" : "설치됨");
+
+            const iconWrapper = document.querySelector('.detail-icon-wrapper');
+
+            if (iconWrapper) {
+                iconWrapper.classList.remove('suspicious');
+                iconWrapper.innerHTML = '';
+            }
 
             // 1. 화면 전환 로직
             const dashboard = document.getElementById('results-dashboard-view');
@@ -1913,7 +2064,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     uninstallBtnEl.textContent = "🗑️ APK 파일 영구 삭제";
                 }
 
-                document.getElementById('detail-req-count').textContent = app.requestedCount || 0;
+                document.getElementById('detail-req-count').textContent = (app.requestedList || app.permissions || []).length;
                 document.getElementById('detail-grant-count').textContent = "-";
 
             } else {
@@ -1958,17 +2109,36 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 5. 아이콘 처리
-            const iconWrapper = document.querySelector('.detail-icon-wrapper');
             if (iconWrapper) {
-                const iconSrc = app.cachedIconUrl || './assets/systemAppLogo.png';
+                const iconSrc = app.reason
+                    ? './assets/SpyAppLogo.png'
+                    : (app.cachedIconUrl || './assets/systemAppLogo.png');
+
+                if (app.reason) {
+                    iconWrapper.classList.add('suspicious');
+                }
+
+                // 데이터 세팅 완료 후 이미지 삽입
                 iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
+            }
+
+            const totalPermsArr = app.requestedList || app.permissions || [];
+            const totalCount = totalPermsArr.length;
+            const grantedCount = (app.grantedList || []).length;
+
+            const reqCountEl = document.getElementById('detail-req-count');
+            const grantCountEl = document.getElementById('detail-grant-count');
+
+            if (reqCountEl) reqCountEl.textContent = totalCount;
+            if (grantCountEl) {
+                grantCountEl.textContent = app.isApkFile ? "-" : grantedCount;
             }
 
             // 6. 권한 리스트 렌더링
             const list = document.getElementById('detail-permission-list');
             if (list) {
                 list.innerHTML = '';
-                const perms = app.requestedList || [];
+                const perms = app.requestedList || app.permissions || [];
                 if (perms.length > 0) {
                     perms.forEach(perm => {
                         const spanElem = document.createElement('span');
@@ -2533,20 +2703,23 @@ document.addEventListener('DOMContentLoaded', () => {
         transformAndroidData: (scanData) => {
             const transformedApps = scanData.allApps || [];
 
-            // 💡 [핵심 수정] VT 확진 앱만 위협 목록으로 분류
-            // app.reason 필드에 "[VT 확진]"이 포함된 앱만 필터링합니다.
-            const suspiciousApps = transformedApps.filter(app => {
-                // reason 필드가 있고, 그 안에 "[VT 확진]" 문자열이 포함된 경우만 true
-                return app.reason && app.reason.includes('[VT 확진]');
-            });
+            // 1. 진짜 스파이앱 (VT 확진된 것만)
+            const spyApps = transformedApps.filter(app =>
+                // app.reason && app.reason.includes('[VT 확진]')
+                false
+            );
 
+            // 2. 개인정보 유출 위협 (권한이 과도하거나 VT 결과가 애매한 의심 앱)
+            const privacyThreats = transformedApps.filter(app =>
+                app.reason // && !app.reason.includes('[VT 확진]')
+            );
 
             return {
                 deviceInfo: scanData.deviceInfo,
                 allApps: transformedApps,
                 apkFiles: scanData.apkFiles || [],
-                suspiciousApps: suspiciousApps
-                // networkUsageMap 등 다른 필드는 필요에 따라 추가
+                suspiciousApps: spyApps,      // [스파이앱 탭으로]
+                privacyThreatApps: privacyThreats // [개인정보 유출 위협 탭으로]
             };
         },
 

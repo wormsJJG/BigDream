@@ -1,113 +1,101 @@
 {
-  "name": "BD-SCANNER",
-  "version": "1.0.6",
-  "description": "Mobile Scanner",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "build": "react-scripts build",
-    "deploy:xos": "electron-builder --mac",
-    "deploy:win32": "electron-builder --win --ia32",
-    "deploy:win64": "electron-builder --win --x64 --publish always",
-    "deploy:win": "yarn deploy:win32 && yarn deploy:win64",
-    "test": "react-scripts test"
-  },
-  "author": "Big Dream Security",
-  "license": "ISC",
-  "devDependencies": {
-    "@electron-forge/maker-squirrel": "^7.10.2",
-    "electron": "^39.2.7",
-    "electron-builder": "^26.0.12"
-  },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "icon": "assets/app_icon",
-        "extraResource": [
-          "ios-tools",
-          "platform-tools"
-        ]
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "BD_Scanner",
-            "setupIcon": "assets/setUpIcon.ico"
-          }
-        }
-      ]
-    }
-  },
-  "dependencies": {
-    "@electron-forge/cli": "^7.10.2",
-    "adb": "^0.2.0",
-    "adbkit": "^2.11.1",
-    "adbkit-apkreader": "^3.2.0",
-    "app-info-parser": "^1.1.6",
-    "axios": "^1.13.2",
-    "child_process": "^1.0.2",
-    "electron-log": "^5.4.3",
-    "electron-updater": "^6.6.2",
-    "firebase": "^12.6.0",
-    "firebase-admin": "^13.6.0",
-    "google-play-scraper": "^10.1.2",
-    "onnxruntime-node": "^1.23.2",
-    "xml2js": "^0.6.2"
-  },
-  "build": {
-    "productName": "BD-Scanner",
-    "appId": "com.bigdream.bdscanner",
-    "asar": true,
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "assets/setUpIcon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "perMachine": true,
-      "language": 1042,
-      "installerIcon": "assets/setUpIcon.ico",
-      "shortcutName": "BD-Scanner",
-      "artifactName": "BD-Scanner-${version}.${ext}",
-      "uninstallDisplayName": "BD-Scanner"
-    },
-    "extraResources": [
-      {
-        "from": "platform-tools/",
-        "to": "platform-tools/",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "ios-tools/",
-        "to": "ios-tools/",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "pcap_receiver.py",
-        "to": "pcap_receiver.py"
-      },
-      {
-        "from": "assets/models",
-        "to": "assets/models"
-      }
+ "name": "BD-SCANNER",
+ "version": "1.1.3",
+ "description": "Mobile Scanner",
+ "main": "main.js",
+ "scripts": {
+  "start": "electron .",
+  "build": "react-scripts build",
+  "deploy:xos": "electron-builder --mac",
+  "deploy:win32": "electron-builder --win --ia32",
+  "deploy:win64": "electron-builder --win --x64 --publish always",
+  "deploy:win": "yarn deploy:win32 && yarn deploy:win64",
+  "test": "react-scripts test"
+ },
+ "author": "Big Dream Security",
+ "license": "ISC",
+ "devDependencies": {
+  "@electron-forge/maker-squirrel": "^7.10.2",
+  "electron": "^39.2.7",
+  "electron-builder": "^26.0.12"
+ },
+ "dependencies": {
+  "@electron-forge/cli": "^7.10.2",
+  "adb": "^0.2.0",
+  "adbkit": "^2.11.1",
+  "adbkit-apkreader": "^3.2.0",
+  "app-info-parser": "^1.1.6",
+  "axios": "^1.13.2",
+  "child_process": "^1.0.2",
+  "electron-log": "^5.4.3",
+  "electron-updater": "^6.6.2",
+  "firebase": "^12.6.0",
+  "firebase-admin": "^13.6.0",
+  "google-play-scraper": "^10.1.2",
+  "onnxruntime-node": "^1.23.2",
+  "xml2js": "^0.6.2"
+ },
+ "build": {
+  "productName": "BD-Scanner",
+  "appId": "com.bigdream.bdscanner",
+  "asar": true,
+  "win": {
+   "target": [
+    "nsis"
+   ],
+   "signtoolOptions": {
+    "signingHashAlgorithms": [
+     "sha256"
     ],
-    "publish": {
-      "provider": "github",
-      "token": "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",
-      "private": true
-    }
+    "certificateSubjectName": "BigDream Corp",
+    "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1"
+   },
+   "icon": "assets/setUpIcon.ico"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/wormsJJG/BigDream"
+  "nsis": {
+   "oneClick": false,
+   "allowToChangeInstallationDirectory": false,
+   "createDesktopShortcut": true,
+   "perMachine": true,
+   "language": 1042,
+   "installerIcon": "assets/setUpIcon.ico",
+   "shortcutName": "BD-Scanner",
+   "artifactName": "BD-Scanner-${version}.${ext}",
+   "uninstallDisplayName": "BD-Scanner"
+  },
+  "extraResources": [
+   {
+    "from": "platform-tools/",
+    "to": "platform-tools/",
+    "filter": [
+     "**/*"
+    ]
+   },
+   {
+    "from": "ios-tools/",
+    "to": "ios-tools/",
+    "filter": [
+     "**/*"
+    ]
+   },
+   {
+    "from": "pcap_receiver.py",
+    "to": "pcap_receiver.py"
+   },
+   {
+    "from": "assets/models",
+    "to": "assets/models"
+   }
+  ],
+  "publish": {
+   "provider": "github",
+   "owner": "wormsJJG",
+   "repo": "BigDream",
+   "token": "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"
   }
+ },
+ "repository": {
+  "type": "git",
+  "url": "https://github.com/wormsJJG/BigDream"
+ }
 }

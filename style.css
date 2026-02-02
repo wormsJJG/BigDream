@@ -888,6 +888,7 @@ p { color: var(--muted); line-height: 1.6; }
 }
 .file-list li { padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); }
 
+
 /* iOS list grid */
 .ios-app-list-grid {
   display: grid !important;
@@ -897,6 +898,25 @@ p { color: var(--muted); line-height: 1.6; }
   overflow-x: hidden !important;
   padding: 0;
   margin: 0;
+
+.detail-icon-wrapper {
+    width: 70px;
+    height: 70px;
+    background: #eee;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 20px;
+    transition: all 0.3s ease; 
+    border: 3px solid transparent; 
+}
+
+/* 스파이앱일 때 적용될 스타일 */
+.detail-icon-wrapper.suspicious {
+    border-color: #d9534f; 
+    background-color: #fff5f5; 
+    box-shadow: 0 0 10px rgba(217, 83, 79, 0.2); 
 }
 
 .ios-app-item {
@@ -1105,6 +1125,16 @@ p { color: var(--muted); line-height: 1.6; }
   box-shadow: none;
   animation: slideDown 0.25s ease;
   color: var(--text);
+}
+
+/* 스크롤바가 너무 투박하다면 깔끔하게 디자인 가능 */
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
 }
 
 @keyframes slideDown {
