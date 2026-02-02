@@ -4068,8 +4068,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.electronAPI && window.electronAPI.onUpdateLiveMetrics) {
         window.electronAPI.onUpdateLiveMetrics((metrics) => {
             // 1. 배터리 업데이트 
-            const bGauge = document.querySelector('.metric-box-soc:nth-child(1) .circular-gauge');
-            const bText = document.querySelector('.metric-box-soc:nth-child(1) .metric-value');
+            const bGauge = document.querySelector('.metric-box:nth-child(1) .circular-gauge');
+            const bText = document.querySelector('.metric-box:nth-child(1) .metric-value');
             if (bGauge) {
                 bGauge.style.background = `conic-gradient(#2563EB 0% ${metrics.battery}%, #1E293B ${metrics.battery}% 100%)`;
                 const gVal = bGauge.querySelector('.gauge-val');
@@ -4078,8 +4078,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 2. RAM 업데이트
-            const rGauge = document.querySelector('.metric-box-soc:nth-child(2) .circular-gauge');
-            const rText = document.querySelector('.metric-box-soc:nth-child(2) .metric-value');
+            const rGauge = document.querySelector('.metric-box:nth-child(2) .circular-gauge');
+            const rText = document.querySelector('.metric-box:nth-child(2) .metric-value');
             if (rGauge) {
                 rGauge.style.background = `conic-gradient(#2563EB 0% ${metrics.ramPercent}%, #1E293B ${metrics.ramPercent}% 100%)`;
                 const gVal = rGauge.querySelector('.gauge-val');
@@ -4088,7 +4088,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 3. 온도 업데이트
-            const tText = document.querySelector('.metric-box-soc:nth-child(3) .metric-value');
+            const tText = document.querySelector('.metric-box:nth-child(3) .metric-value');
             if (tText) tText.textContent = `${metrics.temp} °C`;
         });
     }
