@@ -229,35 +229,121 @@
                 </div>
             </section>
 
-            <section id="scan-progress-screen" class="screen">
-                <h2>검사 진행 중</h2>
-                <div class="content-card scan-animation-card">
-                    <div class="scanner-animation">
-                        <div class="phone">
-                            <div class="notch"></div>
-                            <div class="phone-screen">
-                                <div class="scanner-beam" id="scannerBeam"></div>
-                                <i class="fas fa-triangle-exclamation hack-icon"></i>
-                                <div class="hack-alert">SYSTEM<br>SCANNING</div>
-                                <div style="margin-top:20px; color:#00d2ff; font-size:14px; font-weight:bold;">
-                                    [!] 비정상 권한 접근 탐지...<br>
-                                    [!] 실시간 프로세스 감시...<br>
-                                    [!] AI 기반 지능형 위협 분석 중...
-                                </div>
-                                <div class="data-particle dp-1">App</div>
-                                <div class="data-particle dp-2">File</div>
-                                <div class="data-particle dp-3">System</div>
-                                <div class="data-particle dp-4">Network</div>
-                            </div>
+            <section id="scan-progress-screen" class="screen"
+                style="position: fixed !important; top: 0 !important; left: 240px !important; width: calc(100% - 240px) !important; height: 100vh !important; background: #050810 !important; z-index: 10000 !important; display: none; flex-direction: column !important; padding: 20px !important; box-sizing: border-box !important; overflow: hidden !important; color: #F1F5F9 !important; gap: 15px !important;">
+
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; height: 40px;">
+                    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #fff;">🛰️ 안드로이드 실시간 관제</h1>
+                    <div style="text-align: right; display: flex; align-items: center; gap: 15px;">
+                        <p style="margin: 0; font-size: 13px; color: #64748B;">🛡️ 지능형 보안 엔진 분석 시스템 가동 중</p>
+                        <span style="color: #10B981; font-weight: bold; font-size: 12px;">● ONLINE</span>
+                    </div>
+                </div>
+
+                <div class="metrics-grid-soc"
+                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; flex-shrink: 0; height: 80px;">
+                    <div class="metric-box-soc"
+                        style="background: #0E1320; padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between;">
+                        <div><label
+                                style="color: #64748B; font-size: 11px; display: block; margin-bottom: 2px;">배터리</label>
+                            <div class="metric-value" style="font-size: 20px; font-weight: 800;">--%</div>
+                        </div>
+                        <div class="circular-gauge"
+                            style="width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: conic-gradient(#2563EB 0% 0%, #1E293B 0% 100%);">
+                            <span class="gauge-val" style="font-size: 9px; font-weight: 800; color: #2563EB;">0</span>
                         </div>
                     </div>
-                    <p id="scan-status-text">기기 연결을 확인하는 중...</p>
-                    <div class="progress-bar-container">
-                        <div id="progress-bar" style="width: 0%;"></div>
+                    <div class="metric-box-soc"
+                        style="background: #0E1320; padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between;">
+                        <div><label style="color: #64748B; font-size: 11px; display: block; margin-bottom: 2px;">RAM
+                                점유율</label>
+                            <div class="metric-value" style="font-size: 20px; font-weight: 800;">--%</div>
+                        </div>
+                        <div class="circular-gauge"
+                            style="width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: conic-gradient(#2563EB 0% 0%, #1E293B 0% 100%);">
+                            <span class="gauge-val" style="font-size: 9px; font-weight: 800; color: #2563EB;">0</span>
+                        </div>
                     </div>
-                    <div class="warning-box">
-                        <img src="./assets/icon-warning.png" alt="Warning">
-                        <span><strong>경고:</strong> 검사가 완료될 때까지 USB 케이블을 절대 분리하지 마십시오.</span>
+                    <div class="metric-box-soc"
+                        style="background: #0E1320; padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <label style="color: #64748B; font-size: 11px; display: block; margin-bottom: 2px;">기기
+                            온도</label>
+                        <div class="metric-value" style="font-size: 20px; font-weight: 800;">--.-°C</div>
+                    </div>
+                    <div class="metric-box-soc"
+                        style="background: #0E1320; padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <label style="color: #64748B; font-size: 11px; display: block; margin-bottom: 2px;">분석
+                            프로세스</label>
+                        <div id="scan-status-text" style="font-size: 18px; font-weight: 800; color: #fff;">0 / 0</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0;">
+                    <div
+                        style="width: 300px; background: #0E1320; border-radius: 15px; padding: 20px; display: flex; flex-direction: column; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.05);">
+                        <h4
+                            style="margin: 0 0 15px 0; color: #2563EB; font-size: 14px; font-weight: 700; border-bottom: 2px solid #2563EB; padding-bottom: 8px;">
+                            📱 실시간 분석 제원</h4>
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; font-size: 13px;">
+                            <div
+                                style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 5px;">
+                                <label style="color: #64748B;">모델명</label><span id="live-model-name"
+                                    style="font-weight: bold; color: #F1F5F9;">-</span></div>
+                            <div
+                                style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 5px;">
+                                <label style="color: #64748B;">OS 버전</label><span id="live-os-version">-</span></div>
+                            <div
+                                style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 5px;">
+                                <label style="color: #64748B;">커널 상태</label><span
+                                    style="color: #10B981; font-weight: bold;">SAFE</span></div>
+                            <div
+                                style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 5px;">
+                                <label style="color: #64748B;">루팅 여부</label><span id="live-rooted-status"
+                                    style="color: #2563EB; font-weight: bold;">WAIT</span></div>
+                            <div style="display: flex; justify-content: space-between;"><label
+                                    style="color: #64748B;">감시 상태</label><span
+                                    style="color: #EF4444; font-weight: bold;">ACTIVE</span></div>
+                        </div>
+                        <div
+                            style="margin-top: 10px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; font-size: 11px; color: #EF4444; text-align: center; line-height: 1.4;">
+                            ⚠️ <strong>주의:</strong> 분석 중 케이블 분리 시<br>시스템 무결성 손상 위험이 있습니다.
+                        </div>
+                    </div>
+
+                    <div
+                        style="flex: 1; background: linear-gradient(180deg, #0E1320 0%, #050810 100%); border: 1px solid rgba(255,255,255,0.05); border-radius: 15px; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+                        <div
+                            style="flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+                            <div class="phone"
+                                style="transform: scale(0.38) !important; margin: 0 !important; position: relative; top: -10px;">
+                                <div class="notch"
+                                    style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 150px; height: 25px; background: #222; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; z-index: 20;">
+                                </div>
+                                <div class="phone-screen"
+                                    style="width: 320px; height: 640px; background: #000; border-radius: 40px; border: 12px solid #222; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+                                    <div class="scanner-beam" id="scannerBeam"
+                                        style="position: absolute; width: 100%; height: 5px; background: #2563EB; box-shadow: 0 0 20px #2563EB; animation: scanLine 2s infinite linear; display: block;">
+                                    </div>
+                                    <div class="hack-alert"
+                                        style="color: #2563EB; font-size: 32px; font-weight: bold; text-align: center; text-shadow: 0 0 15px #2563EB; letter-spacing: 2px;">
+                                        SOC<br>SYSTEM</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            style="height: 160px; background: rgba(0,0,0,0.6); display: flex; flex-direction: column; padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); z-index: 10; flex-shrink: 0; box-sizing: border-box;">
+                            <div
+                                style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-bottom: 12px; overflow: hidden;">
+                                <div id="progress-bar"
+                                    style="width: 0%; height: 100%; background: #2563EB; box-shadow: 0 0 10px #2563EB; transition: width 0.4s ease;">
+                                </div>
+                            </div>
+                            <div class="status-console"
+                                style="flex-grow: 1; font-family: 'Courier New', monospace; font-size: 11px; color: #10B981; overflow: hidden; line-height: 1.5;">
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
