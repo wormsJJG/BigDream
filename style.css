@@ -898,7 +898,7 @@ p { color: var(--muted); line-height: 1.6; }
   overflow-x: hidden !important;
   padding: 0;
   margin: 0;
-
+}
 .detail-icon-wrapper {
     width: 70px;
     height: 70px;
