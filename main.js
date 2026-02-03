@@ -210,7 +210,7 @@ function createWindow() {
     console.log('--- [System] Main Window Created ---');
     const mainWindow = new BrowserWindow({
         width: 1280,
-        height: 850,
+        height: 900,
         webPreferences: {
             devTools: true,
             preload: path.join(__dirname, 'preload.js'),

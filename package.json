@@ -1,6 +1,6 @@
 {
   "name": "BD-SCANNER",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Mobile Scanner",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "deploy:win": "yarn deploy:win32 && yarn deploy:win64",
     "test": "react-scripts test"
   },
-  "author": "Big Dream Security",
+  "author": "BigDream Corp",
   "license": "ISC",
   "devDependencies": {
     "@electron-forge/maker-squirrel": "^7.10.2",
@@ -64,7 +64,7 @@
         "nsis"
       ],
       "signingHashAlgorithms": ["sha256"],
-      "certificateSubjectName": "GlobalSign GCC R45 EV CodeSigning CA 2020",
+      "certificateSubjectName": "BigDream Corp",
       "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1",
       "icon": "assets/setUpIcon.ico"
     },
