@@ -19,6 +19,9 @@ const log = require('electron-log');
 const { EventEmitter } = require('events');
 const ApkReader = require('adbkit-apkreader');
 
+const { createMainWindow } = require('./src/main/window/createMainWindow');
+const { initializeAutoUpdater } = require('./src/main/updater/initializeAutoUpdater');
+
 const aiEvents = new EventEmitter();
 aiEvents.setMaxListeners(0);
 
@@ -206,81 +209,12 @@ const client = adb.createClient({ bin: CONFIG.PATHS.ADB });
 // [2] 앱 생명주기 및 창 관리 (APP LIFECYCLE)
 // ============================================================
 
-function createWindow() {
-    console.log('--- [System] Main Window Created ---');
-    const mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 900,
-        webPreferences: {
-            devTools: true,
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false
-        }
-    });
-    mainWindow.loadFile('index.html');
-}
-
-function sendStatusToWindow(channel, data) {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-    if (mainWindow) {
-        mainWindow.webContents.send(channel, data);
-    }
-}
-
-autoUpdater.on('checking-for-update', () => { log.info('업데이트 확인 중...'); });
-autoUpdater.on('update-available', (info) => {
-    log.info('업데이트 가능');
-    sendStatusToWindow('update-start', info.version)
-});
-autoUpdater.on('update-not-available', (info) => { log.info('최신 버전임'); });
-autoUpdater.on('error', (err) => {
-    log.info('에러 발생: ' + err);
-    sendStatusToWindow('update-error', err.message)
-});
-autoUpdater.on('download-progress', (progressObj) => {
-    log.info(`다운로드 중: ${progressObj.percent}%`);
-
-    sendStatusToWindow('update-progress', {
-        percent: Math.floor(progressObj.percent),
-        bytesPerSecond: Utils.formatBytes(progressObj.bytesPerSecond) + '/s',
-        transferred: Utils.formatBytes(progressObj.transferred),
-        total: Utils.formatBytes(progressObj.total)
-    });
-});
-autoUpdater.on('update-downloaded', (info) => {
-    log.info('다운로드 완료. 앱을 재시작하여 업데이트를 적용합니다.');
-    autoUpdater.quitAndInstall();
-});
-
-function initializeAutoUpdater() {
-    // 개발 모드에서는 업데이트 확인을 건너뜁니다 (API 차단 방지)
-    if (CONFIG.IS_DEV_MODE) {
-        log.info("[Update] 개발 모드: 업데이트 체크를 생략합니다.");
-        return;
-    }
-
-    autoUpdater.on('error', (err) => {
-        log.error('업데이트 에러 상세:', err);
-        // API 제한 에러 발생 시 사용자에게 불필요한 오류 팝업을 띄우지 않도록 제어
-        if (err.message.includes('403') || err.message.includes('429')) {
-            console.warn("⚠️ GitHub API 속도 제한에 도달했습니다. 나중에 다시 시도합니다.");
-        }
-    });
-
-    // 앱 시작 5초 후에 딱 한 번만 확인하도록 딜레이 (리소스 충돌 방지)
-    setTimeout(() => {
-        autoUpdater.checkForUpdatesAndNotify().catch(e => {
-            log.error("최초 업데이트 확인 실패:", e.message);
-        });
-    }, 5000);
-}
+// Window/updater logic moved into src/main/* modules for maintainability.
 
 app.whenReady().then(async () => {
-    createWindow();
-    const mainWindow = BrowserWindow.getAllWindows()[0];
+    const mainWindow = createMainWindow({ baseDir: __dirname });
     await Utils.checkAndInstallPrerequisites(mainWindow);
-    initializeAutoUpdater()
+    initializeAutoUpdater({ autoUpdater, log, BrowserWindow, CONFIG, Utils });
 }).catch(err => {
     console.log(err)
 });

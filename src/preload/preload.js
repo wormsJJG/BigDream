@@ -1,45 +1,10 @@
-// preload.js (root entry)
-//
-// Why this file contains the full implementation:
-// - Some Electron setups (e.g., webpack / electron-webpack) execute preload scripts
-//   from a sandbox bundle where relative `require('./src/...')` cannot resolve.
-// - To keep runtime stable, we avoid requiring project-relative modules here.
-//
+// src/preload/preload.js
 // Security-first preload: expose ONLY whitelisted APIs.
 
 const { contextBridge, ipcRenderer } = require('electron');
+const IPC = require('../shared/ipcChannels');
 
-// IPC channel names (inlined for maximum compatibility)
-const IPC = {
-    ANDROID: {
-        CHECK_DEVICE_CONNECTION: 'check-device-connection',
-        RUN_SCAN: 'run-scan',
-        OPEN_SCAN_FILE: 'open-scan-file',
-        GET_APP_DATA: 'get-app-data',
-        UNINSTALL_APP: 'uninstall-app',
-        NEUTRALIZE_APP: 'neutralize-app',
-        DELETE_APK_FILE: 'delete-apk-file',
-        AUTO_PUSH_REPORT: 'auto-push-report-to-android',
-        START_FULL_SCAN: 'start-full-scan'
-    },
-    IOS: {
-        CHECK_CONNECTION: 'check-ios-connection',
-        RUN_SCAN: 'run-ios-scan',
-        DELETE_BACKUP: 'delete-ios-backup'
-    },
-    APP: {
-        FORCE_WINDOW_RESET: 'force-window-reset',
-        SAVE_SCAN_RESULT: 'saveScanResult',
-        CHECK_FOR_UPDATE: 'checkForUpdate',
-        SAVE_LOGIN_INFO: 'saveLoginInfo',
-        GET_LOGIN_INFO: 'getLogininfo'
-    },
-    EVENTS: {
-        UPDATE_START: 'update-start',
-        UPDATE_PROGRESS: 'update-progress',
-        UPDATE_ERROR: 'update-error'
-    }
-};
+console.log('--- preload.js: 로드됨 ---');
 
 // ✅ Structured API (recommended)
 const bdScanner = {
@@ -98,3 +63,5 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld('bdScanner', bdScanner);
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+
+console.log('--- preload.js: bdScanner / electronAPI 브릿지 생성 완료 ---');
