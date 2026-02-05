@@ -1,0 +1,38 @@
+<h2>기기 연결</h2>
+<div class="content-card" style="text-align: center;">
+<div class="phone-wrapper state-disconnected" id="connection-visual-wrapper">
+<div class="phone">
+<div class="notch"></div>
+<div class="phone-screen">
+<div class="screen-icon-container">
+<svg class="neon-svg icon-plug" fill="none" viewbox="0 0 60 130" xmlns="http://www.w3.org/2000/svg">
+<rect height="50" rx="4" stroke="currentColor" stroke-width="4" width="30" x="15" y="10"></rect>
+<path d="M22 50L22 60" stroke="currentColor" stroke-linecap="round" stroke-width="4"></path>
+<path d="M38 50L38 60" stroke="currentColor" stroke-linecap="round" stroke-width="4"></path>
+<path d="M15 25H45" stroke="currentColor" stroke-width="4"></path>
+<path d="M20 60H40V130H20V60Z" fill="currentColor"></path>
+</svg>
+<svg class="neon-svg icon-lock" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect>
+<path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+</svg>
+<svg class="neon-svg icon-check" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+</div>
+<div class="hack-alert" id="connection-device-title">CONNECT<br/>DEVICE</div>
+</div>
+</div>
+<div class="phone-cable"></div>
+</div>
+<h3 id="connection-status-title" style="margin-top: 20px;">기기를 연결해주세요</h3>
+<p id="connection-status-desc">
+                        Android 기기를 USB 케이블로 연결하고<br/>
+                        화면에서 <strong>'USB 디버깅 허용'</strong>을 눌러주세요.
+                    </p>
+<div id="start-scan-container" style="display: none; margin-top: 30px;">
+<button class="primary-button" id="real-start-scan-btn">검사 시작하기</button>
+</div>
+<br/>
+<button class="secondary-button" id="back-to-info-btn" style="width: 100%;">← 뒤로 가기</button>
+</div>

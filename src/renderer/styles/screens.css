@@ -1,0 +1,16 @@
+/* Screen styles entrypoint (Stage4+).
+   NOTE: Keep import order to preserve cascade.
+*/
+@import "../screens/login-screen/style.css";
+@import "../screens/support-screen/style.css";
+@import "../screens/create-scan-screen/style.css";
+@import "../screens/device-connection-screen/style.css";
+@import "../screens/scan-progress-screen/style.css";
+
+/* Results / Admin */
+@import "../screens/scan-results-screen/style.css";
+@import "../screens/admin-screen/style.css";
+@import "../screens/admin-report-detail-screen/style.css";
+
+/* Global overlays */
+@import "./modals.css";
