@@ -1,0 +1,43 @@
+<div id="agency-info-display">
+<div id="agency-name">(주) BD SCANNER</div>
+<div id="agency-quota">남은 횟수 : 로딩 중</div>
+</div>
+<h2>검사 생성</h2>
+<p>검사를 진행할 대상자의 정보를 입력해주세요.</p>
+<div class="content-card input-card-relative">
+<button class="reset-icon-btn" id="reset-client-info-btn" type="button">↺ 정보 초기화</button>
+<form id="client-info-form">
+<div class="form-group-anon">
+<label for="client-name">대상자 이름</label>
+<div class="input-and-anon">
+<input id="client-name" type="text"/>
+<label class="anon-label" for="anon-name">
+<input class="anon-check" id="anon-name" type="checkbox"/>
+                                    익명
+                                </label>
+</div>
+</div>
+<div class="form-group-anon" style="display: none;">
+<label for="client-dob">생년월일</label>
+<div class="input-and-anon">
+<input id="client-dob" type="date"/>
+<label class="anon-label" for="anon-dob">
+<input checked="" class="anon-check" id="anon-dob" type="checkbox"/>
+                                    익명
+                                </label>
+</div>
+</div>
+<div class="form-group-anon">
+<label for="client-phone">휴대폰 번호</label>
+<div class="input-and-anon">
+<input id="client-phone" placeholder="010-1234-5678" type="tel"/>
+<label class="anon-label" for="anon-phone">
+<input class="anon-check" id="anon-phone" type="checkbox"/>
+                                    익명
+                                </label>
+</div>
+</div>
+<button class="primary-button" disabled="" id="to-connection-screen-btn" type="submit">다음 단계 (기기
+                            연결)</button>
+</form>
+</div>

@@ -1,0 +1,87 @@
+/* --- 버튼 스타일 공통 --- */
+.primary-button {
+    padding: 14px 20px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.primary-button:hover {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+}
+
+.primary-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.secondary-button {
+    padding: 10px 20px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.secondary-button:hover {
+    background-color: #5a6268;
+}
+
+/* 빨간색 버튼 (우선순위 높임) */
+.secondary-button.danger-button {
+    background-color: var(--danger-color);
+}
+
+.secondary-button.danger-button:hover {
+    background-color: var(--danger-hover);
+}
+
+/* --- Sidebar support info (moved from old screens.css) --- */
+.sidebar-support-info {
+    display: flex;
+    align-items: center;
+    padding: 15px 10px;
+    margin-bottom: 15px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+}
+
+.support-text-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.sidebar-support-info p {
+    margin: 1px 0 !important;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.support-company {
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+.support-title {
+    font-size: 14px;
+    color: #bdc3c7;
+}
+
+.support-phone {
+    font-size: 16px;
+    font-weight: 700;
+    color: #4ECDC4;
+}

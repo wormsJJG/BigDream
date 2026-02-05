@@ -23,7 +23,11 @@ module.exports = {
         SAVE_SCAN_RESULT: 'saveScanResult',
         CHECK_FOR_UPDATE: 'checkForUpdate',
         SAVE_LOGIN_INFO: 'saveLoginInfo',
-        GET_LOGIN_INFO: 'getLogininfo'
+        GET_LOGIN_INFO: 'getLogininfo',
+        READ_TEXT_FILE: 'read-text-file'
+    },
+    FIRESTORE: {
+        CALL: 'firestore-call'
     },
     EVENTS: {
         UPDATE_START: 'update-start',
@@ -31,3 +35,5 @@ module.exports = {
         UPDATE_ERROR: 'update-error'
     }
 };
+
+export const FIREBASE_AUTH_LOGIN = 'firebase-auth-login';

@@ -14,6 +14,7 @@ const bdScanner = {
         saveScanResult: (data) => ipcRenderer.invoke(IPC.APP.SAVE_SCAN_RESULT, data),
         saveLoginInfo: (data) => ipcRenderer.invoke(IPC.APP.SAVE_LOGIN_INFO, data),
         getLoginInfo: () => ipcRenderer.invoke(IPC.APP.GET_LOGIN_INFO),
+        readTextFile: (relativePath) => ipcRenderer.invoke(IPC.APP.READ_TEXT_FILE, { relativePath }),
         onUpdateStart: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_START, (event, version) => callback(version)),
         onUpdateProgress: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_PROGRESS, (event, data) => callback(data)),
         onUpdateError: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_ERROR, (event, msg) => callback(msg))
@@ -28,6 +29,9 @@ const bdScanner = {
         deleteApkFile: (data) => ipcRenderer.invoke(IPC.ANDROID.DELETE_APK_FILE, data),
         autoPushReportToAndroid: () => ipcRenderer.invoke(IPC.ANDROID.AUTO_PUSH_REPORT),
         startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN)
+    },
+    firestore: {
+        call: (payload) => ipcRenderer.invoke(IPC.FIRESTORE.CALL, payload)
     },
     ios: {
         checkConnection: () => ipcRenderer.invoke(IPC.IOS.CHECK_CONNECTION),
@@ -58,7 +62,9 @@ const electronAPI = {
     onUpdateProgress: bdScanner.app.onUpdateProgress,
     onUpdateError: bdScanner.app.onUpdateError,
     autoPushReportToAndroid: bdScanner.android.autoPushReportToAndroid,
-    startFullScan: bdScanner.android.startFullScan
+    startFullScan: bdScanner.android.startFullScan,
+    readTextFile: bdScanner.app.readTextFile,
+    firestoreCall: bdScanner.firestore.call
 };
 
 contextBridge.exposeInMainWorld('bdScanner', bdScanner);

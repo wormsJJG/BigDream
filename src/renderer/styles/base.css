@@ -1,0 +1,199 @@
+/* style.css (최종 통합 완성본) */
+
+:root {
+    --primary-color: #3A539B;
+    /* 신뢰감을 주는 딥 블루 */
+    --primary-hover: #2d427d;
+    --secondary-bg-color: #F4F7F6;
+    /* 전체 배경색 */
+    --card-bg-color: #ffffff;
+    --text-color: #333333;
+    --border-color: #e0e0e0;
+    --danger-color: #e74c3c;
+    /* 위험/로그아웃/초기화 (빨강) */
+    --danger-hover: #c0392b;
+    --warning-color: #F0AD4E;
+    /* 주의 (주황) */
+    --success-color: #5CB85C;
+    /* 성공 (초록) */
+}
+
+/* --- 기본 설정 --- */
+body {
+    font-family: 'Noto Sans KR', sans-serif;
+    margin: 0;
+    background-color: var(--secondary-bg-color);
+    color: var(--text-color);
+    overflow: hidden;
+    /* 스크롤바 숨김 (앱 느낌) */
+}
+
+/* 뷰 관리 (로그인 전/후) */
+.app-view {
+    display: none;
+    height: 100vh;
+}
+
+.app-view.active {
+    display: flex;
+}
+
+/* --- 사이드바 (네비게이션) --- */
+.sidebar {
+    width: 240px;
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.logo-area {
+    padding: 30px;
+    text-align: center;
+    border-bottom: 1px solid #34495e;
+}
+
+.company-logo {
+    width: 50px;
+    margin-bottom: 10px;
+}
+
+.app-title {
+    font-size: 20px;
+    font-weight: 700;
+    display: block;
+    color: #4ECDC4;
+}
+
+.nav-menu {
+    list-style: none;
+    padding: 20px 0;
+    margin: 0;
+    flex-grow: 1;
+}
+
+.nav-item {
+    padding: 15px 30px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.nav-item:hover {
+    background-color: #34495e;
+}
+
+.nav-item.active {
+    background-color: var(--primary-color);
+    border-left: 5px solid #4ECDC4;
+    padding-left: 25px;
+}
+
+.sidebar-footer {
+    padding: 20px;
+}
+
+.sidebar-button {
+    width: 100%;
+    padding: 12px;
+    background: var(--danger-color);
+    border: none;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.3s;
+}
+
+.sidebar-button:hover {
+    background-color: var(--danger-hover);
+}
+
+/* --- 메인 컨텐츠 영역 --- */
+.main-content {
+    flex-grow: 1;
+    padding: 40px;
+    overflow-y: auto; /* 내부 스크롤 */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+/* 화면 전환 애니메이션 */
+.screen {
+    display: none;
+    width: 100%; /* 너비를 꽉 채우도록 명시 */
+    box-sizing: border-box;
+}
+
+/* [시작] 회사 정보 표시 스타일 */
+#agency-info-display {
+    position: absolute; /* 절대 위치 지정 */
+    top: 40px; /* main-content의 패딩만큼 아래로 */
+    right: 40px; /* main-content의 패딩만큼 왼쪽으로 */
+    
+    padding: 10px 20px;
+    background-color: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    text-align: right;
+    
+    z-index: 50; /* 다른 요소 위에 표시 */
+}
+
+#agency-info-display #agency-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 2px;
+}
+
+#agency-info-display #agency-quota {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.screen.active {
+    display: block;
+    width: 100%;
+    animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 카드 UI 공통 */
+.content-card {
+    background: var(--card-bg-color);
+    border-radius: 10px;
+    padding: 35px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    margin-top: 20px;
+}
+
+h2 {
+    font-size: 26px;
+    color: #2c3e50;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+p {
+    color: #666;
+    line-height: 1.5;
+}

@@ -1,0 +1,55 @@
+/* 유틸리티 클래스 (필수) */
+.hidden {
+    display: none !important;
+}
+/* ==========================================================================
+   10. 모달 스타일 (MODAL)
+   ========================================================================== */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* 반투명 검은 배경 */
+    z-index: 9999; /* 제일 위에 뜨게 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 유틸리티 클래스 hidden이 있으면 숨김 (기존에 있다면 중복 정의 안 해도 됨) */
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 25px;
+    border-radius: 8px;
+    width: 300px;
+    
+    /* 추가된 부분 */
+    max-height: 70vh;    /* 너무 길어지지 않게 제한 */
+    overflow-y: auto;    /* 내용이 길면 스크롤 발생 */
+    
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    animation: slideDown 0.3s ease;
+}
+
+/* 스크롤바가 너무 투박하다면 깔끔하게 디자인 가능 */
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* ==========================================================================

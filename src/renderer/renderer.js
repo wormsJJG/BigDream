@@ -17,9 +17,11 @@ import {
     serverTimestamp,
     deleteDoc,
     increment,
-    limit  // ★ [수정 1] 비정상 로그 불러올 때 필요한 limit 추가
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    limit
+} from './core/firestoreProxy.js';
+
+// NOTE: Firestore CRUD is proxied to main via IPC. Only Auth remains in renderer.
+const initializeApp = () => {};
 
 import { createViewManager } from './core/viewManager.js';
 
@@ -28,10 +30,12 @@ import { initClientDevice } from './modules/clientDevice.js';
 import { initScanController } from './modules/scanController.js';
 import { initAppDetail } from './modules/appDetail.js';
 import { initActionHandlers } from './modules/actionHandlers.js';
+import { loadTemplates } from './core/templateLoader.js';
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadTemplates();
     console.log('--- renderer.js: DOM 로드 완료 ---');
 
     getSaveInfo();
@@ -114,6 +118,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM 참조 캐싱 (자주 쓰는 뷰)
     const loggedInView = document.getElementById('logged-in-view');
     const loggedOutView = document.getElementById('logged-out-view');
+
+    ViewManager.showView('logged-out-view');
+
+    const loginScreen = document.getElementById('login-screen');
+
+    if (loginScreen) loginScreen.style.display = 'block';
+
+    // logged-out 사이드바 active 처리
+    document.querySelectorAll('#logged-out-view .nav-item').forEach(li => li.classList.remove('active'));
+    const navLogin = document.getElementById('nav-login');
+    if (navLogin) navLogin.classList.add('active');
 
     // 재사용 가능한 custom Alert
     const CustomUI = {
@@ -257,7 +272,8 @@ document.addEventListener('DOMContentLoaded', () => {
             setupLoggedOutNav: createLoggedOutNavSetup({ ViewManager, loggedOutView })
         },
         services: {},
-        firebase: { auth, db,
+        firebase: {
+            auth, db,
             signInWithEmailAndPassword,
             signOut,
             createUserWithEmailAndPassword,

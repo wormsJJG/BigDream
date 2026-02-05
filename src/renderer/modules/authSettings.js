@@ -1,5 +1,7 @@
 // Auto-split module: authSettings
 
+import { checkUserRole as checkUserRoleService, fetchUserInfoAndSettings as fetchUserInfoAndSettingsService } from '../services/userSettingsService.js';
+
 export function initAuthSettings(ctx) {
     const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
     const { loggedInView, loggedOutView } = dom;
@@ -13,66 +15,18 @@ export function initAuthSettings(ctx) {
         // [3] 인증 및 설정 불러오기 (AUTH & SETTINGS)
         // =========================================================
     
-        //사용자 권한 확인 함수
+        // --- Service wrappers: UI 모듈에서 DB 로직 분리 ---
         async function checkUserRole(uid) {
-            try {
-                const userDocRef = doc(db, "users", uid);
-                const userSnap = await getDoc(userDocRef);
-    
-                if (userSnap.exists()) {
-                    const userData = userSnap.data();
-    
-                    if (userData.isLocked) {
-                        throw new Error("LOCKED_ACCOUNT"); // 에러 발생시킴
-                    }
-    
-                    return userData.role || 'user'; // role이 없으면 기본 'user'
-                } else {
-                    return 'user';
-                }
-            } catch (e) {
-                if (e.message === "LOCKED_ACCOUNT") {
-                    console.log("잡았다! 잠긴 계정임.")
-                    throw e;
-                }
-                console.error("권한 확인 실패:", e);
-                return 'user'; // 에러 나면 안전하게 일반 유저로
-            }
+            return await checkUserRoleService(firebase, uid);
         }
-    
-        //  Firestore에서 시간 설정 가져오기 함수
+
         async function fetchUserInfoAndSettings() {
-            try {
-                // 1. 현재 로그인한 유저 정보 가져오기
-                const user = auth.currentUser;
-    
-                if (!user) {
-                    console.log("⚠️ 로그인 정보가 없어 설정을 불러올 수 없습니다.");
-                    return;
-                }
-    
-                console.log(`📥 [${user.uid}] 계정의 설정값 불러오는 중...`);
-    
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-    
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    State.androidTargetMinutes = data.android_scan_duration || 0;
-                    State.agencyName = data.companyName || (data.userId ? `(주) ${data.userId}` : "업체명 없음");
-                    State.quota = data.quota !== undefined ? data.quota : 0;
-                    console.log(`✅ 설정 로드 완료: 안드로이드 검사 시간 [${State.androidTargetMinutes}분]`);
-    
-                    updateAgencyDisplay();
-    
-                } else {
-                    console.log("⚠️ 유저 문서가 존재하지 않습니다. (기본값 0분 사용)");
-                    State.androidTargetMinutes = 0;
-                }
-            } catch (error) {
-                console.error("❌ 설정 불러오기 실패:", error);
-                State.androidTargetMinutes = 0;
-            }
+            const result = await fetchUserInfoAndSettingsService(firebase, constants);
+            if (!result) return;
+            State.androidTargetMinutes = result.androidTargetMinutes || 0;
+            State.agencyName = result.agencyName || '업체명 없음';
+            State.quota = (result.quota !== undefined) ? result.quota : 0;
+            updateAgencyDisplay();
         }
     
         //회사 정보 UI 업데이트 함수
@@ -147,6 +101,18 @@ export function initAuthSettings(ctx) {
                 try {
                     // 1. Firebase 로그인
                     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+                    // ✅ Main 프로세스에서도 동일 계정으로 Firebase Auth 로그인(Firestore 권한용)
+                    try {
+                        if (window?.bdScanner?.auth?.login) {
+                            await window.bdScanner.auth.login(email, password);
+                        } else if (window?.electronAPI?.firebaseAuthLogin) {
+                            await window.electronAPI.firebaseAuthLogin(email, password);
+                        }
+                    } catch (e) {
+                        console.warn('Main Auth login failed (will likely cause permission errors):', e);
+                    }
+
                     const user = userCredential.user;
     
                     // 2. 권한 확인 (DB 조회)
