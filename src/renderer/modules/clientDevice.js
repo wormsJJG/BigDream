@@ -1,14 +1,14 @@
 // Auto-split module: clientDevice
 
 export function initClientDevice(ctx) {
-    const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
+    const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
     const { loggedInView, loggedOutView } = dom;
     const { ID_DOMAIN } = constants;
 
-    // Firebase deps (pass-through from renderer bootstrap)
-    const { auth, db, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth,
-        doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit, initializeApp
-    } = firebase;
+    // Services (auth + firestore)
+    // Role-separated deps
+    const authService = services.auth;
+    const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit } = services.firestore;
 
         // [4] 고객 정보 및 기기 연결 (CLIENT INFO & DEVICE)
         // =========================================================

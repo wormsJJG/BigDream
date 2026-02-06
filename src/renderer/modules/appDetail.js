@@ -2,14 +2,14 @@
 
 import { Utils } from '../core/utils.js';
 export function initAppDetail(ctx) {
-    const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
+    const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
     const { loggedInView, loggedOutView } = dom;
     const { ID_DOMAIN } = constants;
 
-    // Firebase deps (pass-through from renderer bootstrap)
-    const { auth, db, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth,
-        doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit, initializeApp
-    } = firebase;
+    // Role-separated deps
+    // (이 모듈은 auth를 직접 사용하지 않으므로 authService만 보관)
+    const authService = services.auth;
+    const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit } = services.firestore;
 
         // [8] 앱 상세 화면 (APP DETAIL MANAGER)
         // =========================================================

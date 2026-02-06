@@ -8,6 +8,11 @@ console.log('--- preload.js: 로드됨 ---');
 
 // ✅ Structured API (recommended)
 const bdScanner = {
+    auth: {
+        login: (email, password) => ipcRenderer.invoke(IPC.AUTH.LOGIN, { email, password }),
+        logout: () => ipcRenderer.invoke(IPC.AUTH.LOGOUT),
+        createUser: (email, password) => ipcRenderer.invoke(IPC.AUTH.CREATE_USER, { email, password })
+    },
     app: {
         forceWindowReset: () => ipcRenderer.invoke(IPC.APP.FORCE_WINDOW_RESET),
         checkForUpdate: (currentVersion) => ipcRenderer.invoke(IPC.APP.CHECK_FOR_UPDATE, currentVersion),
@@ -64,6 +69,9 @@ const electronAPI = {
     autoPushReportToAndroid: bdScanner.android.autoPushReportToAndroid,
     startFullScan: bdScanner.android.startFullScan,
     readTextFile: bdScanner.app.readTextFile,
+    firebaseAuthLogin: (email, password) => bdScanner.auth.login(email, password),
+    firebaseAuthLogout: () => bdScanner.auth.logout(),
+    firebaseAuthCreateUser: (email, password) => bdScanner.auth.createUser(email, password),
     firestoreCall: bdScanner.firestore.call
 };
 

@@ -1,27 +1,10 @@
 // renderer.js
 // BD (Big Dream) Security Solution - Renderer Process
-import { auth, db } from '../../firebaseConfig.js';
-import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import {
-    doc,
-    getDoc,
-    updateDoc,
-    collection,
-    getDocs,
-    setDoc,
-    query,
-    orderBy,
-    where,
-    runTransaction,
-    addDoc,
-    serverTimestamp,
-    deleteDoc,
-    increment,
-    limit
-} from './core/firestoreProxy.js';
-
-// NOTE: Firestore CRUD is proxied to main via IPC. Only Auth remains in renderer.
-const initializeApp = () => {};
+// Renderer no longer talks to Firebase directly.
+// Auth + Firestore are routed through the main process via IPC.
+import * as firestoreProxy from './core/firestoreProxy.js';
+import { createAuthService } from './services/authService.js';
+import { createFirestoreService } from './services/firestoreService.js';
 
 import { createViewManager } from './core/viewManager.js';
 
@@ -39,6 +22,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('--- renderer.js: DOM 로드 완료 ---');
 
     getSaveInfo();
+
+    // Services (composition root)
+    const authService = createAuthService();
+    const firestoreService = createFirestoreService(firestoreProxy);
 
     const ID_DOMAIN = "@bd.com";
 
@@ -90,8 +77,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('remember-me').checked = saveInfo.remember;
         } else {
             // 기억하기가 체크 안 된 상태라면 입력창을 비움
-            document.getElementById('user-id').value = '';
-            document.getElementById('user-pw').value = '';
+            // NOTE: 실제 입력 요소 id는 username/password 이므로 일관되게 사용
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
             document.getElementById('remember-me').checked = false;
         }
     };
@@ -271,29 +259,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 로그인 전(nav-login / nav-support) 클릭 이벤트 바인딩
             setupLoggedOutNav: createLoggedOutNavSetup({ ViewManager, loggedOutView })
         },
-        services: {},
-        firebase: {
-            auth, db,
-            signInWithEmailAndPassword,
-            signOut,
-            createUserWithEmailAndPassword,
-            getAuth,
-            doc,
-            getDoc,
-            updateDoc,
-            collection,
-            getDocs,
-            setDoc,
-            query,
-            orderBy,
-            where,
-            runTransaction,
-            addDoc,
-            serverTimestamp,
-            deleteDoc,
-            increment,
-            limit,
-            initializeApp
+        services: {
+            auth: authService,
+            firestore: firestoreService
         }
     };
 

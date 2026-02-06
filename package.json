@@ -107,6 +107,7 @@
     ],
     "publish": {
       "provider": "github",
+      "token": "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",
       "private": true
     }
   },

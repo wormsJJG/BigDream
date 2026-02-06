@@ -22,7 +22,6 @@ export function createViewManager(State) {
                 'admin-screen',
                 'admin-report-detail-screen',
                 'app-detail-view',
-                'res-privacy'
             ];
 
             allScreens.forEach(id => {

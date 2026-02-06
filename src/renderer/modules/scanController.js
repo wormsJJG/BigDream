@@ -12,14 +12,14 @@ export function initScanController(ctx) {
         }
         mgr.show(appData, displayName);
     }
-const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
+const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
     const { loggedInView, loggedOutView } = dom;
     const { ID_DOMAIN } = constants;
 
-    // Firebase deps (pass-through from renderer bootstrap)
-    const { auth, db, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth,
-        doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit, initializeApp
-    } = firebase;
+    // Services (auth + firestore)
+    const authService = services.auth;
+    const firestore = services.firestore;
+    const { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, increment } = firestore;
 
         // [6] 검사 실행 (SCAN CONTROLLER)
         // =========================================================
@@ -48,9 +48,9 @@ const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
                 //횟수 차감 및 UI 업데이트 로직
                 try {
                     // 1. Firebase에서 Quota 차감 요청 (increment(-1) 사용)
-                    const user = auth.currentUser;
+                    const user = authService.getCurrentUser?.();
                     if (user) {
-                        await updateDoc(doc(db, "users", user.uid), {
+                        await updateDoc(doc(null, "users", user.uid), {
                             quota: increment(-1) // 1회 차감
                         });
     
@@ -246,12 +246,12 @@ const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
             },
     
             async startLogTransaction(deviceMode) {
-                const user = auth.currentUser;
+                const user = authService.getCurrentUser?.();
                 if (!user) return false;
     
                 try {
                     // 1. 유저 정보 가져오기 (업체명 확인용)
-                    const userRef = doc(db, "users", user.uid);
+                    const userRef = doc(null, "users", user.uid);
                     const userSnap = await getDoc(userRef);
                     const userData = userSnap.exists() ? userSnap.data() : {};
     
@@ -264,7 +264,7 @@ const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
                         quota: increment(-1)
                     });
                     */
-                    const newLogRef = await addDoc(collection(db, "scan_logs"), {
+                    const newLogRef = await addDoc(collection(null, "scan_logs"), {
                         userId: user.uid,
                         companyName: companyName,     // ★ 요청하신 업체명
                         deviceMode: deviceMode,
@@ -290,7 +290,7 @@ const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
                 if (!this.currentLogId) return; // 시작 로그가 없으면 무시
     
                 try {
-                    const logRef = doc(db, "scan_logs", this.currentLogId);
+                    const logRef = doc(null, "scan_logs", this.currentLogId);
     
                     await updateDoc(logRef, {
                         status: status,               // ★ 상태: completed 또는 error
@@ -313,10 +313,10 @@ const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
                 if (State.userRole === 'admin') return true;
     
                 try {
-                    const user = auth.currentUser;
+                    const user = authService.getCurrentUser?.();
                     if (!user) return false;
     
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    const userDoc = await getDoc(doc(null, "users", user.uid));
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
                         const currentQuota = userData.quota || 0;

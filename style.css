@@ -1,4 +1,3 @@
-
 /* style.css (wrapper) - keep this file stable, imports the real styles for maintainability */
 @import "./src/renderer/styles/base.css";
 @import "./src/renderer/styles/components.css";

@@ -3,25 +3,27 @@
 import { checkUserRole as checkUserRoleService, fetchUserInfoAndSettings as fetchUserInfoAndSettingsService } from '../services/userSettingsService.js';
 
 export function initAuthSettings(ctx) {
-    const { State, ViewManager, CustomUI, dom, firebase, constants } = ctx;
+    const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
     const { loggedInView, loggedOutView } = dom;
     const { ID_DOMAIN } = constants;
 
-    // Firebase deps (pass-through from renderer bootstrap)
-    const { auth, db, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, getAuth,
-        doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit, initializeApp
-    } = firebase;
+    // Role-separated deps
+    // - auth: IPC 기반 authService (firebase SDK 직접 사용 금지)
+    // - firestore: IPC 기반 firestoreProxy wrapper
+    const authService = services.auth;
+    const firestore = services.firestore;
+    const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit } = firestore;
 
         // [3] 인증 및 설정 불러오기 (AUTH & SETTINGS)
         // =========================================================
     
         // --- Service wrappers: UI 모듈에서 DB 로직 분리 ---
         async function checkUserRole(uid) {
-            return await checkUserRoleService(firebase, uid);
+            return await checkUserRoleService(services, uid);
         }
 
-        async function fetchUserInfoAndSettings() {
-            const result = await fetchUserInfoAndSettingsService(firebase, constants);
+        async function fetchUserInfoAndSettings(uidOverride) {
+            const result = await fetchUserInfoAndSettingsService(services, constants, uidOverride);
             if (!result) return;
             State.androidTargetMinutes = result.androidTargetMinutes || 0;
             State.agencyName = result.agencyName || '업체명 없음';
@@ -36,8 +38,9 @@ export function initAuthSettings(ctx) {
             const quotaEl = document.getElementById('agency-quota');
     
             if (nameEl && quotaEl) {
-                // 관리자 계정은 쿼터 무제한으로 표시
-                if (State.userRole === 'admin') {
+				// 관리자 계정은 쿼터 무제한으로 표시
+				const isAdmin = State.userRole && State.userRole !== 'user';
+				if (isAdmin) {
                     nameEl.textContent = `(주) 관리자 계정`;
                     quotaEl.textContent = `남은 횟수 : 무제한`;
                     quotaEl.style.color = 'var(--warning-color)';
@@ -99,21 +102,8 @@ export function initAuthSettings(ctx) {
                 if (sidebar) sidebar.classList.add('ui-lock');
     
                 try {
-                    // 1. Firebase 로그인
-                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-
-                    // ✅ Main 프로세스에서도 동일 계정으로 Firebase Auth 로그인(Firestore 권한용)
-                    try {
-                        if (window?.bdScanner?.auth?.login) {
-                            await window.bdScanner.auth.login(email, password);
-                        } else if (window?.electronAPI?.firebaseAuthLogin) {
-                            await window.electronAPI.firebaseAuthLogin(email, password);
-                        }
-                    } catch (e) {
-                        console.warn('Main Auth login failed (will likely cause permission errors):', e);
-                    }
-
-                    const user = userCredential.user;
+                    // 1) Auth (Main IPC) 로그인
+                    const user = await authService.login(email, password);
     
                     // 2. 권한 확인 (DB 조회)
                     const role = await checkUserRole(user.uid);
@@ -121,13 +111,15 @@ export function initAuthSettings(ctx) {
                     console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
     
                     // 3. 설정값 불러오기
-                    await fetchUserInfoAndSettings();
+                    await fetchUserInfoAndSettings(user.uid);
     
                     // 4. 화면 전환 분기 처리
                     State.isLoggedIn = true;
                     State.userRole = role; // 상태에 저장
     
-                    if (role === 'admin') {
+					// 역할 값이 'admin' 외에 'superAdmin', 'master' 등으로 저장된 경우도 관리자 취급
+					const isAdmin = role && role !== 'user';
+					if (isAdmin) {
                         // ★ 관리자 화면
                         ViewManager.showView('logged-in-view');
                         ViewManager.showScreen(loggedInView, 'create-scan-screen');
@@ -138,7 +130,7 @@ export function initAuthSettings(ctx) {
                         setTimeout(() => {
                             AdminManager.init();
                         }, 500);
-                    } else {
+					} else {
                         // ★ 일반 사용자
                         ViewManager.showView('logged-in-view');
                         ViewManager.showScreen(loggedInView, 'create-scan-screen');
@@ -152,7 +144,7 @@ export function initAuthSettings(ctx) {
                     console.error(error);
                     if (error.message === "LOCKED_ACCOUNT") {
                         errorMsg.textContent = "🚫 관리자에 의해 이용이 정지된 계정입니다. \n(문의: 031-778-8810)";
-                        await signOut(auth); // Firebase 세션도 즉시 로그아웃
+                        await authService.logout();
                         return;
                     }
     
@@ -181,7 +173,7 @@ export function initAuthSettings(ctx) {
             logoutBtn.addEventListener('click', async () => {
                 if (await CustomUI.confirm('로그아웃 하시겠습니까?')) {
                     try {
-                        await signOut(auth);
+                        await authService.logout();
                         ((ctx.services && ctx.services.deviceManager) ? ctx.services.deviceManager.stopPolling() : undefined);
                         State.isLoggedIn = false;
                         State.androidTargetMinutes = 0; // 설정값 초기화
