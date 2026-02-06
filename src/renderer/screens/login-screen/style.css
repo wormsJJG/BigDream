@@ -1,0 +1,95 @@
+/* --- [화면 1] 로그인 화면 (모던 디자인 적용) --- */
+.login-card {
+    text-align: center;
+    max-width: 380px;
+    margin: 80px auto;
+    padding: 40px 35px;
+}
+
+.login-card input {
+    width: 100%;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fafafa;
+    font-size: 15px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.login-card input:focus {
+    background-color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(58, 83, 155, 0.15);
+    outline: none;
+}
+
+.login-card button {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.error-message {
+    color: var(--danger-color);
+    font-size: 13px;
+    margin-bottom: 15px;
+    min-height: 18px;
+    text-align: left;
+    padding-left: 5px;
+}
+
+.remember-container {
+    display: flex;
+    align-items: center;
+    margin-top: -4px;      /* 위쪽 input과의 간격 조정 */
+    margin-bottom: 20px;   /* 아래쪽 버튼과의 간격 */
+    padding-left: 4px;     /* 입력창 테두리선과 정렬 맞춤 */
+    text-align: left;
+}
+
+.remember-container input[type="checkbox"] {
+    width: 18px;           /* 기존 input 스타일이 checkbox에 영향을 주지 않도록 크기 고정 */
+    height: 18px;
+    margin: 0 10px 0 0;    /* 우측 텍스트와 간격 */
+    cursor: pointer;
+    accent-color: var(--primary-color); /* 체크박스 색상을 브랜드 컬러로 변경 */
+}
+
+.remember-container label {
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* --- 로그인 로딩창 --- */
+.loader-container {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+    min-height: 44px;
+}
+
+.loader-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #f0f0f0;
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 8px;
+}
+
+.loader-text {
+    font-size: 14px;
+    color: #666;
+    font-weight: 400;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

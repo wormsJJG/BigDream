@@ -1,0 +1,28 @@
+/* --- [화면 2] 고객센터 --- */
+.support-card {
+    text-align: center;
+    padding: 60px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.support-contact {
+    display: inline-block;
+    background: white;
+    padding: 20px 50px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    margin-top: 20px;
+}
+
+.support-contact span {
+    font-size: 28px;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.ui-lock {
+    pointer-events: none;
+    opacity: 0.6;
+    filter: grayscale(0.5);
+    transition: all 0,3s ease;
+}

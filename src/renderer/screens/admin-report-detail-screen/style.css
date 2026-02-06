@@ -1,0 +1,374 @@
+#admin-report-detail-screen #admin-report-detail-screen {
+    background-color: #f4f6f9;
+    padding: 20px;
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+/* 상단 바 */
+#admin-report-detail-screen .detail-top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+#admin-report-detail-screen .page-title { font-size: 18px; font-weight: bold; margin-left: 15px; vertical-align: middle; }
+#admin-report-detail-screen .badge-id { background: #e3f2fd; color: #1976d2; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-right: 5px;}
+#admin-report-detail-screen .badge-date { color: #666; font-size: 13px; }
+
+/* 요약 정보 카드 그리드 */
+#admin-report-detail-screen .summary-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+}
+#admin-report-detail-screen .info-card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    overflow: hidden;
+}
+#admin-report-detail-screen .card-head {
+    background: #f8f9fa;
+    padding: 10px 15px;
+    font-weight: bold;
+    color: #444;
+    border-bottom: 1px solid #eee;
+}
+#admin-report-detail-screen .card-body { padding: 15px; }
+#admin-report-detail-screen .field-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+    border-bottom: 1px dashed #f0f0f0;
+    padding-bottom: 4px;
+}
+#admin-report-detail-screen .field-row:last-child { border-bottom: none; margin-bottom: 0; }
+#admin-report-detail-screen .field-row label { color: #888; }
+#admin-report-detail-screen .field-row span { color: #333; font-weight: 500; }
+
+/* 메시지 박스 */
+#admin-report-detail-screen .message-section { margin-bottom: 20px; }
+#admin-report-detail-screen .message-section label { font-weight: bold; display: block; margin-bottom: 5px; color: #555; }
+#admin-report-detail-screen .message-box {
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+    padding: 15px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* 위협 리스트 컨테이너 */
+#admin-report-detail-screen .threat-section { margin-top: 30px; }
+#admin-report-detail-screen .section-header h3 { margin: 0 0 15px 0; color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 10px; display: inline-block;}
+
+/* 개별 위협 카드 디자인 */
+#admin-report-detail-screen .threat-card {
+    background: white;
+    border-left: 5px solid #d9534f;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+    padding: 20px;
+}
+#admin-report-detail-screen .threat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+#admin-report-detail-screen .app-title-lg { font-size: 18px; font-weight: bold; color: #d9534f; }
+#admin-report-detail-screen .pkg-name { color: #888; font-size: 13px; margin-left: 10px; }
+#admin-report-detail-screen .threat-reason { background: #ffebee; color: #c62828; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-top: 5px; display: inline-block;}
+
+#admin-report-detail-screen .threat-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+#admin-report-detail-screen .detail-box label { font-size: 12px; color: #888; font-weight: bold; display: block; margin-bottom: 5px; }
+#admin-report-detail-screen .path-box { 
+    font-family: monospace; font-size: 11px; background: #f5f5f5; padding: 8px; border-radius: 4px; color: #333; word-break: break-all; 
+}
+
+/* 권한 배지 스타일 */
+#admin-report-detail-screen .perm-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 100px;
+    overflow-y: auto;
+    background: #fafafa;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #eee;
+}
+#admin-report-detail-screen .perm-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+    color: #555;
+    background: white;
+}
+#admin-report-detail-screen .perm-badge.granted {
+    border-color: #a5d6a7;
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+#admin-report-detail-screen #mvt-analysis-section {
+    padding: 20px;
+    background-color: #f7fbff; /* 연한 파란색 배경으로 전문성 강조 */
+    border: 1px solid #e0f2ff;
+}
+
+/* 개별 분석 항목 (아코디언 바깥 박스) */
+#admin-report-detail-screen .analysis-section { 
+    margin-bottom: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    transition: all 0.2s;
+}
+
+/* 아코디언 헤더 (클릭 가능 영역) */
+#admin-report-detail-screen .analysis-header { 
+    padding: 15px; 
+    cursor: pointer; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* 상태 뱃지 (안전 / 경고) */
+#admin-report-detail-screen .analysis-status { 
+    padding: 3px 8px; 
+    border-radius: 4px; 
+    font-size: 0.8em; 
+    font-weight: bold;
+}
+
+#admin-report-detail-screen .status-safe { 
+    background-color: #e8f5e9; /* Green 100 */
+    color: #388e3c;           /* Green 700 */
+}
+
+#admin-report-detail-screen .status-warning { 
+    background-color: #fff3e0; /* Amber 100 */
+    color: #f57c00;            /* Amber 700 */
+}
+
+/* 아코디언 내용 영역 */
+#admin-report-detail-screen .analysis-content { 
+    padding: 15px; 
+    border-top: 1px solid #eee; 
+    /* JS에 의해 display: block/none이 제어됨 */
+}
+
+/* MVT 경고 목록 스타일 */
+#admin-report-detail-screen .analysis-content ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin-top: 10px;
+    margin-bottom: 0;
+}
+#admin-report-detail-screen .analysis-content ul li {
+    color: #d32f2f; /* Red */
+    margin-bottom: 5px;
+}
+
+
+/* ========================================================
+   [B] iOS 설치된 앱 목록 그리드 (.ios-app-list-grid)
+   ======================================================== */
+
+#admin-report-detail-screen .ios-app-list-grid {
+    /* 찌그러짐 방지 핵심: 3열 레이아웃을 명확히 정의하고, 
+       minmax(0, 1fr)로 항목이 컨테이너를 벗어나지 않게 보장 */
+    display: grid !important; 
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important; 
+    gap: 10px !important; 
+    width: 100% !important; 
+    box-sizing: border-box !important;
+    overflow-x: hidden !important; 
+    
+    /* 혹시 모를 기존 .app-grid의 영향을 최소화 */
+    padding: 0;
+    margin: 0;
+}
+
+#admin-report-detail-screen .ios-app-item {
+    background: #f8f9fa; 
+    padding: 10px; 
+    border-radius: 4px; 
+    border: 1px solid #eee; 
+    box-sizing: border-box; 
+    min-width: 0; 
+    
+    /* 항목 자체는 줄 바꿈을 허용하지 않고 오버플로우를 자름 */
+    white-space: nowrap; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block; /* 내부 콘텐츠가 블록 요소임을 보장 */
+}
+
+#admin-report-detail-screen .ios-app-item .app-title {
+    display: block; 
+    font-size: 14px; 
+    font-weight: bold;
+    color: #333; 
+    overflow: hidden;
+    text-overflow: ellipsis; 
+    white-space: nowrap;
+}
+
+#admin-report-detail-screen .ios-app-item .app-package {
+    display: block; 
+    font-size: 11px; 
+    color: #777; 
+    overflow: hidden;
+    text-overflow: ellipsis; 
+    white-space: nowrap;
+}
+
+#admin-report-detail-screen .hidden-dob {
+    display: none !important;
+}
+
+/* --- 스파이앱 탐지 시 테두리 강조 강화 --- */
+
+/* 1. 전체 카드 테두리를 아주 진한 빨간색으로 변경 */
+#admin-report-detail-screen .app-item.suspicious {
+    border: 3px solid #cc0000 !important; /* 선명하고 진한 빨강 */
+    background-color: #fff9f9 !important; /* 배경은 아주 연한 핑크로 대비 효과 */
+    box-shadow: none !important;           /* 흐릿한 그림자 제거하여 선명도 유지 */
+}
+
+/* 2. 카드 내부의 아이콘 테두리도 진하게 통일 */
+#admin-report-detail-screen .app-item.suspicious .app-icon-wrapper {
+    border: 1.5px solid #cc0000 !important;
+    background-color: #ffeaea;
+}
+
+#admin-report-detail-screen .sidebar-support-info {
+    display: flex;
+    align-items: center;
+    padding: 15px 10px;        /* 좌우 패딩을 줄여 공간 확보 */
+    margin-bottom: 15px;
+    background-color: rgba(255, 255, 255, 0.08); 
+    border-radius: 10px;
+    overflow: hidden;          /* 로고가 넘쳐도 레이아웃 유지 */
+}
+
+/* 로고 이미지 크기를 파격적으로 확대 */
+#admin-report-detail-screen .sidebar-support-logo {
+    width: 65px;               
+    height: 65px;
+    object-fit: contain;       /* 여백이 있어도 비율 유지 */
+    margin-left: -5px;         /* 이미지 자체 여백을 상쇄하기 위해 왼쪽으로 살짝 밀기 */
+    margin-right: 5px;         /* 텍스트와의 간격 */
+    flex-shrink: 0;            /* 로고 크기 절대 보존 */
+}
+
+/* 텍스트 그룹 */
+#admin-report-detail-screen .support-text-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;              /* 텍스트 생략 방지 */
+}
+
+#admin-report-detail-screen .sidebar-support-info p {
+    margin: 1px 0 !important;
+    line-height: 1.2;
+    white-space: nowrap;       /* 줄바꿈 방지 */
+}
+
+#admin-report-detail-screen .support-company {
+    font-size: 17px;
+    font-weight: 800;         
+    color: #ffffff;
+}
+
+#admin-report-detail-screen .support-title {
+    font-size: 14px;
+    color: #bdc3c7;
+}
+
+#admin-report-detail-screen .support-phone {
+    font-size: 16px;
+    font-weight: bold;
+    color: #4ECDC4;
+}
+
+#admin-report-detail-screen .privacy-notice {
+    margin-top: auto;   /* [수정] 컨텐츠가 적어도 화면 맨 아래로 밀어냄 */
+    padding: 30px 0 20px;
+    text-align: center;
+    font-size: 17px;
+    color: #a0a0a0;
+    border-top: 1px solid #eeeeee;
+    width: 100%;        /* 너비 100% 보장 */
+    flex-shrink: 0;     /* 크기가 줄어들지 않도록 설정 */
+    box-sizing: border-box;
+}
+
+/* 기존 modal 스타일이 있다고 가정하고 추가 */
+#admin-report-detail-screen .modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s ease-in-out;
+}
+
+#admin-report-detail-screen .modal.hidden {
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 업데이트 아이콘 애니메이션 */
+#admin-report-detail-screen .update-icon {
+    animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+#admin-report-detail-screen 0%, #admin-report-detail-screen 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+#admin-report-detail-screen .result-content-section {
+    width: 100%;
+    display: none
+}
+
+/* active 클래스가 붙은 섹션만 보여줌 */
+#admin-report-detail-screen .result-content-section.active {
+    display: block !important;
+}
+
+#admin-report-detail-screen .screen {
+    display: none; 
+    width: 100%;
+    height: 100%;
+    position: relative; /* 고정 위치 해제 */
+    z-index: 1;
+}
+
+/* 관리자 스크린 전용 (혹시 모를 겹침 방지) */

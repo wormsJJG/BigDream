@@ -1,0 +1,122 @@
+/* --- [화면 3] 검사 생성 (모던 디자인 + 초기화 버튼 우측 상단) --- */
+.input-card-relative {
+    position: relative;
+}
+
+/* 기준점 */
+
+/* 초기화 버튼 (우측 상단 배치) */
+.reset-icon-btn {
+    position: absolute;
+    top: 25px;
+    right: 25px;
+    padding: 6px 12px;
+    font-size: 13px;
+    background-color: #fff;
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.reset-icon-btn:hover {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+#client-info-form {
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+#client-info-form label {
+    display: block;
+    margin: 20px 0 8px 2px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #444;
+}
+
+#client-info-form input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fafafa;
+    font-size: 15px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+#client-info-form input:focus {
+    background-color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(58, 83, 155, 0.15);
+    outline: none;
+}
+
+#client-info-form button[type="submit"] {
+    width: 100%;
+    margin-top: 30px;
+}
+
+/* ★★★ [시작] 개별 익명 기능 관련 스타일 추가 ★★★ */
+
+/* 각 폼 그룹 컨테이너 */
+.form-group-anon {
+    margin-bottom: 25px; /* 상하 마진 */
+}
+
+/* 입력 필드와 익명 체크박스를 감싸는 컨테이너 (가로 정렬) */
+.input-and-anon {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* 입력 필드와 체크박스 사이 간격 */
+}
+
+/* 입력 필드 (익명 체크박스와 공간을 공유하기 위해 flex-grow 적용) */
+#client-info-form input {
+    flex-grow: 1; /* 남은 공간을 모두 차지 */
+    /* 기존 스타일 유지 (renderer.js에서 이미 복사된 스타일) */
+}
+
+/* 익명 체크박스 레이블 스타일 */
+.anon-label {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    white-space: nowrap; /* 텍스트 줄바꿈 방지 */
+    margin: 0;
+}
+
+/* 익명 체크박스 자체 스타일 */
+.anon-check {
+    width: 15px !important; 
+    height: 15px !important; 
+    margin-right: 5px;
+    flex-shrink: 0; /* 크기가 줄어들지 않도록 고정 */
+}
+
+/* 기존 label 스타일 복구 (form-group-anon 때문에) */
+#client-info-form label {
+    display: block; /* label은 블록 요소로 유지하여 input 위에 표시 */
+    margin: 0 0 8px 2px; /* 상단 마진 제거 및 하단 마진만 8px */
+    font-weight: 600;
+    font-size: 14px;
+    color: #444;
+}
+
+/* --- [moved from legacy bundle] --- */
+#create-scan-screen .content-card {
+    max-width: 380px;  /* 로그인 카드와 동일한 폭 */
+    margin: 60px auto; /* 중앙 배치 */
+    padding: 40px 35px;
+    position: relative; /* 초기화 버튼 배치를 위해 필수 */
+}
+
+/* 초기화 버튼 위치 미세 조정 (카드가 작아졌으므로) */
+.reset-icon-btn { top: 15px; right: 15px; }

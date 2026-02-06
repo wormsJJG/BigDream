@@ -1,0 +1,60 @@
+<div class="modal hidden" id="admin-modal">
+<div class="modal-content">
+<h3 style="margin-top:0; color:#333;">⚡ 관리자 설정</h3>
+<p style="font-size:14px; color:#666; margin-bottom:15px;">
+                안드로이드 검사 소요 시간(분)을 입력하세요.<br/>
+<span style="font-size:12px;">(범위: 10~60, 해제: 0)</span>
+</p>
+<input id="admin-input" placeholder="0" style="width:100%; padding:10px; margin-bottom:20px; box-sizing:border-box; border:1px solid #ddd; border-radius:4px;" type="number"/>
+<div style="display:flex; justify-content:flex-end; gap:10px;">
+<button class="secondary-button" id="admin-cancel-btn">취소</button>
+<button class="primary-button" id="admin-save-btn">저장</button>
+</div>
+</div>
+</div>
+<div class="modal hidden" id="custom-alert-modal" style="z-index: 10000;">
+<div class="modal-content" style="width: 300px; text-align: center;">
+<div style="font-size: 40px; margin-bottom: 10px;">📢</div>
+<p id="custom-alert-msg" style="color: #333; font-weight: 500; white-space: pre-line; margin-bottom: 20px;">
+                알림 내용</p>
+<button class="primary-button" id="custom-alert-ok-btn" style="width: 100%;">확인</button>
+</div>
+</div>
+<div class="modal hidden" id="custom-confirm-modal" style="z-index: 10000;">
+<div class="modal-content" style="width: 320px; text-align: center;">
+<div style="font-size: 40px; margin-bottom: 10px;">🤔</div>
+<p id="custom-confirm-msg" style="color: #333; font-weight: 500; white-space: pre-line; margin-bottom: 20px;">진행하시겠습니까?</p>
+<div style="display: flex; gap: 10px; justify-content: center;">
+<button class="secondary-button" id="custom-confirm-cancel-btn" style="flex: 1;">취소</button>
+<button class="primary-button" id="custom-confirm-ok-btn" style="flex: 1;">확인</button>
+</div>
+</div>
+</div>
+<div class="modal hidden" id="admin-result-modal">
+<div class="modal-content" style="width: 500px; max-height: 80vh; overflow-y: auto;">
+<h3>📊 검사 이력 확인</h3>
+<div id="admin-result-content">로딩 중...</div>
+<div style="text-align: right; margin-top: 20px;">
+<button class="secondary-button" id="admin-result-close-btn">닫기</button>
+</div>
+</div>
+</div>
+<div class="modal hidden" id="update-modal" style="z-index: 11000; background: rgba(0,0,0,0.85);">
+<div class="modal-content" style="width: 400px; text-align: center; padding: 40px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+<div class="update-icon" style="font-size: 50px; margin-bottom: 20px;">🚀</div>
+<h2 style="margin-bottom: 10px; color: #333;">새로운 버전 업데이트</h2>
+<p id="update-ver-text" style="color: #666; margin-bottom: 30px;">버전 정보를 불러오는 중...</p>
+<div style="background: #eee; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 15px;">
+<div id="update-progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3A539B, #5CB85C); transition: width 0.3s ease;">
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #888; font-family: monospace;">
+<span id="update-percent">0%</span>
+<span id="update-speed">0 KB/s</span>
+</div>
+<div id="update-size-info" style="font-size: 12px; color: #aaa; margin-top: 5px; text-align: right;">0MB /
+                0MB</div>
+<p style="margin-top: 30px; font-size: 14px; color: #d9534f; font-weight: bold;">업데이트 완료 후 앱이 자동으로 재시작됩니다.
+            </p>
+</div>
+</div>
