@@ -30,6 +30,17 @@ export function initAuthSettings(ctx) {
             State.quota = (result.quota !== undefined) ? result.quota : 0;
             updateAgencyDisplay();
         }
+
+        // 역할 판단 헬퍼
+        function isAdminRole(role) {
+            // 관리자만 '무제한/관리자 페이지' 권한을 가짐
+            return role === 'admin' || role === 'superAdmin' || role === 'master';
+        }
+
+        function isPrivilegedRole(role) {
+            // '특권 기능(예: 검사 시간 설정)'을 허용할 역할
+            return isAdminRole(role) || role === 'distributor';
+        }
     
         //회사 정보 UI 업데이트 함수
         function updateAgencyDisplay() {
@@ -39,7 +50,7 @@ export function initAuthSettings(ctx) {
     
             if (nameEl && quotaEl) {
 				// 관리자 계정은 쿼터 무제한으로 표시
-				const isAdmin = State.userRole && State.userRole !== 'user';
+				const isAdmin = isAdminRole(State.userRole);
 				if (isAdmin) {
                     nameEl.textContent = `(주) 관리자 계정`;
                     quotaEl.textContent = `남은 횟수 : 무제한`;
@@ -110,15 +121,15 @@ export function initAuthSettings(ctx) {
                     await window.electronAPI.saveLoginInfo(loginData)
                     console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
     
-                    // 3. 설정값 불러오기
-                    await fetchUserInfoAndSettings(user.uid);
-    
                     // 4. 화면 전환 분기 처리
                     State.isLoggedIn = true;
                     State.userRole = role; // 상태에 저장
+
+                    // 3. 설정값 불러오기 (role 설정 이후 UI가 정확히 갱신되도록 순서 보장)
+                    await fetchUserInfoAndSettings(user.uid);
     
 					// 역할 값이 'admin' 외에 'superAdmin', 'master' 등으로 저장된 경우도 관리자 취급
-					const isAdmin = role && role !== 'user';
+					const isAdmin = isAdminRole(role);
 					if (isAdmin) {
                         // ★ 관리자 화면
                         ViewManager.showView('logged-in-view');
@@ -176,6 +187,8 @@ export function initAuthSettings(ctx) {
                         await authService.logout();
                         ((ctx.services && ctx.services.deviceManager) ? ctx.services.deviceManager.stopPolling() : undefined);
                         State.isLoggedIn = false;
+                        State.userRole = 'user';
+                        document.body.classList.remove('is-admin');
                         State.androidTargetMinutes = 0; // 설정값 초기화
                         State.agencyName = 'BD SCANNER'; // 회사 정보 상태 초기화
                         State.quota = -1;
