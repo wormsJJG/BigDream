@@ -18,24 +18,17 @@
     
             transformAndroidData: (scanData) => {
                 const transformedApps = scanData.allApps || [];
-    
-                // 1. 진짜 스파이앱 (VT 확진된 것만)
-                const spyApps = transformedApps.filter(app =>
-                    // app.reason && app.reason.includes('[VT 확진]')
-                    false
-                );
-    
-                // 2. 개인정보 유출 위협 (권한이 과도하거나 VT 결과가 애매한 의심 앱)
-                const privacyThreats = transformedApps.filter(app =>
-                    app.reason // && !app.reason.includes('[VT 확진]')
-                );
-    
+
+                // ✅ main(androidService)에서 riskLevel로 이미 분류해 내려줌
+                const spyApps = transformedApps.filter(app => app.riskLevel === 'SPYWARE');
+                const privacyThreats = transformedApps.filter(app => app.riskLevel === 'PRIVACY_RISK');
+
                 return {
                     deviceInfo: scanData.deviceInfo,
                     allApps: transformedApps,
                     apkFiles: scanData.apkFiles || [],
-                    suspiciousApps: spyApps,      // [스파이앱 탭으로]
-                    privacyThreatApps: privacyThreats // [개인정보 유출 위협 탭으로]
+                    suspiciousApps: spyApps,             // [스파이앱 탭]
+                    privacyThreatApps: privacyThreats    // [개인정보 유출 위협 탭]
                 };
             },
     

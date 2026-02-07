@@ -6,6 +6,7 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
   // NOTE: bootstrap.js passes a single options object.
   if (!client) throw new Error('createAndroidService requires client');
   if (!adb) throw new Error('createAndroidService requires adb');
+  const { evaluateAndroidAppRisk, RISK_LEVELS } = require('../../shared/risk/riskRules');
   const service = {
       /**
        * Check first connected device status + model.
@@ -137,20 +138,40 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                   processedApps.push(...results);
               }
 
-              let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
+                            let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
 
+              // 1) VirusTotal 검사 (기존 흐름 유지)
               if (suspiciousApps.length > 0 && CONFIG?.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
                   const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
                   console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
                   await service.runVirusTotalCheck(serial, vtTargets);
               }
 
-              const privacyThreatApps = suspiciousApps.filter(app => app.reason && app.reason.includes('개인정보'));
-              suspiciousApps = suspiciousApps.filter(app => !app.reason || !app.reason.includes('개인정보'));
+              // 2) ✅ 최종 분류 (정책 기반)
+              processedApps.forEach((app) => {
+                  const evaluated = evaluateAndroidAppRisk(app);
+
+                  app.riskLevel = evaluated.riskLevel;
+                  app.riskReasons = evaluated.riskReasons;
+                  app.recommendation = evaluated.recommendation;
+                  app.aiNarration = evaluated.aiNarration;
+
+                  // UI 호환용 reason도 유지 (대표 문장 1개)
+                  if (app.riskLevel === RISK_LEVELS.SPYWARE) {
+                      app.reason = `[VT 확진] ${evaluated.aiNarration}`;
+                  } else if (app.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
+                      app.reason = `[개인정보 유출 위협] ${evaluated.aiNarration}`;
+                  } else if (!app.reason) {
+                      app.reason = '';
+                  }
+              });
+
+              const spywareApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.SPYWARE);
+              const privacyThreatApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.PRIVACY_RISK);
 
               const runningAppsCount = processedApps.filter(app => app.isRunningBg).length;
 
-              return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
+              return { deviceInfo, allApps: processedApps, suspiciousApps: spywareApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
           } catch (err) {
               console.error(err);
               return { error: err.message };
