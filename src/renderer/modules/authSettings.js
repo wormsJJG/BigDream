@@ -249,11 +249,22 @@ export function initAuthSettings(ctx) {
                         section.classList.remove('active');
                     }
                 });
+
+                // ✅ 탭 전환 시 스크롤 위치를 맨 위로 (main-content는 내부 스크롤 컨테이너)
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) mainContent.scrollTop = 0;
+                const resultsView = document.getElementById('results-dashboard-view');
+                if (resultsView) { resultsView.scrollTop = 0; resultsView.scrollLeft = 0; }
+
                 const privacyNotice = document.getElementById('privacy-footer-notice');
                 if (privacyNotice) {
                     privacyNotice.style.display = 'block';
                 }
                 console.log(`[Tab Switch] ${targetId} 전환 성공`);
+
+                if (String(targetId || '').startsWith('res-ios-') && typeof window.__bd_forceRenderIosCoreAreas === 'function') {
+                    window.__bd_forceRenderIosCoreAreas();
+                }
             });
         });
     

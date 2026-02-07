@@ -1,3 +1,12 @@
+
+// ✅ Normalize device mode strings (e.g., 'iOS', 'ios 17.2', 'ANDROID') to 'ios' | 'android'
+function normalizeDeviceMode(modeValue) {
+    const v = String(modeValue || '').toLowerCase();
+    if (v.includes('ios')) return 'ios';
+    if (v.includes('android')) return 'android';
+    return v === 'ios' ? 'ios' : (v === 'android' ? 'android' : '');
+}
+
 // Auto-split module: scanController
 
 import { Utils } from '../core/utils.js';
@@ -122,7 +131,7 @@ export function initScanController(ctx) {
                     const osMode = result.osMode; // 저장된 데이터에서 OS 모드를 가져옴
 
                     // 1. 상태 업데이트 (렌더링에 OS 모드가 필요하므로)
-                    State.currentDeviceMode = osMode;
+                    State.currentDeviceMode = normalizeDeviceMode(osMode || data?.deviceInfo?.os) || osMode;
                     State.lastScanData = data;
                     window.lastScanData = data;
 
@@ -479,12 +488,26 @@ export function initScanController(ctx) {
         render(data) {
             console.log("ResultsRenderer.render 시작", data);
 
+
+            window.__bd_lastScanData = data;
             const containers = [
                 'app-grid-container',
                 'bg-app-grid-container',
                 'apk-grid-container',
                 'suspicious-list-container',
-                'mvt-analysis-container'
+
+                // iOS 5대 핵심영역(분리된 메뉴) 컨테이너
+                'ios-web-container',
+                'ios-messages-container',
+                'ios-system-container',
+                'ios-appsprofiles-container',
+                'ios-artifacts-container',
+
+                // (구버전 호환) 단일 MVT 컨테이너
+                'mvt-analysis-container',
+
+                // 개인정보 유출 위협
+                'privacy-threat-list-container'
             ];
             containers.forEach(id => {
                 const el = document.getElementById(id);
@@ -503,7 +526,33 @@ export function initScanController(ctx) {
                 if (el) el.textContent = '-';
             });
 
-            const isIos = State.currentDeviceMode === 'ios';
+            // ✅ OS 모드 자동 판별 (검사 열기/로컬 파일 열기에서 State가 꼬여도 iOS/Android를 정확히 분기)
+            const inferDeviceMode = (payload) => {
+                const raw = payload?.deviceInfo?.os || payload?.deviceInfo?.osMode || payload?.osMode || payload?.deviceMode || payload?.deviceInfo?.type;
+                const normalized = String(raw || '').toLowerCase();
+
+                // 1) explicit markers
+                if (normalized.includes('ios')) return 'ios';
+                if (normalized.includes('android')) return 'android';
+
+                // 2) device model hint (iPhone/iPad/iPod)
+                const model = String(payload?.deviceInfo?.model || '').toLowerCase();
+                if (model.includes('iphone') || model.includes('ipad') || model.includes('ipod')) return 'ios';
+
+                // 3) payload shape hints
+                if (payload?.mvtResults || payload?.mvtAnalysis || payload?.mvt) return 'ios';
+                if (typeof payload?.runningCount === 'number') return 'android';
+                if (Array.isArray(payload?.apkFiles) && payload.apkFiles.length > 0) return 'android';
+
+                // 4) fallback
+                return State.currentDeviceMode || 'android';
+            };
+
+            const detectedMode = inferDeviceMode(data);
+            State.currentDeviceMode = detectedMode;
+            if (data?.deviceInfo && !data.deviceInfo.os) data.deviceInfo.os = detectedMode;
+
+            const isIos = detectedMode === 'ios';
 
             // 1. 공통 기기 정보 바인딩 (모델명, 시리얼 등)
             if (document.getElementById('res-model')) document.getElementById('res-model').textContent = data.deviceInfo?.model || '-';
@@ -547,8 +596,13 @@ export function initScanController(ctx) {
                     // 3. 데이터 렌더링 호출
                     // (1) 요약 탭: 기기정보 + 정밀 분석 결과
                     this.renderSuspiciousList(data.suspiciousApps || [], true);
-                    // (2) 5대 영역 탭: MVT 결과
-                    this.renderMvtAnalysis(data.mvtResults || {}, true);
+                    // (2) 5대 핵심영역: 영역별 상세 리포트(분리 메뉴)
+                    this.renderIosCoreAreas(data.mvtResults || {});
+
+                    // (2-1) iOS 개인정보 유출 위협: 정책 기반(앱 번들ID) + AI 안내
+                    const iosPrivacyApps = this.buildIosPrivacyThreatApps(data.allApps || [], data.privacyThreatApps || []);
+                    this.renderPrivacyThreatList(iosPrivacyApps);
+
                     // (3) 앱 목록 탭: iOS 전용 리스트
                     if (appGrid) {
                         appGrid.innerHTML = '';
@@ -580,43 +634,6 @@ export function initScanController(ctx) {
                     const bgHeader = document.querySelector('#res-background h3');
                     if (bgHeader) {
                         bgHeader.textContent = `🚀 실행 중인 백그라운드 앱 (총 ${runningApps}개)`;
-                    }
-
-
-                    // ✅ 탐지 결과 요약 (스파이앱 0건 안내 + 개인정보 유출 위협 건수)
-                    const spywareCount = Array.isArray(data.suspiciousApps) ? data.suspiciousApps.length : 0;
-                    const privacyCount = Array.isArray(data.privacyThreatApps) ? data.privacyThreatApps.length : 0;
-
-                    if (threatsTitle) threatsTitle.textContent = "⚠️ 탐지 결과";
-                    if (threatsDesc) {
-                        const spywareText = (spywareCount === 0)
-                            ? "✅ 스파이앱이 탐지되지 않았습니다."
-                            : `🚨 스파이앱 ${spywareCount}건이 탐지되었습니다.`;
-
-                        const privacyText = (privacyCount === 0)
-                            ? "✅ 개인정보 유출 위협이 탐지되지 않았습니다."
-                            : `⚠️ 개인정보 유출 위협 ${privacyCount}건이 탐지되었습니다.`;
-
-                        threatsDesc.innerHTML = `
-                                <div style="margin-top:10px; padding:14px; border-radius:10px; background:#f8f9fa; border:1px solid #e9ecef;">
-                                    <div style="display:flex; gap:10px; align-items:flex-start;">
-                                        <div style="font-size:18px; line-height:1;">🤖</div>
-                                        <div style="flex:1;">
-                                            <div style="font-weight:900; margin-bottom:6px;">AI 탐지 요약</div>
-                                            <div style="font-size:13px; line-height:1.6; color:#444;">
-                                                <div>${spywareText}</div>
-                                                <div>${privacyText}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                    }
-
-                    // ✅ 개인정보 유출 위협 화면 상단에 건수 표시
-                    const privacyHeader = document.getElementById('privacy-threat-count');
-                    if (privacyHeader) {
-                        privacyHeader.textContent = `탐지된 개인정보 유출 위협: ${privacyCount}건`;
                     }
 
                     // 2. 데이터 렌더링 호출
@@ -720,51 +737,287 @@ export function initScanController(ctx) {
         },
 
         // [MVT 분석 박스 렌더링 함수]
-        renderMvtAnalysis(mvtResults, isIos) {
-            const mvtContainer = document.getElementById('mvt-analysis-container');
-            if (!mvtContainer) return;
-            const sections = [
-                { id: 'web', title: '🌐 1. 브라우저 및 웹 활동', files: 'History.db, Favicons.db' },
-                { id: 'messages', title: '💬 2. 메시지 및 통신 기록', files: 'sms.db, ChatStorage.sqlite' },
-                { id: 'system', title: '⚙️ 3. 시스템 로그 및 프로세스 활동', files: 'DataUsage.sqlite, Crash Reports' },
-                { id: 'apps', title: '🗂️ 4. 설치된 앱 및 프로파일', files: 'Manifest.db, Profiles' },
-                { id: 'artifacts', title: '📁 5. 기타 시스템 파일', files: 'shutdown.log, LocalStorage' }
+
+        // =========================================================
+        // [iOS 5대 핵심영역 - 메뉴 분리용 렌더링]
+        // =========================================================
+        renderIosCoreAreas(mvtResults) {
+            const areaMap = [
+                {
+                    key: 'web',
+                    sectionId: 'res-ios-web',
+                    containerId: 'ios-web-container',
+                    title: '🌐 브라우저 및 웹 활동',
+                    files: ['History.db', 'Favicons.db', 'WebKit', 'LocalStorage'],
+                    normal: [
+                        '방문 기록/도메인 분포가 사용 패턴과 일치',
+                        '웹뷰/캐시 파일이 정상 범위 내에서 생성/갱신',
+                        '알 수 없는 리디렉션/피싱 도메인 단서 없음'
+                    ],
+                    hacked: [
+                        '의심 도메인(피싱/추적/명령제어) 접속 흔적',
+                        '짧은 시간 내 반복 접속/자동화된 패턴',
+                        '웹뷰 저장소(LocalStorage/IndexedDB)에서 비정상 토큰/스크립트 흔적'
+                    ],
+                    aiSafe: '웹 활동 기록에서 악성/의심 도메인 단서가 확인되지 않았고, 데이터 갱신 패턴이 정상 사용 행태와 일치합니다.',
+                    aiWarn: '웹 활동 영역에서 의심 도메인/패턴이 발견되어, 피싱·추적·원격제어와 연관된 가능성을 배제할 수 없습니다.'
+                },
+                {
+                    key: 'messages',
+                    sectionId: 'res-ios-messages',
+                    containerId: 'ios-messages-container',
+                    title: '💬 메시지 및 통신 기록',
+                    files: ['sms.db', 'ChatStorage.sqlite', 'CallHistoryDB', 'Carrier'],
+                    normal: [
+                        '메시지/통화 기록 구조가 정상(필드 누락/손상 없음)',
+                        '발신/수신 패턴이 사용자 사용 습관과 일치',
+                        '의심 링크/단축URL/스미싱 IOC 단서 없음'
+                    ],
+                    hacked: [
+                        '스미싱/피싱 URL 또는 악성 단축링크 흔적',
+                        '짧은 시간 내 다수 번호로 반복 발신/수신',
+                        '메시지 DB에서 비정상 레코드/손상/이상 타임스탬프'
+                    ],
+                    aiSafe: '통신 기록에서 스미싱/피싱 IOC 단서가 확인되지 않았고, DB 구조도 정상 범위로 판단됩니다.',
+                    aiWarn: '통신 기록에서 의심 링크/패턴이 확인되어, 스미싱·계정 탈취 시나리오 점검이 필요합니다.'
+                },
+                {
+                    key: 'system',
+                    sectionId: 'res-ios-system',
+                    containerId: 'ios-system-container',
+                    title: '⚙️ 시스템 로그 및 프로세스',
+                    files: ['DataUsage.sqlite', 'Crash Reports', 'System Logs', 'Analytics'],
+                    normal: [
+                        '크래시/로그가 일반적인 앱/시스템 이벤트 중심',
+                        '비정상 프로세스/반복 크래시 패턴 없음',
+                        '데이터 사용량 급증/이상 통신 단서 없음'
+                    ],
+                    hacked: [
+                        '특정 앱/프로세스의 반복 크래시(은폐/후킹 가능성)',
+                        '비정상 로그 패턴(권한 상승/설정 변경 시도)',
+                        '데이터 사용량 DB에서 특정 호스트로의 과도한 트래픽 흔적'
+                    ],
+                    aiSafe: '시스템 로그/크래시 패턴이 정상 범위로 확인되어 침해 흔적이 낮은 것으로 판단됩니다.',
+                    aiWarn: '시스템 로그/크래시 영역에서 이상 징후가 확인되어 정밀 진단이 권장됩니다.'
+                },
+                {
+                    key: 'apps',
+                    sectionId: 'res-ios-appsprofiles',
+                    containerId: 'ios-appsprofiles-container',
+                    title: '🗂️ 설치된 앱 및 프로파일',
+                    files: ['Manifest.db', 'Installed Apps', 'Profiles', 'Certificates'],
+                    normal: [
+                        '설치 앱 목록이 사용자 인지 범위와 일치',
+                        '구성 프로파일/인증서 설치 흔적이 제한적(또는 없음)',
+                        '관리(MDM) 흔적이 확인되지 않음'
+                    ],
+                    hacked: [
+                        '사용자 인지 없는 앱/프로파일 설치 흔적',
+                        '신뢰된 인증서(루트 CA) 설치로 트래픽 감청 가능성',
+                        'MDM/프로파일 기반 정책 강제(프록시/VPN) 단서'
+                    ],
+                    aiSafe: '앱/프로파일 영역에서 정책 강제 또는 감청 구성 단서가 확인되지 않았습니다.',
+                    aiWarn: '앱/프로파일 영역에서 프로파일/인증서 관련 단서가 확인되어 개인정보 유출 위험이 증가할 수 있습니다.'
+                },
+                {
+                    key: 'artifacts',
+                    sectionId: 'res-ios-artifacts',
+                    containerId: 'ios-artifacts-container',
+                    title: '📁 기타 시스템 파일',
+                    files: ['shutdown.log', 'LocalStorage', 'Caches', 'Artifacts'],
+                    normal: [
+                        '아티팩트 파일 구조/갱신이 정상 범위',
+                        '특정 IOC/의심 문자열/도메인 단서 없음',
+                        '비정상적인 잔존 파일(은폐 흔적) 없음'
+                    ],
+                    hacked: [
+                        '의심 문자열/도메인/IOC 단서 발견',
+                        '비정상적으로 유지되는 캐시/임시파일(은폐 가능성)',
+                        '분석 도구가 알려진 악성 패턴과 매칭'
+                    ],
+                    aiSafe: '기타 시스템 아티팩트에서 알려진 악성 IOC 매칭이 확인되지 않았습니다.',
+                    aiWarn: '기타 시스템 아티팩트에서 IOC 단서가 확인되어 정밀 분석이 필요합니다.'
+                }
             ];
-            let html = '';
-            sections.forEach(section => {
-                const result = mvtResults[section.id] || { status: 'safe', warnings: [] };
-                const isWarning = result.warnings && result.warnings.length > 0;
-                html += `
-                    <div class="analysis-section" style="margin-bottom:12px; border-left: 5px solid ${isWarning ? '#f57c00' : '#4caf50'}; background:#fcfcfc; border:1px solid #eee; border-radius:4px;">
-                        <div class="analysis-header" onclick="window.toggleAnalysis(this)" style="padding:15px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size: 15px; font-weight: 700;">${section.title}</span>
-                            <span style="color:${isWarning ? '#f57c00' : '#5cb85c'}; font-weight:bold;">${isWarning ? '경고' : '안전'}</span>
-                        </div>
-                        <div class="analysis-content" style="display:${isWarning ? 'block' : 'none'}; padding:15px; border-top:1px solid #eee; background:#fff; font-size:13px; color:#666;">
-                            <p>주요 검사 파일: ${section.files}</p>
-                            ${isWarning ? `<ul style="margin-top:10px; color:#d9534f;">${result.warnings.map(w => `<li>${w}</li>`).join('')}</ul>` : '<p style="color:#5cb85c; margin-top:5px;">발견된 이상 징후가 없습니다.</p>'}
-                        </div>
-                    </div>`;
+
+            areaMap.forEach(area => {
+                const result = mvtResults?.[area.key] || { status: 'safe', warnings: [] };
+                this.renderIosCoreArea(area, result);
             });
-            mvtContainer.innerHTML = html;
         },
+
+        renderIosCoreArea(area, result) {
+            const container = document.getElementById(area.containerId);
+            if (!container) return;
+
+            const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
+            const warningCount = warnings.length;
+            const isWarning = warningCount > 0;
+
+            const statusBadge = isWarning
+                ? `<span style="background:#f0ad4e; color:#fff; padding:4px 10px; border-radius:999px; font-weight:900; font-size:12px;">경고</span>`
+                : `<span style="background:#5cb85c; color:#fff; padding:4px 10px; border-radius:999px; font-weight:900; font-size:12px;">안전</span>`;
+
+            const evidenceHtml = isWarning
+                ? `<div style="margin-top:12px; padding:12px; background:#fff; border:1px solid #f3d3b4; border-radius:10px;">
+                            <div style="font-weight:900; color:#8a6d3b; margin-bottom:6px;">🔎 탐지된 단서</div>
+                            <ul style="margin:0; padding-left:18px; color:#8a6d3b; font-size:13px; line-height:1.5;">
+                                ${warnings.slice(0, 12).map(w => `<li>${w}</li>`).join('')}
+                            </ul>
+                            ${warningCount > 12 ? `<div style="margin-top:6px; font-size:12px; color:#999;">외 ${warningCount - 12}건 단서가 더 있습니다.</div>` : ''}
+                        </div>`
+                : `<div style="margin-top:12px; padding:12px; background:#fff; border:1px solid #e9ecef; border-radius:10px; color:#5cb85c; font-weight:700;">
+                            ✅ 발견된 이상 징후가 없습니다.
+                        </div>`;
+
+            const aiText = isWarning ? area.aiWarn : area.aiSafe;
+
+
+            const filesToShow = (Array.isArray(result?.files) && result.files.length)
+                ? result.files
+                : (Array.isArray(area?.files) ? area.files : []);
+
+            const filesHtml = filesToShow.length
+                ? filesToShow.map(f => `<span class="ios-major-file">${String(f)}</span>`).join(`<span class="ios-major-file-sep">, </span>`)
+                : `<span class="ios-major-file-empty">표시할 파일 목록이 없습니다.</span>`;
+
+            container.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                        <div>
+                            <div class="ios-major-files"><span class="ios-major-label">주요 검사 파일</span><div class="ios-major-files-text">${filesHtml}</div></div>
+                        </div>
+                        <div style="text-align:right;">
+                            ${statusBadge}
+                            <div style="margin-top:6px; font-size:12px; color:#666;">단서 ${warningCount}건</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                        <div style="padding:12px; background:#f8f9fa; border:1px solid #e9ecef; border-radius:10px;">
+                            <div style="font-weight:900; margin-bottom:8px;">정상 기기 특징</div>
+                            <ul style="margin:0; padding-left:18px; color:#444; font-size:13px; line-height:1.55;">
+                                ${area.normal.map(x => `<li>${x}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <div style="padding:12px; background:#fff7e6; border:1px solid #f3d3b4; border-radius:10px;">
+                            <div style="font-weight:900; margin-bottom:8px; color:#8a6d3b;">해킹 기기 특징</div>
+                            <ul style="margin:0; padding-left:18px; color:#6b5a2a; font-size:13px; line-height:1.55;">
+                                ${area.hacked.map(x => `<li>${x}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:12px; padding:14px; background:#eef4ff; border:1px solid #cfe0ff; border-radius:10px;">
+                        <div style="display:flex; gap:10px; align-items:flex-start;">
+                            <div style="font-size:18px; line-height:1;">🤖</div>
+                            <div style="flex:1;">
+                                <div style="font-weight:900; margin-bottom:6px; color:#2a4a8a;">AI 해석</div>
+                                <div style="font-size:13px; line-height:1.55; color:#2a4a8a;">${aiText}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${evidenceHtml}
+                `;
+        },
+
+        buildIosPrivacyThreatApps(allApps, incomingPrivacyApps) {
+            // main에서 이미 내려준 privacyThreatApps가 있으면 우선 사용(호환)
+            if (Array.isArray(incomingPrivacyApps) && incomingPrivacyApps.length > 0) {
+                return incomingPrivacyApps;
+            }
+
+            const POLICY_BUNDLE_IDS = new Set([
+                'com.life360.safetymapd',
+                'com.geozilla.family',
+                'org.findmykids.app',
+                'com.glympse.glympse',
+                'com.wondershare.famisafe',
+                'com.snapchat.Snapchat',
+                'com.burbn.instagram'
+            ]);
+
+            const normalize = (pkg) => String(pkg || '').trim();
+
+            const candidates = (Array.isArray(allApps) ? allApps : []).filter(app => {
+                const pkg = normalize(app.packageName);
+                return POLICY_BUNDLE_IDS.has(pkg);
+            });
+
+            return candidates.map(app => {
+                const pkg = normalize(app.packageName);
+                const isInstagram = pkg === 'com.burbn.instagram';
+
+                return {
+                    ...app,
+                    riskLevel: 'PRIVACY_RISK',
+                    aiNarration: isInstagram
+                        ? '인스타그램은 위치 공유 기능이 존재하여 사용 방식에 따라 위치 정보가 외부로 공유될 수 있어 개인정보 유출 위협으로 안내합니다.'
+                        : '위치 공유/가족 보호 등 위치 기반 기능 특성상 위치 정보가 외부로 공유될 수 있어 개인정보 유출 위협으로 안내합니다.',
+                    riskReasons: [
+                        {
+                            code: isInstagram ? 'INSTAGRAM_LOCATION_FEATURE' : 'LOCATION_SHARING_APP',
+                            title: isInstagram ? '위치 공유 기능(인스타그램)' : '위치 공유 기능 중심 앱',
+                            detail: '앱 기능 특성상 위치 기반 정보가 외부로 공유될 수 있습니다. 공유 설정/권한을 점검하는 것을 권장합니다.',
+                            severity: 'LOW'
+                        }
+                    ],
+                    recommendation: [
+                        { action: 'REVIEW_SHARING', label: '공유 설정 점검' },
+                        { action: 'DISABLE_LOCATION', label: '위치 접근 최소화' },
+                        { action: 'LIMIT_BACKGROUND', label: '백그라운드 제한' }
+                    ],
+                    reason: '[개인정보 유출 위협] 위치 기반 정보 공유 가능성이 있습니다.'
+                };
+            });
+        },
+
+
+
 
         // [아이폰용 앱 리스트 렌더링 함수]
         renderIosInstalledApps(apps, container) {
+
             if (!container) return;
-            container.innerHTML = '';
-            let listHtml = '<div style="display: flex; flex-direction: column; width:100%; border-top: 1px solid #eee;">';
-            const sortedApps = [...apps].sort((a, b) => (a.cachedTitle || a.packageName).localeCompare(b.cachedTitle || b.packageName));
-            sortedApps.forEach(app => {
-                const displayName = app.cachedTitle || Utils.formatAppName(app.packageName);
-                listHtml += `
-                        <div style="padding: 12px 10px; border-bottom: 1px solid #eee; background: #fff; text-align:left;">
-                            <strong style="display:block; color:#333; font-size:14px; margin-bottom:2px;">${displayName}</strong>
-                            <span style="font-size:12px; color:#999; font-family:monospace;">${app.packageName}</span>
-                        </div>`;
-            });
-            container.innerHTML = listHtml + '</div>';
+
+            const appList = Array.isArray(apps) ? apps : [];
+
+            if (appList.length === 0) {
+                container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📱</div>
+                    <div class="empty-title">검사 대상 애플리케이션이 없습니다.</div>
+                    <div class="empty-desc">iOS 백업/추출 데이터에서 확인된 앱 목록이 없습니다.</div>
+                </div>
+            `;
+                return;
+            }
+
+            // Android "설치된 앱" 화면과 동일한 그리드 스타일(한 줄 3개)
+            const itemsHtml = appList.map((app) => {
+                const displayName = app?.displayName || app?.name || app?.cachedTitle || app?.appName || '알 수 없는 앱';
+                const bundleId = app?.bundleId || app?.packageName || app?.id || app?.bundle || '';
+
+                // createAppIcon은 Android용 스타일(app-grid/app-item)을 이미 갖고 있으므로
+                // iOS도 동일한 데이터 형태로 맞춰 재사용한다.
+                const normalized = {
+                    packageName: bundleId,
+                    cachedTitle: displayName,
+                    cachedIconUrl: app?.iconUrl || app?.cachedIconUrl || '',
+                };
+
+                return this.createAppIcon(normalized);
+            }).join('');
+
+            container.innerHTML = `
+            <div class="app-grid-container">
+                <div class="app-grid">
+                    ${itemsHtml}
+                </div>
+            </div>
+        `;
         },
+
 
         // -------------------------------------------------
         // MVT 상세 분석 렌더링 함수 (iOS 전용)
@@ -857,47 +1110,9 @@ export function initScanController(ctx) {
         // -------------------------------------------------
         // iOS 설치된 앱 목록 렌더링 
         // -------------------------------------------------
-        renderIosInstalledApps(apps, container) {
-            if (!container) return;
 
-            const totalApps = apps.length;
 
-            // 1. 제목 업데이트 
-            const parentHeader = container.closest('.content-card')?.querySelector('h3');
-            if (parentHeader) {
-                parentHeader.innerHTML = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
-            }
 
-            // 2. iOS 전용 멘트 표시 
-            const descEl = document.getElementById('ios-app-list-description');
-            if (descEl) {
-                descEl.innerHTML = `MVT 분석은 아래 목록에 포함된 **${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는데 활용되었습니다.`;
-            }
-
-            container.innerHTML = '';
-
-            if (totalApps === 0) {
-                container.innerHTML = '<p style="color:#888; padding:10px;">앱 목록 정보가 확인되지 않았습니다.</p>';
-                return;
-            }
-
-            // 3. 앱 목록 렌더링: CSS 클래스만 사용 
-            const sortedApps = [...apps].sort((a, b) => (a.cachedTitle || a.packageName).localeCompare(b.cachedTitle || b.packageName));
-
-            let listHtml = '<div class="ios-app-list-grid">';
-
-            sortedApps.forEach(app => {
-                const displayName = app.cachedTitle || Utils.formatAppName(app.packageName);
-                listHtml += `
-                    <div class="ios-app-item">
-                        <strong class="app-title">${displayName}</strong>
-                    </div>
-                `;
-            });
-            listHtml += '</div>';
-
-            container.innerHTML = listHtml;
-        },
 
         // 아이콘 생성 로직 (Android 전용)
         createAppIcon(app, container) {
@@ -987,87 +1202,47 @@ export function initScanController(ctx) {
             container.appendChild(div);
         },
 
-        // 위협 리스트 렌더링 (iOS/Android 공통 - 상세 근거/조치 포함)
+        // 위협 리스트 렌더링 (iOS/Android 공통 - 로직 개선)
         renderSuspiciousList(suspiciousApps, isIos = false) {
             const suspList = document.getElementById('suspicious-list-container');
-            if (!suspList) return;
 
+            // iOS일 때 제목 변경 
             const headerElement = suspList.previousElementSibling;
             if (headerElement && headerElement.tagName === 'H3') {
-                headerElement.textContent = "🚨 정밀 분석 결과";
+                headerElement.textContent = isIos ? "🚨 정밀 분석 결과" : "🚨 정밀 분석 결과";
             }
-
-            const buildReasonsHtml = (app) => {
-                const reasons = Array.isArray(app.riskReasons) ? app.riskReasons : [];
-                if (reasons.length === 0) return '';
-                const items = reasons.map(r => {
-                    const sev = r.severity === 'HIGH' ? '🔴' : (r.severity === 'MEDIUM' ? '🟠' : '🟡');
-                    return `<li style="margin:4px 0;">
-                                    <div style="font-weight:800; color:#7a1f1f;">${sev} ${r.title}</div>
-                                    <div style="color:#8c2f2f;">${r.detail}</div>
-                                </li>`;
-                }).join('');
-                return `<div style="margin-top:10px; padding:12px; background:#fff; border:1px solid #f3c6c6; border-radius:8px;">
-                                <div style="font-weight:900; color:#D9534F; margin-bottom:6px;">🤖 AI 판단 근거</div>
-                                <ul style="margin:0; padding-left:18px; font-size:12.5px; line-height:1.4;">${items}</ul>
-                            </div>`;
-            };
-
-            const buildRecommendationHtml = (app) => {
-                const actions = Array.isArray(app.recommendation) ? app.recommendation : [];
-                if (actions.length === 0) return '';
-                const chips = actions.map(a =>
-                    `<span style="display:inline-block; padding:6px 10px; margin:4px 6px 0 0; font-size:12px; border-radius:999px; background:#fff; border:1px solid #f3c6c6; color:#8c2f2f;">${a.label}</span>`
-                ).join('');
-                return `<div style="margin-top:10px;">
-                                <div style="font-weight:900; color:#D9534F; margin-bottom:6px;">✅ 권장 조치</div>
-                                <div>${chips}</div>
-                            </div>`;
-            };
 
             if (suspiciousApps && suspiciousApps.length > 0) {
                 let html = '<ul style="list-style:none; padding:0;">';
-
                 suspiciousApps.forEach(app => {
+
                     const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
-                    const narration = app.aiNarration || app.reason || "악성 앱으로 분류되었습니다.";
+                    const reason = app.reason || "알 수 없는 위협";
 
                     let vtBadge = '';
-                    if (app.vtResult && app.vtResult.malicious >= 1) {
-                        vtBadge = `<span style="background:#d9534f; color:white; padding:3px 8px; border-radius:999px; font-size:11px; margin-left:6px;">🦠 VT 확진: ${app.vtResult.malicious}</span>`;
+                    if (app.vtResult && app.vtResult.malicious > 0) {
+                        vtBadge = `<span style="background:#d9534f; color:white; padding:2px 5px; border-radius:4px; font-size:11px; margin-left:5px;">🦠 VT: ${app.vtResult.malicious}</span>`;
                     } else if (isIos) {
-                        vtBadge = `<span style="background:#0275d8; color:white; padding:3px 8px; border-radius:999px; font-size:11px; margin-left:6px;">🛡️ MVT 탐지</span>`;
+                        vtBadge = `<span style="background:#0275d8; color:white; padding:2px 5px; border-radius:4px; font-size:11px; margin-left:5px;">🛡️ MVT 탐지</span>`;
                     }
 
+                    // 해시값 표시 
                     const hashInfo = (isIos && app.hash && app.hash !== 'N/A')
-                        ? `<div style="font-size:11px; color:#888; margin-top:6px; font-family:monospace;">Hash: ${app.hash}</div>`
+                        ? `<div style="font-size:11px; color:#888; margin-top:4px; font-family:monospace;">Hash: ${app.hash}</div>`
                         : '';
 
                     html += `
-                            <li style="padding:16px; border:1px solid #f3c6c6; border-left: 5px solid #D9534F; background-color: #fff5f5; margin-bottom: 12px; border-radius: 10px;">
-                                <div style="color:#D9534F; font-weight:900; font-size: 15px; margin-bottom: 6px;">
-                                    🚨 ${dName} ${vtBadge}
-                                    <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
+                            <li style="padding:15px; border-bottom:1px solid #eee; border-left: 4px solid #D9534F; background-color: #fff5f5; margin-bottom: 10px; border-radius: 4px;">
+                                <div style="color:#D9534F; font-weight:bold; font-size: 15px; margin-bottom: 4px;">
+                                    🚨 ${dName} ${vtBadge} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
                                 </div>
-
-                                <div style="margin-top:8px; padding:12px; background:#ffecec; border:1px solid #f3c6c6; border-radius:10px;">
-                                    <div style="display:flex; gap:8px; align-items:flex-start;">
-                                        <div style="font-size:18px; line-height:1;">🤖</div>
-                                        <div style="flex:1;">
-                                            <div style="font-weight:900; color:#8c2f2f; margin-bottom:4px;">AI 안내</div>
-                                            <div style="font-size:13px; color:#8c2f2f; line-height:1.45;">${narration}</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                ${buildReasonsHtml(app)}
-                                ${buildRecommendationHtml(app)}
+                                <div style="font-size:13px; color:#555;">${reason}</div>
                                 ${hashInfo}
                             </li>`;
                 });
-
                 suspList.innerHTML = html + '</ul>';
             } else {
+                // 안전할 때 메시지 (iOS/Android 구분)
                 const safeMessage = isIos
                     ? '정밀 분석 결과, 알려진 스파이웨어 흔적이 발견되지 않았습니다.'
                     : '탐지된 스파이앱이 없습니다.';
@@ -1081,82 +1256,87 @@ export function initScanController(ctx) {
                     `;
             }
         },
-
         renderPrivacyThreatList(privacyApps) {
             const container = document.getElementById('privacy-threat-list-container');
             if (!container) return;
 
             container.innerHTML = '';
 
-            const buildReasonsHtml = (app) => {
-                const reasons = Array.isArray(app.riskReasons) ? app.riskReasons : [];
-                if (reasons.length === 0) return '';
-                const items = reasons.map(r => {
-                    const sev = r.severity === 'HIGH' ? '🔴' : (r.severity === 'MEDIUM' ? '🟠' : '🟡');
-                    return `<li style="margin:4px 0;">
-                                    <div style="font-weight:700; color:#5a4a1f;">${sev} ${r.title}</div>
-                                    <div style="color:#6b5a2a;">${r.detail}</div>
-                                </li>`;
-                }).join('');
-                return `<div style="margin-top:10px; padding:12px; background:#fff; border:1px solid #f1e2b7; border-radius:8px;">
-                                <div style="font-weight:800; color:#8a6d3b; margin-bottom:6px;">🤖 AI 판단 근거</div>
-                                <ul style="margin:0; padding-left:18px; font-size:12.5px; line-height:1.4;">${items}</ul>
-                            </div>`;
+            if (!Array.isArray(privacyApps) || privacyApps.length === 0) {
+                container.innerHTML = `
+                                    <div style="text-align:center; padding:30px; background:#f9f9f9; border-radius:8px; color:#999;">
+                                        ✅ 탐지된 개인정보 유출 위협이 없습니다.
+                                    </div>`;
+                return;
+            }
+
+            const buildChips = (items) => {
+                if (!Array.isArray(items) || items.length === 0) return '';
+                return items.map(x => `<span style="display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #e9d8a6; background:#fff; font-size:12px; font-weight:700; margin-right:8px; margin-bottom:8px;">${x.label || x}</span>`).join('');
             };
 
-            const buildRecommendationHtml = (app) => {
-                const actions = Array.isArray(app.recommendation) ? app.recommendation : [];
-                if (actions.length === 0) return '';
-                const chips = actions.map(a =>
-                    `<span style="display:inline-block; padding:6px 10px; margin:4px 6px 0 0; font-size:12px; border-radius:999px; background:#fff; border:1px solid #f1e2b7; color:#6b5a2a;">${a.label}</span>`
-                ).join('');
-                return `<div style="margin-top:10px;">
-                                <div style="font-weight:800; color:#8a6d3b; margin-bottom:6px;">✅ 권장 조치</div>
-                                <div>${chips}</div>
-                            </div>`;
+            const buildReasons = (reasons) => {
+                if (!Array.isArray(reasons) || reasons.length === 0) return `
+                                    <ul style="margin:0; padding-left:18px; color:#444; font-size:13px; line-height:1.55;">
+                                        <li>위치/공유 기능 특성상 외부 공개 가능성이 있어 주의가 필요합니다.</li>
+                                    </ul>`;
+                return `
+                                    <ul style="margin:0; padding-left:18px; color:#444; font-size:13px; line-height:1.55;">
+                                        ${reasons.map(r => `<li>${r}</li>`).join('')}
+                                    </ul>`;
             };
 
-            if (privacyApps && privacyApps.length > 0) {
-                let html = '<ul style="list-style:none; padding:0;">';
+            const html = privacyApps.map(app => {
+                const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
+                const policyLabel = app.policyLabel || app.policy || '';
+                const aiText = app.aiNarration || app.ai || app.reason || '[개인정보 유출 위협] 위치 기반 정보 공유 가능성이 있습니다.';
+                const reasons = app.riskReasons || app.reasons || [];
+                const recs = app.recommendation || app.recommendations || [
+                    { label: '공유 설정/기록 점검' },
+                    { label: '백그라운드 실행 제한' }
+                ];
 
-                privacyApps.forEach(app => {
-                    const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
-                    const narration = app.aiNarration || app.reason || '개인정보 유출 위협으로 분류되었습니다.';
-                    const isInstagram = app.packageName === 'com.instagram.android';
+                return `
+                                    <div style="padding:16px; background:#fcf8e3; border:1px solid #faebcc; border-radius:10px; margin-bottom:12px;">
+                                        <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                                            <div style="color:#8a6d3b; font-weight:900; font-size:15px;">
+                                                ⚠️ ${dName} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
+                                            </div>
+                                            ${policyLabel ? `<div style="font-size:12px; font-weight:800; color:#8a6d3b; padding:4px 10px; border-radius:999px; border:1px solid #f3d3b4; background:#fff;">정책: ${policyLabel}</div>` : ''}
+                                        </div>
 
-                    html += `
-                            <li style="padding:16px; border:1px solid #f1e2b7; border-left: 5px solid #f0ad4e; background-color: #fcf8e3; margin-bottom: 12px; border-radius: 10px;">
-                                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
-                                    <div style="color:#8a6d3b; font-weight:900; font-size: 15px; margin-bottom: 4px;">
-                                        ⚠️ ${dName}
-                                        <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
-                                    </div>
-                                    ${isInstagram ? `<span style="background:#8a6d3b; color:#fff; padding:4px 8px; border-radius:999px; font-size:11px; white-space:nowrap;">정책: Instagram 위치</span>` : ''}
-                                </div>
+                                        <div style="margin-top:10px; padding:12px; background:#fff7e6; border:1px solid #f3d3b4; border-radius:10px;">
+                                            <div style="font-weight:900; margin-bottom:6px;">🤖 AI 안내</div>
+                                            <div style="font-size:13px; line-height:1.6; color:#555;">${aiText}</div>
+                                        </div>
 
-                                <div style="margin-top:8px; padding:12px; background:#fff7e0; border:1px solid #f1e2b7; border-radius:10px;">
-                                    <div style="display:flex; gap:8px; align-items:flex-start;">
-                                        <div style="font-size:18px; line-height:1;">🤖</div>
-                                        <div style="flex:1;">
-                                            <div style="font-weight:800; color:#6b5a2a; margin-bottom:4px;">AI 안내</div>
-                                            <div style="font-size:13px; color:#6b5a2a; line-height:1.45;">${narration}</div>
+                                        <div style="margin-top:10px; padding:12px; background:#fff; border:1px solid #f3d3b4; border-radius:10px;">
+                                            <div style="font-weight:900; margin-bottom:6px;">🤖 AI 판단 근거</div>
+                                            ${buildReasons(reasons)}
+                                        </div>
+
+                                        <div style="margin-top:10px;">
+                                            <div style="font-weight:900; margin-bottom:8px; color:#3c763d;">✅ 권장 조치</div>
+                                            <div>${buildChips(recs)}</div>
                                         </div>
                                     </div>
-                                </div>
+                                `;
+            }).join('');
 
-                                ${buildReasonsHtml(app)}
-                                ${buildRecommendationHtml(app)}
-                            </li>`;
-                });
+            container.innerHTML = html;
+        },
 
-                container.innerHTML = html + '</ul>';
-            } else {
-                container.innerHTML = `
-                        <div style="text-align:center; padding:30px; background:#f9f9f9; border-radius:8px; color:#999;">
-                            ✅ 탐지된 개인정보 유출 위협이 없습니다.
-                        </div>`;
+        forceRenderIosCoreAreas() {
+            try {
+                const data = window.__bd_lastScanData || window.lastScanData || {};
+                this.renderIosCoreAreas(data.mvtResults || {});
+            } catch (e) {
+                console.error('[iOS] forceRenderIosCoreAreas failed:', e);
             }
         }
-    }
-};
+    };
 
+    window.__bd_forceRenderIosCoreAreas = () => {
+        try { ResultsRenderer.forceRenderIosCoreAreas(); } catch (e) { }
+    };
+}
