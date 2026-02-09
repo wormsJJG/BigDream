@@ -130,7 +130,15 @@ export function createViewManager(State) {
                     'res-apps',
                     'res-background',
                     'res-apk',
-                    'res-threats'
+                    'res-privacy',
+                    'res-threats',
+
+                    // iOS 분리 메뉴
+                    'res-ios-web',
+                    'res-ios-messages',
+                    'res-ios-system',
+                    'res-ios-appsprofiles',
+                    'res-ios-artifacts'
                 ];
                 privacyNotice.style.display = allowedScreens.includes(screenId) ? 'block' : 'none';
             }

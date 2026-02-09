@@ -43,13 +43,13 @@
             // iOS 데이터를 안드로이드 포맷으로 변환
             transformIosData(iosData) {
                 console.log("📥 [Renderer] Main에서 받은 데이터:", iosData); // 디버깅용 로그
-    
-                // 1. 위협 데이터 매핑
+
+                // 1. 위협 데이터 매핑 (MVT findings -> suspiciousApps)
                 const suspiciousApps = (iosData.suspiciousItems || []).map(item => {
                     const moduleName = item.module || item.check_name || 'Unknown Module';
                     const description = item.description || item.name || '탐지된 이상 징후';
                     const filePath = item.file_path || item.path || '-';
-    
+
                     return {
                         packageName: moduleName,
                         cachedTitle: `[iOS] ${moduleName}`,
@@ -62,24 +62,33 @@
                         grantedCount: 0
                     };
                 });
-    
-                // 2. 기기 정보 전달 (★ 핵심 수정 부분)
-                // main.js에서 만든 deviceInfo가 있으면 무조건 그걸 씁니다.
-                // 없으면(null이면) 그때서야 기본값을 씁니다.
+
+                // 2. 기기 정보 전달 (Main에서 만든 deviceInfo가 있으면 무조건 사용)
                 const finalDeviceInfo = iosData.deviceInfo || {
                     model: 'iPhone (Unknown)',
                     serial: '-',
                     isRooted: false,
-                    phoneNumber: '-'
+                    phoneNumber: '-',
+                    os: 'iOS'
                 };
-    
+
+                // 3. iOS 모드 표식(렌더러 분기 안전장치)
+                // - deviceInfo.os 는 표시용 그대로 두되(예: "iOS 17.2")
+                // - 별도의 osMode/deviceMode 로 'ios'를 명확히 전달
+                if (!finalDeviceInfo.os) finalDeviceInfo.os = 'iOS';
+                finalDeviceInfo.osMode = 'ios';
+
                 return {
-                    deviceInfo: finalDeviceInfo, // ★ Main에서 준 정보를 그대로 통과시킴
+                    deviceInfo: finalDeviceInfo,
+                    deviceMode: 'ios',
                     allApps: iosData.allApps || [],
                     suspiciousApps: suspiciousApps,
-                    apkFiles: []
+                    privacyThreatApps: iosData.privacyThreatApps || [], // (있으면 그대로 통과)
+                    fileCount: iosData.fileCount || 0,
+                    mvtResults: iosData.mvtResults || iosData.mvtAnalysis || {}, // 5대 핵심영역용
                 };
             },
+
     
             // 권한 한글 매핑
             getKoreanPermission(permString) {

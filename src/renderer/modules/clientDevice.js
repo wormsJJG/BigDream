@@ -155,7 +155,19 @@ export function initClientDevice(ctx) {
                         'bg-app-grid-container',
                         'apk-grid-container',
                         'suspicious-list-container',
-                        'mvt-analysis-container'
+
+                        // iOS 5대 핵심영역(분리 메뉴) 컨테이너
+                        'ios-web-container',
+                        'ios-messages-container',
+                        'ios-system-container',
+                        'ios-appsprofiles-container',
+                        'ios-artifacts-container',
+
+                        // (구버전 호환) 단일 MVT 컨테이너
+                        'mvt-analysis-container',
+
+                        // 개인정보 유출 위협
+                        'privacy-threat-list-container'
                     ];
     
                     containers.forEach(id => {

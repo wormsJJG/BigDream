@@ -67,7 +67,7 @@ function start({ rootDir }) {
 
   const CONFIG = {
       IS_DEV_MODE: false,
-      KEEP_BACKUP: false,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
+      KEEP_BACKUP: true,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
       VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
       PATHS: {
           ADB: path.join(RESOURCE_DIR, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
@@ -401,11 +401,16 @@ const updateService = createUpdateService({ firestoreService });
           const scanData = JSON.parse(jsonContent);
 
           // 💡 [핵심] 저장된 OS 모드 파악 (UI 렌더링에 필요)
+          // - 기존 데이터는 deviceInfo.os 값이 'ANDROID', 'iOS', 'iOS 17.2' 처럼 다양한 형태로 저장될 수 있음
+          // - UI 분기에는 반드시 'android' | 'ios' 로 정규화해서 내려줘야 함
           if (!scanData.deviceInfo || !scanData.deviceInfo.os) {
               throw new Error('파일 구조가 올바르지 않거나 OS 정보가 누락되었습니다.');
           }
 
-          return { success: true, data: scanData, osMode: scanData.deviceInfo.os };
+          const rawOs = String(scanData.deviceInfo.os).toLowerCase();
+          const normalizedOsMode = rawOs.includes('ios') ? 'ios' : 'android';
+
+          return { success: true, data: scanData, osMode: normalizedOsMode };
 
       } catch (e) {
           console.error("로컬 파일 열기 오류:", e);

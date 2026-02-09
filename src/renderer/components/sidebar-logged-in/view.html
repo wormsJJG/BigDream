@@ -1,34 +1,36 @@
 <div class="logo-area">
-<span class="app-title" id="admin-title-trigger">BD SCANNER</span>
+  <span class="app-title" id="admin-title-trigger">BD SCANNER</span>
 </div>
-<ul class="nav-menu">
-<li class="nav-item active" id="nav-create"><span>검사생성</span></li>
-<li class="nav-item" id="nav-open"><span>검사열기</span></li>
-<li class="nav-item hidden" id="nav-android-dashboard" style="display:none;"><span>📟 대시보드</span></li>
-<div class="hidden" id="ios-sub-menu" style="display: none;">
-<li class="nav-item res-tab" data-target="res-summary"><span>📊 검사 결과 </span></li>
-<li class="nav-item res-tab" data-target="res-threats"><span>🔍 iOS 5대 핵심 영역</span></li>
-<li class="nav-item res-tab" data-target="res-apps"><span>📲 검사 대상 앱 목록</span></li>
-</div>
-<div class="hidden" id="result-sub-menu">
-<li class="nav-item res-tab" data-target="res-summary"><span>📊 정밀 검사 결과</span></li>
-<li class="nav-item res-tab" data-target="res-apps"><span>📲 설치된 앱</span></li>
-<li class="res-tab nav-item" data-target="res-background"><span>🚀 백그라운드 실행 앱</span></li>
-<li class="res-tab nav-item" data-target="res-apk"><span>📂 발견된 APK 파일</span></li>
-<li class="res-tab nav-item" data-target="res-privacy"><span>🔒 개인정보 유출 위협</span></li>
-<li class="res-tab nav-item" data-target="res-network" style="display: none !important;"><span>🌐
-                            네트워크 패킷 분석</span></li>
-<li class="res-tab nav-item" data-target="res-threats" style="display: none !important;"><span>⚠️ 기기
-                            보안 위협</span></li>
-</div>
+  <li class="nav-item active" id="nav-create"><span>검사생성</span></li>
+  <li class="nav-item" id="nav-open"><span>검사열기</span></li>
+  <li class="nav-item hidden" id="nav-android-dashboard" style="display:none;"><span>📟 대시보드</span></li>
+  <!-- iOS 전용 결과 메뉴 -->
+  <div class="hidden" id="ios-sub-menu" style="display: none;">
+    <li class="nav-item res-tab" data-target="res-summary"><span>📊 기기 정보 및 탐지 결과</span></li>
+
+    <li class="nav-item res-tab" data-target="res-ios-web"><span>🌐 브라우저 및 웹 활동</span></li>
+    <li class="nav-item res-tab" data-target="res-ios-messages"><span>💬 메시지 및 통신 기록</span></li>
+    <li class="nav-item res-tab" data-target="res-ios-system"><span>⚙️ 시스템 로그 및 프로세스</span></li>
+    <li class="nav-item res-tab" data-target="res-ios-appsprofiles"><span>🗂️ 설치 앱 및 프로파일</span></li>
+    <li class="nav-item res-tab" data-target="res-ios-artifacts"><span>📁 기타 시스템 파일</span></li>
+
+    <li class="nav-item res-tab" data-target="res-privacy"><span>🔒 개인정보 유출 위협</span></li>
+    <li class="nav-item res-tab" data-target="res-apps"><span>📲 검사 대상 애플리케이션</span></li>
+  </div>
+
+  <!-- Android 전용 결과 메뉴 -->
+  <div class="hidden" id="result-sub-menu">
+    <li class="nav-item res-tab" data-target="res-summary"><span>📊 정밀 검사 결과</span></li>
+    <li class="nav-item res-tab" data-target="res-apps"><span>📲 설치된 앱</span></li>
+    <li class="res-tab nav-item" data-target="res-background"><span>🚀 백그라운드 실행 앱</span></li>
+    <li class="res-tab nav-item" data-target="res-apk"><span>📂 발견된 APK 파일</span></li>
+    <li class="res-tab nav-item" data-target="res-privacy"><span>🔒 개인정보 유출 위협</span></li>
+
+    <li class="res-tab nav-item" data-target="res-network" style="display: none !important;"><span>🌐 네트워크 패킷 분석</span></li>
+    <li class="res-tab nav-item" data-target="res-threats" style="display: none !important;"><span>⚠️ 기기 보안 위협</span></li>
+  </div>
 </ul>
+
 <div class="sidebar-footer">
-<div class="sidebar-support-info">
-<div class="support-text-group">
-<p class="support-company">(주)빅드림</p>
-<p class="support-title">기술 문의</p>
-<p class="support-phone">031-778-8810</p>
-</div>
-</div>
-<button class="sidebar-button" id="logout-btn">로그아웃</button>
+  <button class="sidebar-button" id="logout-btn">로그아웃</button>
 </div>
