@@ -19,12 +19,16 @@
             transformAndroidData: (scanData) => {
                 const transformedApps = scanData.allApps || [];
     
-                // 1. 진짜 스파이앱 (최종 필터 확진)
-                const spyApps = transformedApps.filter(app => app.riskLevel === 'SPYWARE');
-
-                // 2. 개인정보 유출 위협
-                const privacyThreats = transformedApps.filter(app => app.riskLevel === 'PRIVACY_RISK');
-
+                // 1. 진짜 스파이앱 (VT 확진된 것만)
+                const spyApps = transformedApps.filter(app =>
+                    // app.reason && app.reason.includes('[VT 확진]')
+                    false
+                );
+    
+                // 2. 개인정보 유출 위협 (권한이 과도하거나 VT 결과가 애매한 의심 앱)
+                const privacyThreats = transformedApps.filter(app =>
+                    app.reason // && !app.reason.includes('[VT 확진]')
+                );
     
                 return {
                     deviceInfo: scanData.deviceInfo,

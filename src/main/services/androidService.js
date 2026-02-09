@@ -7,8 +7,6 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
   if (!client) throw new Error('createAndroidService requires client');
   if (!adb) throw new Error('createAndroidService requires adb');
   const { evaluateAndroidAppRisk, RISK_LEVELS } = require('../../shared/risk/riskRules');
-  const { evaluateAndroidSpywareFinalVerdict } = require('../../shared/spyware/spywareFinalFilter');
-
   
   const service = {
       /**
@@ -58,15 +56,6 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
               const devices = await client.listDevices();
               if (devices.length === 0) throw new Error('기기 없음');
               const serial = devices[0].id;
-
-              // ✅ (무료 최종 필터 정확도 향상)
-              // 접근성 서비스 활성/기기 관리자 활성 상태는 앱별로 매번 조회하지 않고, 스캔 시작 시 한 번만 수집합니다.
-              // - dumpsys accessibility: Enabled services에서 패키지 추출
-              // - dumpsys device_policy: Active admin에서 패키지 추출
-              const [enabledA11yPkgs, activeAdminPkgs] = await Promise.all([
-                  service.getEnabledAccessibilityPackages(serial),
-                  service.getActiveDeviceAdminPackages(serial)
-              ]);
 
               const deviceInfo = await service.getDeviceInfo(serial);
               deviceInfo.os = 'ANDROID';
@@ -131,14 +120,9 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                               console.log(`-------------------------------------------\n`);
                           }
 
-                          const isAccessibilityEnabled = enabledA11yPkgs.has(app.packageName);
-                          const isDeviceAdminActive = activeAdminPkgs.has(app.packageName);
-
                           return {
                               ...app,
                               isRunningBg,
-                              isAccessibilityEnabled,
-                              isDeviceAdminActive,
                               ...permData,
                               dataUsage: netStats,
                               aiScore: aiResult.score,
@@ -156,43 +140,31 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
               }
 
               let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
-              // ✅ VT(유료) 정밀 검사는 사용하지 않습니다. (최종 필터는 내부 정책 기반)
 
-              // 2) ✅ 최종 분류
-// - 2-1) 스파이앱 최종 확정(무료): src/shared/spyware/spywareFinalFilter.js
-// - 2-2) 개인정보 유출 위협: src/shared/risk/riskRules.js
-processedApps.forEach((app) => {
-    // (A) 최종 스파이 확정 필터 (AI 의심 앱만 대상으로 조합 기반 확정)
-    const finalVerdict = evaluateAndroidSpywareFinalVerdict(app);
+              if (suspiciousApps.length > 0 && CONFIG?.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
+                  const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
+                  console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
+                  await service.runVirusTotalCheck(serial, vtTargets);
+              }
 
-    if (finalVerdict.isSpyware) {
-        app.riskLevel = RISK_LEVELS.SPYWARE;
-        app.riskReasons = finalVerdict.reasons || [];
-        app.recommendation = [
-            { action: 'UNINSTALL', label: '앱 삭제 권장' },
-            { action: 'REVOKE_PERMISSIONS', label: '권한 회수(전체)' },
-            { action: 'CHECK_ACCOUNTS', label: '계정/인증정보 점검' }
-        ];
-        app.aiNarration = finalVerdict.narration || '스파이앱으로 분류했습니다.';
-        app.reason = `[최종 필터 확진] ${app.aiNarration}`;
-        return;
-    }
+              // 2) ✅ 최종 분류 (정책 기반)
+              processedApps.forEach((app) => {
+                  const evaluated = evaluateAndroidAppRisk(app);
 
-    // (B) 개인정보 유출 위협 평가
-    const evaluated = evaluateAndroidAppRisk(app);
+                  app.riskLevel = evaluated.riskLevel;
+                  app.riskReasons = evaluated.riskReasons;
+                  app.recommendation = evaluated.recommendation;
+                  app.aiNarration = evaluated.aiNarration;
 
-    app.riskLevel = evaluated.riskLevel;
-    app.riskReasons = evaluated.riskReasons;
-    app.recommendation = evaluated.recommendation;
-    app.aiNarration = evaluated.aiNarration;
-
-    // UI 호환용 reason도 유지 (대표 문장 1개)
-    if (app.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
-        app.reason = `[개인정보 유출 위협] ${evaluated.aiNarration}`;
-    } else if (!app.reason) {
-        app.reason = '';
-    }
-});
+                  // UI 호환용 reason도 유지 (대표 문장 1개)
+                  if (app.riskLevel === RISK_LEVELS.SPYWARE) {
+                      app.reason = `[VT 확진] ${evaluated.aiNarration}`;
+                  } else if (app.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
+                      app.reason = `[개인정보 유출 위협] ${evaluated.aiNarration}`;
+                  } else if (!app.reason) {
+                      app.reason = '';
+                  }
+              });
 
               const spywareApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.SPYWARE);
               const privacyThreatApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.PRIVACY_RISK);
@@ -231,86 +203,6 @@ processedApps.forEach((app) => {
       async adbShell(serial, cmd) {
           const out = await client.shell(serial, cmd);
           return (await adb.util.readAll(out)).toString().trim();
-      },
-
-      // ---------------------------------------------------------
-      // ✅ [Helper] 접근성(Accessibility) 활성 서비스 패키지 목록
-      // dumpsys accessibility 출력에서 Enabled services / Enabled Accessibility Services 항목을 파싱합니다.
-      async getEnabledAccessibilityPackages(serial) {
-          try {
-              const raw = await service.adbShell(serial, 'dumpsys accessibility');
-              if (!raw) return new Set();
-
-              const pkgs = new Set();
-              const lines = raw.split(/\r?\n/);
-
-              // "Enabled services:" 블록 이후에 컴포넌트 라인이 여러 줄 나오는 케이스가 많습니다.
-              let inEnabledBlock = false;
-              for (const line of lines) {
-                  const trimmed = line.trim();
-
-                  if (/^Enabled (Accessibility )?services\s*:/i.test(trimmed)) {
-                      inEnabledBlock = true;
-                      continue;
-                  }
-
-                  // 블록 종료 조건: 다음 섹션 헤더가 나오면 종료
-                  if (inEnabledBlock && (/^[A-Z][A-Za-z\s]+:/.test(trimmed) || trimmed.startsWith('m'))) {
-                      // dumpsys 출력은 포맷이 다양하므로 너무 공격적으로 끊지 않고,
-                      // 빈 줄이거나 다음 섹션처럼 보이는 라인에서만 종료
-                      if (trimmed === '' || /^[A-Z][A-Za-z\s]+:/.test(trimmed)) {
-                          inEnabledBlock = false;
-                      }
-                  }
-
-                  if (!inEnabledBlock) continue;
-
-                  // componentName 예: com.example.app/com.example.app.AccessibilityService
-                  const m = trimmed.match(/([a-zA-Z0-9_\.]+)\/[a-zA-Z0-9_\.$]+/);
-                  if (m && m[1]) pkgs.add(m[1]);
-              }
-
-              return pkgs;
-          } catch (e) {
-              console.warn('⚠️ 접근성 활성 서비스 목록 조회 실패:', e?.message || e);
-              return new Set();
-          }
-      },
-
-      // ---------------------------------------------------------
-      // ✅ [Helper] 기기 관리자(Device Admin) 활성 패키지 목록
-      // dumpsys device_policy 출력에서 Active admin / Active Admins 항목의 ComponentInfo를 파싱합니다.
-      async getActiveDeviceAdminPackages(serial) {
-          try {
-              const raw = await service.adbShell(serial, 'dumpsys device_policy');
-              if (!raw) return new Set();
-
-              const pkgs = new Set();
-
-              // 1) ComponentInfo{com.pkg/.Receiver}
-              const re = /ComponentInfo\{([^\/\}\s]+)\//g;
-              let match;
-              while ((match = re.exec(raw)) !== null) {
-                  if (match[1]) pkgs.add(match[1]);
-              }
-
-              // 2) 혹시 dumpsys가 다른 포맷이면 dpm list도 시도(지원되는 기기에서만)
-              if (pkgs.size === 0) {
-                  try {
-                      const out = await service.adbShell(serial, 'dpm list active-admins');
-                      const lines = String(out || '').split(/\r?\n/);
-                      for (const line of lines) {
-                          const m = line.trim().match(/([a-zA-Z0-9_\.]+)\/[a-zA-Z0-9_\.$]+/);
-                          if (m && m[1]) pkgs.add(m[1]);
-                      }
-                  } catch (_e) {}
-              }
-
-              return pkgs;
-          } catch (e) {
-              console.warn('⚠️ 기기 관리자 활성 목록 조회 실패:', e?.message || e);
-              return new Set();
-          }
       },
 
       // 앱 삭제 (Disable -> Uninstall)
