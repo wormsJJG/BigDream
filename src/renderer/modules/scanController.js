@@ -906,9 +906,10 @@ export function initScanController(ctx) {
                 <div style="font-size:10px; color:#f0ad4e; margin-top:4px;">요구권한 ${apk.requestedCount}개</div>
             `;
 
-                // ✅ DOM 참조 캐싱: 검색/정렬 시 재생성 없이 재배치만 하기 위함
-                if (!app.__bd_el) app.__bd_el = {};
-                app.__bd_el[listKey] = div;
+                // ✅ DOM 참조 캐싱(선택): APK 목록에서도 재렌더/필터 시 재사용할 수 있도록 저장
+                // 기존 코드에서 app/listKey를 참조해 오류가 발생했으므로 apk 객체에 고정 키로 캐싱합니다.
+                if (!apk.__bd_el) apk.__bd_el = {};
+                apk.__bd_el.apk = div;
 
                 // 클릭 시 AppDetailManager를 통해 상세 권한 목록 표시
                 div.addEventListener('click', () => {
