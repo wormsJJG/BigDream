@@ -523,3 +523,45 @@
     margin-top:2px;
     color:#555;
 }
+
+/* ===== Android 리스트 검색/정렬 UI ===== */
+.list-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 12px 0 14px 0;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #e6e8ec;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.search-icon {
+    opacity: 0.7;
+    font-size: 14px;
+}
+
+.search-box input {
+    width: 100%;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    background: transparent;
+}
+
+.sort-select {
+    min-width: 160px;
+    border: 1px solid #e6e8ec;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    background: #ffffff;
+}
