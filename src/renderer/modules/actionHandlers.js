@@ -195,14 +195,18 @@ export function initActionHandlers(ctx) {
             saveResultsBtn.textContent = "저장 중...";
 
             try {
-                const result = await window.electronAPI.saveScanResult(State.lastScanData);
+                const pureData = JSON.parse(JSON.stringify(State.lastScanData));
+
+                const result = await window.electronAPI.saveScanResult(pureData);
+
                 if (result.success) {
                     await CustomUI.alert(result.message);
                 } else {
                     await CustomUI.alert(`저장 실패: ${result.error || result.message}`);
                 }
             } catch (error) {
-                await CustomUI.alert(`로컬 저장 오류: ${error.message}`);
+                console.error("Serialization Error:", error);
+                await CustomUI.alert(`로컬 저장 오류: 데이터 형식이 올바르지 않습니다.`);
             } finally {
                 saveResultsBtn.disabled = false;
                 saveResultsBtn.textContent = "💾 로컬 저장";
