@@ -518,7 +518,7 @@ export function initScanController(ctx) {
                 this._androidDashDisconnectedNotified = true;
                 // keep dashboard visible but inform user
                 try {
-                    await CustomUI.alert('⚠️ 기기 연결이 끊겼습니다. USB/ADB 연결을 확인해주세요.');
+                    await CustomUI.alert('⚠️ 기기 연결이 끊겼습니다. USB 연결을 확인해주세요.');
                 } catch (_) { }
             };
 
@@ -709,18 +709,18 @@ export function initScanController(ctx) {
                 });
 
                 // 결과 데이터 렌더링
-                ResultsRenderer.render(data);
 
-                // 결과 화면으로 전환
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
+                requestAnimationFrame(() => {
+                    // 결과 데이터 렌더링
+                    ResultsRenderer.render(data);
 
-                // 결과 화면의 첫 번째 탭(요약)에 하이라이트 부여
-                const summaryTab = document.querySelector('.res-tab[data-target="res-summary"]');
-                if (summaryTab) {
-                    summaryTab.classList.add('active');
-                }
-
-                console.log("[UI] 결과 화면 전환 및 하이라이트 정리 완료");
+                    // 결과 화면의 첫 번째 탭(요약)에 하이라이트 부여
+                    const summaryTab = document.querySelector('.res-tab[data-target="res-summary"]');
+                    if (summaryTab) {
+                        summaryTab.classList.add('active');
+                    }
+                });
             }, 1500);
         },
 
@@ -981,9 +981,10 @@ export function initScanController(ctx) {
                 <div style="font-size:10px; color:#f0ad4e; margin-top:4px;">요구권한 ${apk.requestedCount}개</div>
             `;
 
-                // ✅ DOM 참조 캐싱: 검색/정렬 시 재생성 없이 재배치만 하기 위함
-                if (!app.__bd_el) app.__bd_el = {};
-                app.__bd_el[listKey] = div;
+                // ✅ DOM 참조 캐싱(선택): APK 목록에서도 재렌더/필터 시 재사용할 수 있도록 저장
+                // 기존 코드에서 app/listKey를 참조해 오류가 발생했으므로 apk 객체에 고정 키로 캐싱합니다.
+                if (!apk.__bd_el) apk.__bd_el = {};
+                apk.__bd_el.apk = div;
 
                 // 클릭 시 AppDetailManager를 통해 상세 권한 목록 표시
                 div.addEventListener('click', () => {
@@ -1576,6 +1577,7 @@ export function initScanController(ctx) {
                 }
 
                 if (sortKey === 'nameAsc') {
+                  
                     const n = getName(a).localeCompare(getName(b));
                     if (n !== 0) return n;
                     const p = getPkg(a).localeCompare(getPkg(b));

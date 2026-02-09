@@ -109,7 +109,9 @@ export function initAuthSettings(ctx) {
                 const user = await authService.login(email, password);
 
                 // 2. 권한 확인 (DB 조회)
-                const role = await checkUserRole(user.uid);
+                // - DB에 'User', 'USER ', 'admin ' 등으로 저장된 케이스를 방지하기 위해 정규화
+                const roleRaw = await checkUserRole(user.uid);
+                const role = String(roleRaw || '').trim().toLowerCase();
                 await window.electronAPI.saveLoginInfo(loginData)
                 console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
 
@@ -120,20 +122,21 @@ export function initAuthSettings(ctx) {
                 State.isLoggedIn = true;
                 State.userRole = role;
 
-                const isAdmin = role && role !== 'user';
-                if (isAdmin) {
+                const isAdmin = isAdminRole(role);
 
-                    ViewManager.showView('logged-in-view');
-                    ViewManager.showScreen(loggedInView, 'create-scan-screen');
-                    updateAgencyDisplay()
+                // 로그인 직후 '검사 생성' 화면의 헤더(업체명/남은횟수)가 갱신되지 않는 버그 방지:
+                // - create-scan-screen(view.html)에 기본값이 박혀있어도, 여기서 즉시 State 기반으로 바인딩
+                ViewManager.showView('logged-in-view');
+                ViewManager.showScreen(loggedInView, 'create-scan-screen');
+                updateAgencyDisplay();
+
+                if (isAdmin) {
                     document.body.classList.add('is-admin');
                     await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
                     setTimeout(() => {
                         AdminManager.init();
                     }, 500);
                 } else {
-                    ViewManager.showView('logged-in-view');
-                    ViewManager.showScreen(loggedInView, 'create-scan-screen');
                     document.body.classList.remove('is-admin');
                 }
 

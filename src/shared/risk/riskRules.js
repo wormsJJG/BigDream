@@ -319,9 +319,175 @@ function evaluateAndroidAppRisk(app) {
   };
 }
 
+
+
+/**
+ * Risk classification rules (Common wrapper)
+ *
+ * - platform: 'android' | 'ios'
+ * - app: normalized app object
+ *   - Android: { packageName, cachedTitle, permissions?, ... }
+ *   - iOS: { packageName: <bundleId>, cachedTitle, ... }
+ *
+ * Returns:
+ *  {
+ *    riskLevel, riskReasons, recommendation, aiNarration,
+ *    card: (privacy threat card object for UI) | null
+ *  }
+ */
+const IOS_POLICY_LOCATION_SHARING_BUNDLE_IDS = new Set([
+  // location sharing / family tracking / safety apps
+  'com.life360.safetymapd',
+  'com.geozilla.family',
+  'org.findmykids.app',
+  'com.glympse.glympse',
+  'com.wondershare.famisafe',
+  // major apps with location-sharing features (policy fixed)
+  'com.burbn.instagram',
+  'com.snapchat.Snapchat'
+]);
+
+// iOS: "surveillance-like" list (keep conservative; can expand later)
+const IOS_POLICY_SURVEILLANCE_LIKE_BUNDLE_IDS = new Set([
+  // (intentionally minimal; add when you confirm bundle IDs)
+]);
+
+function normalizePlatform(p) {
+  const v = String(p || '').toLowerCase();
+  if (v.startsWith('ios')) return 'ios';
+  return 'android';
+}
+
+function getAppIdentifier(app) {
+  // We use packageName field as the canonical identifier for both platforms.
+  // - Android: package name (e.g., com.example.app)
+  // - iOS: bundle id (e.g., com.apple.mobilesafari)
+  return (app && (app.packageName || app.bundleId || app.id || app.identifier || '')).toString().trim();
+}
+
+function getAppDisplayName(app, identifier) {
+  return (app && (app.cachedTitle || app.appName || app.name || app.title)) || identifier;
+}
+
+/**
+ * Platform-agnostic entrypoint used by iOS scan flow.
+ */
+function evaluateAppRisk(platform, app) {
+  const p = normalizePlatform(platform);
+
+  if (p === 'android') {
+    const evaluated = evaluateAndroidAppRisk(app);
+    // For Android, the privacyThreatApps list is already prepared in androidService.
+    // Return a UI card only when policy classifies as privacy risk.
+    if (evaluated.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
+      return {
+        ...evaluated,
+        card: {
+          ...(app || {}),
+          riskLevel: evaluated.riskLevel,
+          riskReasons: evaluated.riskReasons,
+          recommendation: evaluated.recommendation,
+          aiNarration: evaluated.aiNarration
+        }
+      };
+    }
+    return { ...evaluated, card: null };
+  }
+
+  // iOS path: use bundleId(=packageName) based policy lists.
+  const identifier = getAppIdentifier(app);
+  if (!identifier) {
+    return { riskLevel: RISK_LEVELS.SAFE, riskReasons: [], recommendation: [], aiNarration: '', card: null };
+  }
+
+  const displayName = getAppDisplayName(app, identifier);
+  const isInstagram = identifier === 'com.burbn.instagram';
+
+  // 1) Location sharing / family tracking policy
+  if (IOS_POLICY_LOCATION_SHARING_BUNDLE_IDS.has(identifier)) {
+    const riskReasons = [{
+      code: isInstagram ? 'INSTAGRAM_LOCATION_FEATURE' : 'LOCATION_SHARING_APP',
+      title: isInstagram ? '위치 공유 기능(인스타그램)' : '위치 공유 기능 중심 앱',
+      detail: '앱 기능 특성상 위치 기반 정보가 외부로 공유될 수 있습니다. 공유 설정/권한을 점검하는 것을 권장합니다.',
+      severity: 'LOW'
+    }];
+
+    const recommendation = [
+      { action: 'REVIEW_SHARING', label: '공유 설정 점검' },
+      { action: 'DISABLE_LOCATION', label: '위치 접근 최소화' },
+      { action: 'LIMIT_BACKGROUND', label: '백그라운드 제한' }
+    ];
+
+    const aiNarration = isInstagram
+      ? '인스타그램은 위치 공유 기능이 존재하여 사용 방식에 따라 위치 정보가 외부로 공유될 수 있어 개인정보 유출 위협으로 안내합니다.'
+      : '위치 공유/가족 보호 등 위치 기반 기능 특성상 위치 정보가 외부로 공유될 수 있어 개인정보 유출 위협으로 안내합니다.';
+
+    return {
+      riskLevel: RISK_LEVELS.PRIVACY_RISK,
+      riskReasons,
+      recommendation,
+      aiNarration,
+      card: {
+        ...(app || {}),
+        // renderer expects packageName field; for iOS it is the bundleId
+        packageName: identifier,
+        cachedTitle: displayName,
+        policyLabel: isInstagram ? 'Instagram 위치 기능' : '위치 공유 앱',
+        riskLevel: RISK_LEVELS.PRIVACY_RISK,
+        riskReasons,
+        recommendation,
+        aiNarration,
+        reason: '[개인정보 유출 위협] 위치 기반 정보 공유 가능성이 있습니다.'
+      }
+    };
+  }
+
+  // 2) Surveillance-like policy (if list is populated)
+  if (IOS_POLICY_SURVEILLANCE_LIKE_BUNDLE_IDS.has(identifier)) {
+    const riskReasons = [{
+      code: 'SURVEILLANCE_LIKE_APP',
+      title: '원격 감시 성격 앱(정책)',
+      detail: '주변 소리/카메라/화면 등 원격 감시 성격의 기능이 포함된 것으로 알려진 앱으로 정책상 개인정보 유출 위협으로 분류합니다.',
+      severity: 'MEDIUM'
+    }];
+
+    const recommendation = [
+      { action: 'VERIFY_INSTALL', label: '설치 목적 확인' },
+      { action: 'REMOVE_IF_UNUSED', label: '불필요 시 삭제' },
+      { action: 'REVIEW_PERMISSIONS', label: '권한 점검' }
+    ];
+
+    const aiNarration = '원격 감시(주변 소리/카메라/화면 등) 성격이 강한 앱으로 분류되어 개인정보 유출 위협으로 안내합니다.';
+
+    return {
+      riskLevel: RISK_LEVELS.PRIVACY_RISK,
+      riskReasons,
+      recommendation,
+      aiNarration,
+      card: {
+        ...(app || {}),
+        packageName: identifier,
+        cachedTitle: displayName,
+        policyLabel: '원격 감시 성격 앱',
+        riskLevel: RISK_LEVELS.PRIVACY_RISK,
+        riskReasons,
+        recommendation,
+        aiNarration,
+        reason: '[개인정보 유출 위협] 원격 감시 성격 앱일 수 있습니다.'
+      }
+    };
+  }
+
+  return { riskLevel: RISK_LEVELS.SAFE, riskReasons: [], recommendation: [], aiNarration: '', card: null };
+}
+
+
 module.exports = {
   RISK_LEVELS,
   POLICY_LOCATION_SHARING_PACKAGE_IDS,
   POLICY_SURVEILLANCE_LIKE_PACKAGE_IDS,
-  evaluateAndroidAppRisk
+  IOS_POLICY_LOCATION_SHARING_BUNDLE_IDS,
+  IOS_POLICY_SURVEILLANCE_LIKE_BUNDLE_IDS,
+  evaluateAndroidAppRisk,
+  evaluateAppRisk
 };
