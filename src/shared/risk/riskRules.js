@@ -86,9 +86,45 @@ function isAiFlagged(app) {
 }
 
 function isLocationGranted(app) {
-  const granted = Array.isArray(app?.grantedList) ? app.grantedList : [];
-  const grantedKeys = new Set(granted.map(normalizePermKey));
-  return LOCATION_PERMISSION_KEYS.some(k => grantedKeys.has(k));
+  // androidService는 보통 app.grantedList / app.requestedList를 제공합니다.
+  // 단, 환경/버전에 따라 다른 키로 들어오거나 "android.permission.X: granted=true" 형태가 섞일 수 있어
+  // 최대한 보수적으로 '허용(granted)' 여부를 판정합니다.
+  const candidateLists = [];
+
+  if (Array.isArray(app?.grantedList)) candidateLists.push(app.grantedList);
+  if (Array.isArray(app?.grantedPermissions)) candidateLists.push(app.grantedPermissions);
+  if (Array.isArray(app?.permissionsGranted)) candidateLists.push(app.permissionsGranted);
+
+  // 일부 코드에서 permissions 객체로 감싸는 케이스 대응
+  if (Array.isArray(app?.permissions?.grantedList)) candidateLists.push(app.permissions.grantedList);
+  if (Array.isArray(app?.permissions?.granted)) candidateLists.push(app.permissions.granted);
+
+  // 마지막 fallback: 문자열 배열(예: 전체 permissions) 안에 '...ACCESS_FINE_LOCATION...granted=true'가 섞여 있으면 허용으로 간주
+  if (Array.isArray(app?.permissions)) candidateLists.push(app.permissions);
+
+  const flattened = candidateLists.flat().filter(Boolean).map(String);
+
+  // granted=true가 포함된 라인은 granted로 인정하고, 그렇지 않으면 그냥 권한 토큰만 비교
+  const grantedKeys = new Set(
+    flattened
+      .filter((p) => {
+        // "android.permission.X: granted=true" / "android.permission.X granted=true" 등
+        if (/granted\s*=\s*true/i.test(p)) return true;
+        // app.grantedList는 보통 이미 허용된 것만 들어오므로 그대로 인정
+        // (granted=true가 없어도 후보군에 포함될 수 있으니 그대로 통과)
+        return true;
+      })
+      .map((p) => {
+        // "android.permission.X: granted=true" 같은 경우 ':' 앞까지만 자르기
+        const head = p.split(':')[0].trim();
+        // "android.permission.X granted=true" 같은 경우 공백 앞까지만
+        const head2 = head.split(/\s+/)[0].trim();
+        return normalizePermKey(head2);
+      })
+      .filter(Boolean)
+  );
+
+  return LOCATION_PERMISSION_KEYS.some((k) => grantedKeys.has(k));
 }
 
 function isInLocationSharingPolicyList(app) {
@@ -246,7 +282,7 @@ function evaluateAndroidAppRisk(app) {
   }
 
   // Rule 5: Location sharing policy list => Privacy risk
-  if (isInLocationSharingPolicyList(app)) {
+  if (isInLocationSharingPolicyList(app) && locationGranted) {
     reasons.push(
       buildReason({
         code: 'LOCATION_SHARING_APP',

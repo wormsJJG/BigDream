@@ -2,6 +2,8 @@
  * Auto-extracted from legacy bootstrap.js for maintainable structure.
  * Responsibility: iOS domain operations only (no IPC wiring).
  */
+const { evaluateAppRisk } = require('../../shared/risk/riskRules');
+
 function createIosService({ fs, path, os, log, CONFIG, Utils }) {
   // NOTE: bootstrap.js passes a single options object.
   if (!fs) throw new Error('createIosService requires fs');
@@ -287,10 +289,17 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
               ioc: { name: '위협 인디케이터 검사', files: ['Detected IOCs'], findings: [] },
           };
 
-          return {
+          
+          // 개인정보 유출 위협(Privacy Risk) - iOS 앱 목록 기반 (RiskRules 공통 로직)
+          const privacyThreatApps = (installedApps || [])
+              .map((app) => evaluateAppRisk('ios', app).card)
+              .filter(Boolean);
+
+return {
               deviceInfo: finalDeviceInfo,
               suspiciousItems: findings,
               allApps: installedApps,
+              privacyThreatApps,
               fileCount: fileCount,
               mvtResults: mvtResults
           };
