@@ -255,19 +255,19 @@
    Restored scan beam animation
    - ViewManager/ScanController toggles display via #scannerBeam
    ================================ */
+@keyframes scanLine { 0% { top: -10%; } 100% { top: 110%; } }
 
-#scan-dashboard-screen .scan-beam {
-  display: none;
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 12px;
-  z-index: 10;
-  background: linear-gradient(to bottom, transparent, #00d2ff, transparent);
-  box-shadow: 0 0 15px #00d2ff;
-  opacity: 0.8;
-  animation: dashboardScanLineMove 2s infinite linear;
-}
+#scan-dashboard-screen #dashboardScannerBeam {
+    display: none; /* JS toggleLaser(true) 시 보임 */
+    position: absolute; 
+    width: 160px; 
+    height: 5px; 
+    background: var(--danger);
+    box-shadow: 0 0 15px var(--danger); 
+    opacity: 0.8; 
+    z-index: 4;
+    animation: scanLine 2s infinite linear;
+} 
 
 /* 해킹 아이콘 및 텍스트 */
 #scan-dashboard-screen .hack-icon {
@@ -291,20 +291,6 @@
   line-height: 1.2;
 }
 
-/* 데이터 입자 */
-#scan-dashboard-screen .data-particle {
-  position: absolute;
-  color: #00d2ff;
-  font-size: 10px;
-  font-weight: bold;
-  opacity: 0;
-  z-index: 3;
-  border: 1px solid #00d2ff;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: rgba(0, 210, 255, 0.1);
-  animation: dataLeak 1.5s infinite;
-}
 
 /* 애니메이션 정의 Keyframes */
 @keyframes dashboardScanLineMove {

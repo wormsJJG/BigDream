@@ -183,16 +183,22 @@ export function initScanController(ctx) {
         currentLogId: null,
 
         toggleLaser(isVisible) {
-            const beam = document.getElementById('scannerBeam');
-            if (beam) {
-                beam.style.display = isVisible ? 'block' : 'none';
-                if (isVisible) {
-                    beam.style.animation = 'none';
-                    beam.offsetHeight; 
-                    beam.style.animation = 'dashboardScanLineMove 2s infinite linear';
-                }
-            }
-        },
+    const show = !!isVisible;
+
+    // Android: dashboard beam
+    const dashBeam = document.getElementById('dashboardScannerBeam');
+    // iOS(또는 legacy progress): progress beam
+    const legacyBeam = document.getElementById('scannerBeam');
+
+    if (State.currentDeviceMode === 'android') {
+        if (dashBeam) dashBeam.style.display = show ? 'block' : 'none';
+        // 혹시 남아있는 legacy beam이 보이지 않게 안전하게 끔
+        if (legacyBeam) legacyBeam.style.display = 'none';
+    } else {
+        if (legacyBeam) legacyBeam.style.display = show ? 'block' : 'none';
+        if (dashBeam) dashBeam.style.display = 'none';
+    }
+},
 
         async startAndroidScan() {
             this.toggleLaser(true);
@@ -383,6 +389,8 @@ export function initScanController(ctx) {
         },
 
         async startIosScan() {
+            this.toggleLaser(true)
+
             ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
                 // 1. 실제 검사 수행
@@ -634,16 +642,9 @@ export function initScanController(ctx) {
             }
 
             if (hackAlert) {
-                hackAlert.innerHTML = 'SYSTEM<br>SAFE';
+                hackAlert.innerHTML = 'SCAN<br>COMPLETE';
                 hackAlert.style.color = 'var(--success-color)';
                 hackAlert.style.textShadow = '0 0 15px var(--success-color)';
-            } else {
-                // ID가 없을 경우 기존 방식으로 한 번 더 시도
-                const legacyAlert = document.querySelector('.hack-alert');
-                if (legacyAlert) {
-                    legacyAlert.innerHTML = 'SYSTEM<br>SAFE';
-                    legacyAlert.style.color = 'var(--success-color)';
-                }
             }
 
             // 4. 대시보드 하단 텍스트 및 로그 처리
