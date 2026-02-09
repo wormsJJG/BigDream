@@ -10,6 +10,7 @@ function normalizeDeviceMode(modeValue) {
 // Auto-split module: scanController
 
 import { Utils } from '../core/utils.js';
+import { setCircularGauge } from '../lib/circularGauge.js';
 export function initScanController(ctx) {
 
     // Shared access to AppDetailManager (module-safe)
@@ -104,12 +105,30 @@ export function initScanController(ctx) {
                 subMenu.classList.remove('active');
             }
 
-            ViewManager.showScreen(loggedInView, 'scan-progress-screen');
+            // Android: use dedicated dashboard screen, iOS: keep legacy progress screen
+            if (State.currentDeviceMode === 'android') {
+                // show Android dashboard nav
+                const dashNav = document.getElementById('nav-android-dashboard');
+                if (dashNav) {
+                    dashNav.classList.remove('hidden');
+                    dashNav.style.display = '';
+                }
+                ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
+            } else {
+                ViewManager.showScreen(loggedInView, 'scan-progress-screen');
+            }
 
             if (State.currentDeviceMode === 'android') {
+                // 1. 좌측 네비게이션 메뉴 중 '대시보드' 탭 하이라이트 활성화
+                ViewManager.activateMenu('nav-android-dashboard');
 
+                // 2. 안드로이드 대시보드 화면 표시
+                ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
+
+                // 3. 실제 검사 로직 시작
                 await ScanController.startAndroidScan();
-            } else if (State.currentDeviceMode === 'ios') {
+            } else {
+                ViewManager.showScreen(loggedInView, 'scan-progress-screen');
                 await ScanController.startIosScan();
             }
         });
@@ -163,18 +182,22 @@ export function initScanController(ctx) {
     const ScanController = {
         currentLogId: null,
 
-        // 레이저 애니메이션을 제어하는 함수
         toggleLaser(isVisible) {
-            // 레이저 빔 제어
             const beam = document.getElementById('scannerBeam');
             if (beam) {
                 beam.style.display = isVisible ? 'block' : 'none';
+                console.log(`[UI] 레이저 빔 상태 변경: ${isVisible ? 'ON' : 'OFF'}`);
+            } else {
+                console.error('[UI] scannerBeam 요소를 찾을 수 없습니다.');
             }
         },
-        //실제 앱 목록을 활용한 정밀 검사 연출 
+
         async startAndroidScan() {
             this.toggleLaser(true);
+
             this.resetSmartphoneUI();
+
+            this.startAndroidDashboardPolling();
 
             try {
                 // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
@@ -420,60 +443,209 @@ export function initScanController(ctx) {
             console.log("[UI] 스마트폰 화면이 초기 상태로 리셋되었습니다.");
         },
 
-        finishScan(data) {
-            console.log("--- 검사 종료: 결과 대시보드 준비 ---");
-            this.endLogTransaction('completed');
-            ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
-            this.toggleLaser(false);
+        // ------------------------------
+        // Android Live Dashboard Polling
+        // ------------------------------
+        startAndroidDashboardPolling() {
+            this.stopAndroidDashboardPolling();
+            if (State.currentDeviceMode !== 'android') return;
 
-            const particles = document.querySelectorAll('.data-particle');
-            particles.forEach(p => {
-                p.style.opacity = '0';
-                p.style.display = 'none';
-            });
-            // 2. 스마트폰 내부 화면을 '안전' 상태로 즉시 변경
-            const scanScreen = document.getElementById('scan-progress-screen');
-            const phoneScreen = scanScreen ? scanScreen.querySelector('.phone-screen') : null;
+            // failure/disconnect guard (avoid alert spam)
+            this._androidDashFailCount = 0;
+            if (this._androidDashDisconnectedNotified === undefined) {
+                this._androidDashDisconnectedNotified = false;
+            }
 
-            if (phoneScreen) {
-                const icon = phoneScreen.querySelector('.hack-icon');
-                const alertText = phoneScreen.querySelector('.hack-alert');
-                const statusList = phoneScreen.querySelector('div[style*="margin-top:20px"]');
+            const notifyDisconnectedOnce = async () => {
+                if (this._androidDashDisconnectedNotified) return;
+                this._androidDashDisconnectedNotified = true;
+                // keep dashboard visible but inform user
+                try {
+                    await CustomUI.alert('⚠️ 기기 연결이 끊겼습니다. USB/ADB 연결을 확인해주세요.');
+                } catch (_) { }
+            };
 
-                // 배경색을 신뢰감 있는 짙은 색으로 변경
-                phoneScreen.style.backgroundColor = '#0f172a';
+            const render = async () => {
+                try {
+                    const res = await window.electronAPI?.getAndroidDashboardData?.();
+                    if (!res || !res.ok) {
+                        this._androidDashFailCount++;
+                        if (this._androidDashFailCount >= 3) await notifyDisc
+                        onnectedOnce();
+                        return;
+                    }
+                    this._androidDashFailCount = 0;
+                    this._renderAndroidDashboard(res);
 
-                // 아이콘을 녹색 체크 표시로 변경
-                if (icon) {
-                    icon.style.color = '#27c93f';
-                    icon.style.animation = 'none';
+                    // hard disconnect signal from backend
+                    if (res.metrics && res.metrics.connected === false) {
+                        await notifyDisconnectedOnce();
+                    }
+                } catch (e) {
+                    this._androidDashFailCount++;
+                    if (this._androidDashFailCount >= 3) await notifyDisconnectedOnce();
+                }
+            };
+
+            // First paint
+            render();
+            this._androidDashTimer = setInterval(render, 1000);
+        },
+
+        stopAndroidDashboardPolling() {
+            if (this._androidDashTimer) {
+                clearInterval(this._androidDashTimer);
+                this._androidDashTimer = null;
+            }
+        },
+
+        _renderAndroidDashboard({ metrics, spec, top }) {
+            // Metrics
+            const setText = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = (val === undefined || val === null || val === '') ? '-' : String(val);
+            };
+
+            const setGauge = (gaugeId, valId, percent,) => {
+                const el = document.getElementById(gaugeId);
+                const valEl = document.getElementById(valId);
+                const p = Number(percent);
+                const safe = Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : 0;
+
+                if (valEl) {
+                    valEl.textContent = String(Math.round(safe));
+                }
+                if (!el) {
+                    return;
                 }
 
-                // 문구 변경: SCANNING -> SAFE
-                if (alertText) {
-                    alertText.innerHTML = 'SCAN<br>COMPLETED';
-                    alertText.style.color = '#27c93f';
-                    alertText.style.textShadow = '0 0 15px rgba(39, 201, 63, 0.5)';
-                }
+                // SVG donut gauge (library)
+                setCircularGauge(el, safe);
+            };
 
-                // 하단 상태 메시지 업데이트
-                if (statusList) {
-                    statusList.innerHTML = '<span style="color:#27c93f"> 보안 검사가 완료되었습니다.</span>';
+            if (metrics) {
+                // Battery
+                const bat = (metrics.batteryLevel !== undefined) ? Number(metrics.batteryLevel) : null;
+                setText('live-bat-text', (bat === null || !Number.isFinite(bat)) ? '--%' : `${bat}%`);
+                setGauge('bat-gauge', 'live-bat-val', bat);
+
+                // RAM
+                const ram = (metrics.memUsagePercent !== undefined) ? Number(metrics.memUsagePercent) : null;
+                setText('live-ram-text', (ram === null || !Number.isFinite(ram)) ? '--%' : `${ram}%`);
+                setGauge('ram-gauge', 'live-ram-val', ram);
+
+                // Temp
+                const t = (metrics.deviceTempC !== undefined) ? Number(metrics.deviceTempC) : null;
+                setText('live-temp-text', (t === null || !Number.isFinite(t)) ? '--.- °C' : `${t.toFixed(1)} °C`);
+
+                const tPct = (t === null || !Number.isFinite(t)) ? 0 : (t / 100) * 100;
+                if (document.getElementById('live-temp-val')) {
+                    document.getElementById('live-temp-val').textContent = (t === null || !Number.isFinite(t)) ? '-' : String(Math.round(t));
+                }
+                setGauge('temp-gauge', 'live-temp-val', tPct);
+
+                // Connection badge
+                const status = document.getElementById('dash-connection');
+                if (status) {
+                    // Treat undefined as connected; only explicit false is disconnected.
+                    const isConnected = metrics.connected !== false;
+                    status.textContent = isConnected ? '● CONNECTION' : '● DISCONNECTED';
+                    status.classList.toggle('is-disconnected', !isConnected);
                 }
             }
 
+            // Spec
+            if (spec) {
+                setText('live-model-name', spec.model || '-');
+                setText('live-os-version', spec.android || 'ANDROID');
+                setText('live-serial-number', spec.serial || '-');
+                // rooted status
+                const rootedEl = document.getElementById('live-rooted-status');
+                if (rootedEl) {
+                    const rooted = String(spec.rooted || '').toLowerCase();
+                    const isSafe = (rooted === 'off' || rooted === 'false' || rooted.includes('safe'));
+                    rootedEl.textContent = spec.rooted || 'UNKNOWN';
+                    rootedEl.classList.toggle('status-safe', isSafe);
+                    rootedEl.classList.toggle('status-danger', !isSafe);
+                }
+            }
+
+            // Top processes
+            const tbody = document.getElementById('dash-top-tbody');
+            if (tbody) {
+                if (Array.isArray(top) && top.length) {
+                    tbody.innerHTML = top.map(p => `
+                          <tr>
+                            <td>${p.pid ?? '-'}</td>
+                            <td>${p.cpu ?? '-'}</td>
+                            <td>${p.mem ?? '-'}</td>
+                            <td class="name">${p.name ?? '-'}</td>
+                          </tr>
+                        `).join('');
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" class="empty">데이터 대기 중...</td></tr>`;
+                }
+            }
+        },
+
+
+        finishScan(data) {
+            console.log("--- 검사 종료: 결과 대시보드 준비 ---");
+
+            this.endLogTransaction('completed');
+            // 진행바를 100%로 만들고 완료 문구 출력
             ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
+
+            // 1. 레이저 애니메이션 즉시 정지
+            this.toggleLaser(false);
+
+            // 2. 스마트폰 내부 화면 시각 효과 변경 
+            const scanScreen = document.getElementById('scan-dashboard-screen'); 
+            const phoneFrame = scanScreen ? scanScreen.querySelector('.phone-frame') : null;
+
+            if (phoneFrame) {
+                // 기존 검사 진행 텍스트 변경
+                const runningText = document.getElementById('android-scan-running-text');
+                if (runningText) {
+                    runningText.textContent = '검사 완료 (SAFE)';
+                    runningText.style.color = 'var(--success-color)';
+                }
+
+                // 대시보드용 로그 컨테이너에 마지막 완료 메시지 추가
+                const logContainer = document.getElementById('log-container');
+                if (logContainer) {
+                    const doneLine = document.createElement('div');
+                    doneLine.className = 'log-line';
+                    doneLine.innerHTML = `<span style="color:var(--success-color)">[SYSTEM] Security Scan Successfully Completed.</span>`;
+                    logContainer.appendChild(doneLine);
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                }
+            }
+
+            // 3. 데이터 저장
             State.lastScanData = data;
             window.lastScanData = data;
 
-            ViewManager.updateProgress(100, "분석 완료! 리포트를 생성합니다.");
-
+            // 4. 화면 전환 및 좌측 탭 하이라이트 정리
             setTimeout(() => {
-
-                ViewManager.showScreen(loggedInView, 'scan-results-screen');
-                requestAnimationFrame(() => {
-                    ResultsRenderer.render(data);
+                // 기존의 모든 하이라이트(대시보드 등)를 제거
+                document.querySelectorAll('.nav-item, .res-tab').forEach(el => {
+                    el.classList.remove('active');
                 });
+
+                // 결과 데이터 렌더링
+                ResultsRenderer.render(data);
+
+                // 결과 화면으로 전환
+                ViewManager.showScreen(loggedInView, 'scan-results-screen');
+
+                // 결과 화면의 첫 번째 탭(요약)에 하이라이트 부여
+                const summaryTab = document.querySelector('.res-tab[data-target="res-summary"]');
+                if (summaryTab) {
+                    summaryTab.classList.add('active');
+                }
+
+                console.log("[UI] 결과 화면 전환 및 하이라이트 정리 완료");
             }, 1500);
         },
 

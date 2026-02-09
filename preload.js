@@ -20,7 +20,8 @@ const IPC = {
         NEUTRALIZE_APP: 'neutralize-app',
         DELETE_APK_FILE: 'delete-apk-file',
         AUTO_PUSH_REPORT: 'auto-push-report-to-android',
-        START_FULL_SCAN: 'start-full-scan'
+        START_FULL_SCAN: 'start-full-scan',
+        GET_DASHBOARD_DATA: 'get-android-dashboard-data'
     },
     IOS: {
         CHECK_CONNECTION: 'check-ios-connection',
@@ -68,7 +69,8 @@ const bdScanner = {
         neutralizeApp: (pkg) => ipcRenderer.invoke(IPC.ANDROID.NEUTRALIZE_APP, pkg),
         deleteApkFile: (data) => ipcRenderer.invoke(IPC.ANDROID.DELETE_APK_FILE, data),
         autoPushReportToAndroid: () => ipcRenderer.invoke(IPC.ANDROID.AUTO_PUSH_REPORT),
-        startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN)
+        startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN),
+        getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA)
     },
     auth: {
       login: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
@@ -108,7 +110,8 @@ const electronAPI = {
     autoPushReportToAndroid: bdScanner.android.autoPushReportToAndroid,
     startFullScan: bdScanner.android.startFullScan,
     readTextFile: bdScanner.app.readTextFile,
-    firestoreCall: bdScanner.firestore.call
+    firestoreCall: bdScanner.firestore.call,
+    getAndroidDashboardData: bdScanner.android.getDashboardData
 };
 
 contextBridge.exposeInMainWorld('bdScanner', bdScanner);

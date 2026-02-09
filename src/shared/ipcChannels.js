@@ -22,7 +22,8 @@ module.exports = {
     NEUTRALIZE_APP: 'neutralize-app',
     DELETE_APK_FILE: 'delete-apk-file',
     AUTO_PUSH_REPORT: 'auto-push-report-to-android',
-    START_FULL_SCAN: 'start-full-scan'
+    START_FULL_SCAN: 'start-full-scan',
+    GET_DASHBOARD_DATA: 'get-android-dashboard-data'
   },
 
   IOS: {
