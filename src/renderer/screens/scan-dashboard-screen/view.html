@@ -15,36 +15,27 @@
       <label>배터리 잔량</label>
       <div class="metric-value" id="live-bat-text">--%</div>
     </div>
-    <div class="circular-gauge" id="bat-gauge">
-      <span class="gauge-val" id="live-bat-val">0</span>
-    </div>
+    <div class="circular-gauge" id="bat-gauge"><span class="gauge-val" id="live-bat-val">0</span></div>
   </div>
   <div class="metric-box">
     <div class="metric-info">
       <label>RAM 점유율</label>
       <div class="metric-value" id="live-ram-text">--%</div>
     </div>
-    <div class="circular-gauge" id="ram-gauge">
-      <span class="gauge-val" id="live-ram-val">0</span>
-    </div>
+    <div class="circular-gauge" id="ram-gauge"><span class="gauge-val" id="live-ram-val">0</span></div>
   </div>
   <div class="metric-box">
     <div class="metric-info">
       <label>기기 온도</label>
       <div class="metric-value temp-text" id="live-temp-text">--.- °C</div>
     </div>
-    <div class="circular-gauge" id="temp-gauge">
-      <span class="gauge-val" id="live-temp-val">0</span>
-    </div>
+    <div class="circular-gauge" id="temp-gauge"><span class="gauge-val" id="live-temp-val">0</span></div>
   </div>
   <div class="metric-box highlight">
     <div class="metric-info">
       <label>분석 프로세스</label>
       <div class="metric-value" id="android-scan-status-text">0/0</div>
     </div>
-    <!-- <div class="circular-gauge" id="proc-gauge">
-      <span class="gauge-val" id="live-proc-val">0</span>
-    </div> -->
   </div>
 </div>
 
@@ -53,7 +44,6 @@
     <h4>📑 기기 세부 사양</h4>
     <div class="spec-list">
       <div class="data-row"><label>모델</label><span id="live-model-name">-</span></div>
-      <!-- <div class="data-row"><label>프로세서</label><span id="live-processor">-</span></div> -->
       <div class="data-row"><label>OS 버전</label><span id="live-os-version">-</span></div>
       <div class="data-row"><label>일련번호</label><span id="live-serial-number">-</span></div>
       <div class="data-row"><label>루팅 여부</label><span class="status-safe" id="live-rooted-status">OFF (Safe)</span>
@@ -66,17 +56,23 @@
     <div class="monitor-top">
       <div class="phone-frame">
         <div class="scan-beam" id="scannerBeam"></div>
+        <i class="fas fa-triangle-exclamation hack-icon"></i>
+        <div class="hack-alert" id="phoneStatusAlert">SYSTEM<br>SCANNING</div>
+        <div class="data-particle dp-1">App</div>
+        <div class="data-particle dp-2">File</div>
+        <div class="data-particle dp-3">System</div>
+        <div class="data-particle dp-4">Network</div>
       </div>
       <h2 class="scan-running-text" id="android-scan-running-text">검사 진행 중...</h2>
     </div>
 
-    <div class="progress-wrapper">
+    <div class="progress-wrapper" style="margin-top: 10px;">
       <div class="progress-track">
         <div id="android-progress-bar"></div>
       </div>
-      <div class="progress-percent" id="android-progress-percent-text">0%</div>
+      <div id="android-progress-percent-text">0%</div>
     </div>
 
-    <div class="status-console" id="log-container"></div>
+    <div class="status-console" id="log-container" style="margin-top: 15px; flex: 1;"></div>
   </div>
 </div>

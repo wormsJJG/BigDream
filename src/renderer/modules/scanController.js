@@ -186,18 +186,33 @@ export function initScanController(ctx) {
             const beam = document.getElementById('scannerBeam');
             if (beam) {
                 beam.style.display = isVisible ? 'block' : 'none';
-                console.log(`[UI] 레이저 빔 상태 변경: ${isVisible ? 'ON' : 'OFF'}`);
-            } else {
-                console.error('[UI] scannerBeam 요소를 찾을 수 없습니다.');
+                if (isVisible) {
+                    beam.style.animation = 'none';
+                    beam.offsetHeight; 
+                    beam.style.animation = 'dashboardScanLineMove 2s infinite linear';
+                }
             }
         },
 
         async startAndroidScan() {
             this.toggleLaser(true);
 
-            this.resetSmartphoneUI();
+            // 데이터 입자들을 보이게 설정
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.display = 'block';
+                p.style.opacity = '1';
+            });
 
-            this.startAndroidDashboardPolling();
+            const alertText = document.getElementById('phoneStatusAlert');
+            if (alertText) {
+                alertText.innerHTML = 'SYSTEM<br>SCANNING';
+                alertText.style.color = '#00d2ff';
+            }
+
+            // 폴링 및 UI 리셋
+            this.resetSmartphoneUI();
+            this.startAndroidDashboardPolling()
 
             try {
                 // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
@@ -596,30 +611,55 @@ export function initScanController(ctx) {
             // 진행바를 100%로 만들고 완료 문구 출력
             ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
 
-            // 1. 레이저 애니메이션 즉시 정지
+            // 휴대폰 내부 비주얼 변경 (애니메이션 종료)
+
+            // 1. 레이저 빔 즉시 정지
             this.toggleLaser(false);
 
-            // 2. 스마트폰 내부 화면 시각 효과 변경 
-            const scanScreen = document.getElementById('scan-dashboard-screen'); 
-            const phoneFrame = scanScreen ? scanScreen.querySelector('.phone-frame') : null;
+            // 2. 입자 애니메이션 중단 및 숨김
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.opacity = '0';
+                p.style.display = 'none';
+            });
 
-            if (phoneFrame) {
-                // 기존 검사 진행 텍스트 변경
-                const runningText = document.getElementById('android-scan-running-text');
-                if (runningText) {
-                    runningText.textContent = '검사 완료';
-                    runningText.style.color = 'var(--success-color)';
-                }
+            // 3. 스마트폰 내부 화면 요소 찾기 
+            const hackIcon = document.querySelector('.hack-icon');
+            const hackAlert = document.getElementById('phoneStatusAlert');
 
-                // 대시보드용 로그 컨테이너에 마지막 완료 메시지 추가
-                const logContainer = document.getElementById('log-container');
-                if (logContainer) {
-                    const doneLine = document.createElement('div');
-                    doneLine.className = 'log-line';
-                    doneLine.innerHTML = `<span style="color:var(--success-color)">[SYSTEM] Security Scan Successfully Completed.</span>`;
-                    logContainer.appendChild(doneLine);
-                    logContainer.scrollTop = logContainer.scrollHeight;
+            if (hackIcon) {
+                hackIcon.className = "fas fa-check-circle hack-icon";
+                hackIcon.style.color = "var(--success-color)";
+                hackIcon.style.animation = "none";
+            }
+
+            if (hackAlert) {
+                hackAlert.innerHTML = 'SYSTEM<br>SAFE';
+                hackAlert.style.color = 'var(--success-color)';
+                hackAlert.style.textShadow = '0 0 15px var(--success-color)';
+            } else {
+                // ID가 없을 경우 기존 방식으로 한 번 더 시도
+                const legacyAlert = document.querySelector('.hack-alert');
+                if (legacyAlert) {
+                    legacyAlert.innerHTML = 'SYSTEM<br>SAFE';
+                    legacyAlert.style.color = 'var(--success-color)';
                 }
+            }
+
+            // 4. 대시보드 하단 텍스트 및 로그 처리
+            const runningText = document.getElementById('android-scan-running-text');
+            if (runningText) {
+                runningText.textContent = '검사 완료';
+                runningText.style.color = 'var(--success-color)';
+            }
+
+            const logContainer = document.getElementById('log-container');
+            if (logContainer) {
+                const doneLine = document.createElement('div');
+                doneLine.className = 'log-line';
+                doneLine.innerHTML = `<span style="color:var(--success-color)">[SYSTEM] Security Scan Successfully Completed.</span>`;
+                logContainer.appendChild(doneLine);
+                logContainer.scrollTop = logContainer.scrollHeight;
             }
 
             // 3. 데이터 저장
@@ -838,8 +878,8 @@ export function initScanController(ctx) {
                     }
 
 
-// ✅ Android 앱 리스트 검색/정렬 기능 바인딩 (검색/정렬 시 아이콘 재로딩 없음)
-this.initAndroidAppListControls(allAndroidApps);
+                    // ✅ Android 앱 리스트 검색/정렬 기능 바인딩 (검색/정렬 시 아이콘 재로딩 없음)
+                    this.initAndroidAppListControls(allAndroidApps);
 
                     // (4) 발견된 설치 파일(APK) (설치 파일 탭)
                     if (apkGrid) {
@@ -906,9 +946,9 @@ this.initAndroidAppListControls(allAndroidApps);
                 <div style="font-size:10px; color:#f0ad4e; margin-top:4px;">요구권한 ${apk.requestedCount}개</div>
             `;
 
-            // ✅ DOM 참조 캐싱: 검색/정렬 시 재생성 없이 재배치만 하기 위함
-            if (!app.__bd_el) app.__bd_el = {};
-            app.__bd_el[listKey] = div;
+                // ✅ DOM 참조 캐싱: 검색/정렬 시 재생성 없이 재배치만 하기 위함
+                if (!app.__bd_el) app.__bd_el = {};
+                app.__bd_el[listKey] = div;
 
                 // 클릭 시 AppDetailManager를 통해 상세 권한 목록 표시
                 div.addEventListener('click', () => {
@@ -1394,195 +1434,195 @@ this.initAndroidAppListControls(allAndroidApps);
                 imgTag.src = app.cachedIconUrl;
                 imgTag.style.display = 'block';
                 spanTag.style.display = 'none';
-            
-} else if (!app.cachedIconUrl || !app.cachedTitle) {
-    // ✅ 동일 앱에 대해 아이콘/타이틀을 중복 조회하지 않도록 Promise 공유
-    const ensureAppData = () => {
-        if (app.__bd_fetchPromise) return app.__bd_fetchPromise;
-        app.__bd_fetchPromise = window.electronAPI.getAppData(app.packageName);
-        return app.__bd_fetchPromise;
-    };
 
-    ensureAppData().then(result => {
-        if (!result) {
-            handleImageError(false);
-            return;
-        }
+            } else if (!app.cachedIconUrl || !app.cachedTitle) {
+                // ✅ 동일 앱에 대해 아이콘/타이틀을 중복 조회하지 않도록 Promise 공유
+                const ensureAppData = () => {
+                    if (app.__bd_fetchPromise) return app.__bd_fetchPromise;
+                    app.__bd_fetchPromise = window.electronAPI.getAppData(app.packageName);
+                    return app.__bd_fetchPromise;
+                };
 
-        if (result.icon) {
-            app.cachedIconUrl = result.icon;
-            imgTag.src = result.icon;
-            imgTag.onload = () => {
-                imgTag.style.display = 'block';
-                spanTag.style.display = 'none';
-            };
-        } else {
-            handleImageError(false);
-        }
+                ensureAppData().then(result => {
+                    if (!result) {
+                        handleImageError(false);
+                        return;
+                    }
 
-        if (result.title) {
-            app.cachedTitle = result.title;
-            const nameEl = div.querySelector('.app-display-name');
-            if (nameEl) nameEl.textContent = result.title;
-        }
-    }).catch(() => {
-        handleImageError(false);
-    });
-}
+                    if (result.icon) {
+                        app.cachedIconUrl = result.icon;
+                        imgTag.src = result.icon;
+                        imgTag.onload = () => {
+                            imgTag.style.display = 'block';
+                            spanTag.style.display = 'none';
+                        };
+                    } else {
+                        handleImageError(false);
+                    }
 
-div.addEventListener
-('click', () => {
-                showAppDetail(app, div.querySelector('.app-display-name').textContent);
-            });
+                    if (result.title) {
+                        app.cachedTitle = result.title;
+                        const nameEl = div.querySelector('.app-display-name');
+                        if (nameEl) nameEl.textContent = result.title;
+                    }
+                }).catch(() => {
+                    handleImageError(false);
+                });
+            }
+
+            div.addEventListener
+                ('click', () => {
+                    showAppDetail(app, div.querySelector('.app-display-name').textContent);
+                });
 
             app.__bd_el[listKey] = div;
             container.appendChild(div);
         },
 
 
-// -------------------------------------------------
-// ✅ Android 앱 리스트 검색/정렬 (DOM 재생성 없이 재배치만)
-// -------------------------------------------------
-initAndroidAppListControls(allAndroidApps) {
-    // 이전 바인딩 정리 (스캔을 여러 번 실행해도 이벤트 중복 방지)
-    if (Array.isArray(State.__bd_androidListCleanup)) {
-        State.__bd_androidListCleanup.forEach(fn => {
-            try { fn && fn(); } catch (_e) { }
-        });
-    }
-    State.__bd_androidListCleanup = [];
+        // -------------------------------------------------
+        // ✅ Android 앱 리스트 검색/정렬 (DOM 재생성 없이 재배치만)
+        // -------------------------------------------------
+        initAndroidAppListControls(allAndroidApps) {
+            // 이전 바인딩 정리 (스캔을 여러 번 실행해도 이벤트 중복 방지)
+            if (Array.isArray(State.__bd_androidListCleanup)) {
+                State.__bd_androidListCleanup.forEach(fn => {
+                    try { fn && fn(); } catch (_e) { }
+                });
+            }
+            State.__bd_androidListCleanup = [];
 
-    const appGrid = document.getElementById('app-grid-container');
-    const bgGrid = document.getElementById('bg-app-grid-container');
-    const appsSearch = document.getElementById('apps-search');
-    const appsSort = document.getElementById('apps-sort');
-    const bgSearch = document.getElementById('bg-search');
-    const bgSort = document.getElementById('bg-sort');
+            const appGrid = document.getElementById('app-grid-container');
+            const bgGrid = document.getElementById('bg-app-grid-container');
+            const appsSearch = document.getElementById('apps-search');
+            const appsSort = document.getElementById('apps-sort');
+            const bgSearch = document.getElementById('bg-search');
+            const bgSort = document.getElementById('bg-sort');
 
-    // iOS 모드이거나 화면 요소가 없으면 종료
-    if (!appGrid || !appsSearch || !appsSort) return;
+            // iOS 모드이거나 화면 요소가 없으면 종료
+            if (!appGrid || !appsSearch || !appsSort) return;
 
-    const baseAll = Array.isArray(allAndroidApps) ? allAndroidApps : [];
-    const baseBg = baseAll.filter(a => a && a.isRunningBg);
+            const baseAll = Array.isArray(allAndroidApps) ? allAndroidApps : [];
+            const baseBg = baseAll.filter(a => a && a.isRunningBg);
 
-    // 안정 정렬을 위한 원본 인덱스 부여
-    baseAll.forEach((app, i) => {
-        if (app && app.__bd_index === undefined) app.__bd_index = i;
-    });
+            // 안정 정렬을 위한 원본 인덱스 부여
+            baseAll.forEach((app, i) => {
+                if (app && app.__bd_index === undefined) app.__bd_index = i;
+            });
 
-    const getName = (app) => {
-        const name = app?.cachedTitle || Utils.formatAppName(app?.packageName || '');
-        return String(name || '');
-    };
+            const getName = (app) => {
+                const name = app?.cachedTitle || Utils.formatAppName(app?.packageName || '');
+                return String(name || '');
+            };
 
-    const getPkg = (app) => String(app?.packageName || '');
+            const getPkg = (app) => String(app?.packageName || '');
 
-    const getPermCount = (app) => {
-        const req = Array.isArray(app?.requestedList) ? app.requestedList : [];
-        const grt = Array.isArray(app?.grantedList) ? app.grantedList : [];
-        return new Set([...req, ...grt]).size;
-    };
+            const getPermCount = (app) => {
+                const req = Array.isArray(app?.requestedList) ? app.requestedList : [];
+                const grt = Array.isArray(app?.grantedList) ? app.grantedList : [];
+                return new Set([...req, ...grt]).size;
+            };
 
-    const compare = (sortKey) => (a, b) => {
-        const ai = a?.__bd_index ?? 0;
-        const bi = b?.__bd_index ?? 0;
+            const compare = (sortKey) => (a, b) => {
+                const ai = a?.__bd_index ?? 0;
+                const bi = b?.__bd_index ?? 0;
 
-        if (sortKey === 'permDesc' || sortKey === 'permAsc') {
-            const ap = getPermCount(a);
-            const bp = getPermCount(b);
-            const diff = sortKey === 'permDesc' ? (bp - ap) : (ap - bp);
-            if (diff !== 0) return diff;
+                if (sortKey === 'permDesc' || sortKey === 'permAsc') {
+                    const ap = getPermCount(a);
+                    const bp = getPermCount(b);
+                    const diff = sortKey === 'permDesc' ? (bp - ap) : (ap - bp);
+                    if (diff !== 0) return diff;
 
-            const n = getName(a).localeCompare(getName(b));
-            if (n !== 0) return n;
-            const p = getPkg(a).localeCompare(getPkg(b));
-            if (p !== 0) return p;
-            return ai - bi;
-        }
+                    const n = getName(a).localeCompare(getName(b));
+                    if (n !== 0) return n;
+                    const p = getPkg(a).localeCompare(getPkg(b));
+                    if (p !== 0) return p;
+                    return ai - bi;
+                }
 
-        if (sortKey === 'nameAsc') {
-            const n = getName(a).localeCompare(getName(b));
-            if (n !== 0) return n;
-            const p = getPkg(a).localeCompare(getPkg(b));
-            if (p !== 0) return p;
-            return ai - bi;
-        }
+                if (sortKey === 'nameAsc') {
+                    const n = getName(a).localeCompare(getName(b));
+                    if (n !== 0) return n;
+                    const p = getPkg(a).localeCompare(getPkg(b));
+                    if (p !== 0) return p;
+                    return ai - bi;
+                }
 
-        // 기본: pkgAsc
-        const p = getPkg(a).localeCompare(getPkg(b));
-        if (p !== 0) return p;
-        const n = getName(a).localeCompare(getName(b));
-        if (n !== 0) return n;
-        return ai - bi;
-    };
+                // 기본: pkgAsc
+                const p = getPkg(a).localeCompare(getPkg(b));
+                if (p !== 0) return p;
+                const n = getName(a).localeCompare(getName(b));
+                if (n !== 0) return n;
+                return ai - bi;
+            };
 
-    const renderList = ({ base, container, listKey, query, sortKey, emptyMessage }) => {
-        const q = String(query || '').trim().toLowerCase();
+            const renderList = ({ base, container, listKey, query, sortKey, emptyMessage }) => {
+                const q = String(query || '').trim().toLowerCase();
 
-        const filtered = q.length === 0
-            ? base
-            : base.filter(app => getName(app).toLowerCase().includes(q));
+                const filtered = q.length === 0
+                    ? base
+                    : base.filter(app => getName(app).toLowerCase().includes(q));
 
-        const sorted = [...filtered].sort(compare(sortKey || 'permDesc'));
+                const sorted = [...filtered].sort(compare(sortKey || 'permDesc'));
 
-        container.innerHTML = '';
-        if (sorted.length === 0) {
-            container.innerHTML = `<p style="padding:20px; color:#999; width:100%; text-align:center;">${emptyMessage}</p>`;
-            return;
-        }
+                container.innerHTML = '';
+                if (sorted.length === 0) {
+                    container.innerHTML = `<p style="padding:20px; color:#999; width:100%; text-align:center;">${emptyMessage}</p>`;
+                    return;
+                }
 
-        sorted.forEach(app => {
-            const el = app?.__bd_el?.[listKey];
-            if (el) container.appendChild(el);
-        });
-    };
+                sorted.forEach(app => {
+                    const el = app?.__bd_el?.[listKey];
+                    if (el) container.appendChild(el);
+                });
+            };
 
-    const bind = ({ inputEl, selectEl, container, base, listKey, emptyMessage }) => {
-        if (!inputEl || !selectEl || !container) return;
+            const bind = ({ inputEl, selectEl, container, base, listKey, emptyMessage }) => {
+                if (!inputEl || !selectEl || !container) return;
 
-        const apply = () => renderList({
-            base,
-            container,
-            listKey,
-            query: inputEl.value,
-            sortKey: selectEl.value,
-            emptyMessage
-        });
+                const apply = () => renderList({
+                    base,
+                    container,
+                    listKey,
+                    query: inputEl.value,
+                    sortKey: selectEl.value,
+                    emptyMessage
+                });
 
-        const onInput = () => apply();
-        const onChange = () => apply();
+                const onInput = () => apply();
+                const onChange = () => apply();
 
-        inputEl.addEventListener('input', onInput);
-        selectEl.addEventListener('change', onChange);
+                inputEl.addEventListener('input', onInput);
+                selectEl.addEventListener('change', onChange);
 
-        State.__bd_androidListCleanup.push(() => inputEl.removeEventListener('input', onInput));
-        State.__bd_androidListCleanup.push(() => selectEl.removeEventListener('change', onChange));
+                State.__bd_androidListCleanup.push(() => inputEl.removeEventListener('input', onInput));
+                State.__bd_androidListCleanup.push(() => selectEl.removeEventListener('change', onChange));
 
-        // 초기 1회 반영
-        apply();
-    };
+                // 초기 1회 반영
+                apply();
+            };
 
-    bind({
-        inputEl: appsSearch,
-        selectEl: appsSort,
-        container: appGrid,
-        base: baseAll,
-        listKey: 'installed',
-        emptyMessage: '검색 결과가 없습니다.'
-    });
+            bind({
+                inputEl: appsSearch,
+                selectEl: appsSort,
+                container: appGrid,
+                base: baseAll,
+                listKey: 'installed',
+                emptyMessage: '검색 결과가 없습니다.'
+            });
 
-    // bg UI가 존재할 때만 바인딩
-    if (bgGrid && bgSearch && bgSort) {
-        bind({
-            inputEl: bgSearch,
-            selectEl: bgSort,
-            container: bgGrid,
-            base: baseBg,
-            listKey: 'bg',
-            emptyMessage: '검색 결과가 없습니다.'
-        });
-    }
-},
+            // bg UI가 존재할 때만 바인딩
+            if (bgGrid && bgSearch && bgSort) {
+                bind({
+                    inputEl: bgSearch,
+                    selectEl: bgSort,
+                    container: bgGrid,
+                    base: baseBg,
+                    listKey: 'bg',
+                    emptyMessage: '검색 결과가 없습니다.'
+                });
+            }
+        },
 
         // 위협 리스트 렌더링 (iOS/Android 공통 - 로직 개선)
         renderSuspiciousList(suspiciousApps, isIos = false) {
@@ -1693,36 +1733,36 @@ initAndroidAppListControls(allAndroidApps) {
                 };
 
                 return reasons
-    .filter(Boolean)
-    .slice(0, 8)
-    .map((r) => {
-        const t = toReasonText(r).trim();
-        if (!t) return '';
+                    .filter(Boolean)
+                    .slice(0, 8)
+                    .map((r) => {
+                        const t = toReasonText(r).trim();
+                        if (!t) return '';
 
-        // title/desc 분리 (예: "타이틀 - 설명", "타이틀: 설명")
-        let title = t;
-        let desc = '';
-        const separators = [' - ', ' — ', ' – ', ': ', ' : '];
-        for (const sep of separators) {
-            const idx = t.indexOf(sep);
-            if (idx > 0 && idx < t.length - sep.length) {
-                title = t.slice(0, idx).trim();
-                desc = t.slice(idx + sep.length).trim();
-                break;
-            }
-        }
+                        // title/desc 분리 (예: "타이틀 - 설명", "타이틀: 설명")
+                        let title = t;
+                        let desc = '';
+                        const separators = [' - ', ' — ', ' – ', ': ', ' : '];
+                        for (const sep of separators) {
+                            const idx = t.indexOf(sep);
+                            if (idx > 0 && idx < t.length - sep.length) {
+                                title = t.slice(0, idx).trim();
+                                desc = t.slice(idx + sep.length).trim();
+                                break;
+                            }
+                        }
 
-        // 오른쪽(초기 디자인)처럼: 굵은 제목 + 얇은 설명(있을 때만)
-        return `<li style="display:flex; gap:10px; align-items:flex-start; margin: 8px 0;">
+                        // 오른쪽(초기 디자인)처럼: 굵은 제목 + 얇은 설명(있을 때만)
+                        return `<li style="display:flex; gap:10px; align-items:flex-start; margin: 8px 0;">
             <span style="margin-top:6px; width:6px; height:6px; border-radius:50%; background:#F0AD4E; flex: 0 0 6px;"></span>
             <div style="min-width:0;">
                 <div style="font-weight:800; color:#333; line-height:1.35;">${escapeHtml(title)}</div>
                 ${desc ? `<div style="font-size:12px; color:#666; line-height:1.45; margin-top:2px; word-break:break-word;">${escapeHtml(desc)}</div>` : ''}
             </div>
         </li>`;
-    })
-    .filter(Boolean)
-    .join('');
+                    })
+                    .filter(Boolean)
+                    .join('');
             };
 
             const html = privacyApps.map(app => {
