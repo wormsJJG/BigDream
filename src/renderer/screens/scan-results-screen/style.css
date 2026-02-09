@@ -565,3 +565,174 @@
     font-size: 13px;
     background: #ffffff;
 }
+
+/* --- [요약 UI 리디자인] --- */
+#scan-results-screen .overview-card .summary-metrics{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+}
+#scan-results-screen .metric-card{
+    background:#fff;
+    border:1px solid #eef1f5;
+    border-radius:12px;
+    padding:14px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+#scan-results-screen .metric-card.metric-danger{
+    border-color:#ffd7d7;
+    background:#fff7f7;
+}
+#scan-results-screen .metric-card.metric-warn{
+    border-color:#ffe9c7;
+    background:#fffaf2;
+}
+#scan-results-screen .metric-label{
+    font-size:12px;
+    color:#6b7280;
+    margin-bottom:6px;
+}
+#scan-results-screen .metric-value{
+    font-size:26px;
+    font-weight:800;
+    color:#111827;
+    display:flex;
+    align-items:baseline;
+    gap:6px;
+}
+#scan-results-screen .metric-value.metric-small{
+    font-size:15px;
+    font-weight:700;
+}
+#scan-results-screen .metric-unit{
+    font-size:13px;
+    font-weight:700;
+    color:#6b7280;
+}
+#scan-results-screen .summary-narration{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e5e7eb;
+}
+#scan-results-screen .scan-steps{
+    margin: 10px 0 0 0;
+    padding-left: 18px;
+}
+#scan-results-screen .scan-steps li{
+    margin-bottom: 8px;
+    line-height: 1.5;
+    color:#374151;
+}
+#scan-results-screen .danger-soft-card{
+    border-left: 4px solid var(--danger-color);
+    background: #fff7f7;
+}
+#scan-results-screen .warn-soft-card{
+    border-left: 4px solid #f59e0b;
+    background: #fffaf2;
+}
+#scan-results-screen .card-header-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+}
+#scan-results-screen .pill{
+    display:inline-flex;
+    align-items:center;
+    padding:4px 10px;
+    border-radius: 999px;
+    font-size:12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+#scan-results-screen .pill-danger{
+    background:#ffe3e3;
+    color:#b42318;
+    border:1px solid #ffd0d0;
+}
+#scan-results-screen .pill-warn{
+    background:#fff1d6;
+    color:#92400e;
+    border:1px solid #ffe4b5;
+}
+
+/* 상세 근거(앱별) */
+#scan-results-screen .evidence-list{
+    display:flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+#scan-results-screen details.evidence-item{
+    background:#ffffff;
+    border:1px solid #eef1f5;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+#scan-results-screen details.evidence-item[open]{
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+#scan-results-screen details.evidence-item > summary{
+    cursor:pointer;
+    list-style:none;
+    display:flex;
+    align-items:baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 800;
+    color:#111827;
+}
+#scan-results-screen details.evidence-item > summary::-webkit-details-marker{
+    display:none;
+}
+#scan-results-screen .evidence-meta{
+    font-size:12px;
+    font-weight:600;
+    color:#6b7280;
+}
+#scan-results-screen .reason-badges{
+    display:flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+#scan-results-screen .reason-badge{
+    font-size:11px;
+    padding:3px 8px;
+    border-radius: 999px;
+    border:1px solid #eef1f5;
+    background:#f9fafb;
+    color:#374151;
+}
+#scan-results-screen .reason-badge.high{
+    background:#ffe3e3;
+    border-color:#ffd0d0;
+    color:#b42318;
+}
+#scan-results-screen .reason-badge.medium{
+    background:#fff1d6;
+    border-color:#ffe4b5;
+    color:#92400e;
+}
+#scan-results-screen .reason-detail{
+    margin-top: 10px;
+    color:#374151;
+    line-height: 1.6;
+}
+#scan-results-screen .empty-soft{
+    padding: 12px 14px;
+    border-radius: 12px;
+    background:#ffffff;
+    border:1px dashed #e5e7eb;
+    color:#6b7280;
+    margin-top: 10px;
+}
+
+/* 반응형 */
+@media (max-width: 1100px){
+    #scan-results-screen .overview-card .summary-metrics{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

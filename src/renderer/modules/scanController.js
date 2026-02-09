@@ -527,8 +527,7 @@ export function initScanController(ctx) {
                     const res = await window.electronAPI?.getAndroidDashboardData?.();
                     if (!res || !res.ok) {
                         this._androidDashFailCount++;
-                        if (this._androidDashFailCount >= 3) await notifyDisc
-                        onnectedOnce();
+                        if (this._androidDashFailCount >= 3) await notifyDisconnectedOnce();
                         return;
                     }
                     this._androidDashFailCount = 0;
@@ -744,20 +743,19 @@ export function initScanController(ctx) {
                 'app-grid-container',
                 'bg-app-grid-container',
                 'apk-grid-container',
-                'suspicious-list-container',
-
+                // 요약(보고서)
+                'spyware-detail-container',
+                'privacy-threat-detail-container',
+                // (호환) 일부 탭/구버전 컨테이너
+                'privacy-threat-list-container',
                 // iOS 5대 핵심영역(분리된 메뉴) 컨테이너
                 'ios-web-container',
                 'ios-messages-container',
                 'ios-system-container',
                 'ios-appsprofiles-container',
                 'ios-artifacts-container',
-
                 // (구버전 호환) 단일 MVT 컨테이너
-                'mvt-analysis-container',
-
-                // 개인정보 유출 위협
-                'privacy-threat-list-container'
+                'mvt-analysis-container'
             ];
             containers.forEach(id => {
                 const el = document.getElementById(id);
@@ -804,7 +802,76 @@ export function initScanController(ctx) {
 
             const isIos = detectedMode === 'ios';
 
-            // 1. 공통 기기 정보 바인딩 (모델명, 시리얼 등)
+            
+
+// --- [요약 UI 바인딩] (기기정보는 대시보드로 이동했으므로 여기서는 결과 요약 중심) ---
+try {
+    const spywareCount = (data?.suspiciousApps || []).length;
+    const privacyCount = (data?.privacyThreatApps || []).length;
+    const totalAppCount = (data?.allApps || data?.apps || data?.applications || data?.installedApps || data?.appList || []).length;
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+    };
+
+    setText('res-spyware-count', spywareCount);
+    setText('res-privacy-count', privacyCount);
+    setText('res-total-apps', totalAppCount);
+
+    const modeEl = document.getElementById('res-scan-mode');
+    if (modeEl) modeEl.textContent = isIos ? 'iOS (MVT 기반 분석)' : 'Android (ADB + BD_SFA 행동 분석)';
+
+    const narrationEl = document.getElementById('res-summary-narration');
+    if (narrationEl) {
+        const apkCount = (data?.apkFiles || []).length;
+        const runningCount = data?.runningCount || 0;
+
+        const parts = [];
+        parts.push(`설치 앱 ${totalAppCount}개`);
+        if (!isIos) parts.push(`백그라운드 실행 ${runningCount}개`);
+        if (!isIos && apkCount > 0) parts.push(`발견 APK ${apkCount}개`);
+
+        const basis = parts.join(' · ');
+        const engine = `<b>BD_SFA</b> (행동 분석 기반 엔진)`; // 전문 명칭
+
+        if (spywareCount > 0 && privacyCount > 0) {
+            narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 ${engine}가 행위/권한/지속성 신호를 분석하고, 정책 규칙을 결합해 최종 판정했습니다. 결과적으로 스파이앱 <b>${spywareCount}건</b>, 개인정보 유출 위협 <b>${privacyCount}건</b>이 탐지되었습니다.`;
+        } else if (spywareCount > 0) {
+            narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 ${engine}가 행위/권한/지속성 신호를 분석하고, 정책 규칙을 결합해 최종 판정했습니다. 결과적으로 스파이앱 <b>${spywareCount}건</b>이 탐지되었습니다.`;
+        } else if (privacyCount > 0) {
+            narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 ${engine}가 행위/권한/데이터 접근 신호를 분석하고, 정책 규칙을 결합해 최종 판정했습니다. 결과적으로 개인정보 유출 위협 <b>${privacyCount}건</b>이 탐지되었습니다.`;
+        } else {
+            narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 ${engine}가 행위/권한/지속성 신호를 분석했습니다. 현재 결과 기준으로 스파이웨어의 명확한 흔적은 확인되지 않았습니다.`;
+        }
+    }
+
+    const stepsEl = document.getElementById('res-scan-steps');
+    if (stepsEl) {
+        const apkCount = (data?.apkFiles || []).length;
+        const runningCount = data?.runningCount || 0;
+        const total = totalAppCount;
+
+        const steps = [];
+        if (isIos) {
+            steps.push(`기기 백업/로그(또는 MVT 결과)에서 앱 목록·웹 활동·메시지·시스템 아티팩트 등 핵심 영역 데이터를 수집했습니다.`);
+            steps.push(`MVT 분석 결과와 정책 기반 규칙을 결합해 침해 징후 및 개인정보 노출 가능성을 평가했습니다.`);
+            steps.push(`의심 지표가 강한 항목은 근거(IOC/패턴)와 함께 요약 보고서에 정리했습니다.`);
+        } else {
+            steps.push(`ADB로 설치된 앱 ${total}개 및 실행 중(백그라운드) 앱 ${runningCount}개 메타데이터를 수집했습니다.`);
+            if (apkCount > 0) steps.push(`저장소에서 발견된 APK 파일 ${apkCount}개를 추가 수집하여 설치 흔적을 점검했습니다.`);
+            steps.push(`<b>BD_SFA</b>가 권한·서비스/리시버·지속성·위장/사이드로드 신호를 결합하여 행동 기반 위험도를 산정했습니다.`);
+            steps.push(`정책 기반 규칙(개인정보 접근/공유 위험)과 결합해 1차 분류를 수행했습니다.`);
+            steps.push(`마지막으로 <b>접근성/기기관리자 활성 + 민감 권한 + 지속성</b> 조합이 강한 경우에만 스파이앱으로 최종 확정했습니다.`);
+        }
+
+        stepsEl.innerHTML = steps.map(s => `<li>${s}</li>`).join('');
+    }
+} catch (e) {
+    console.warn('summary binding failed', e);
+}
+
+// 1. 공통 기기 정보 바인딩 (모델명, 시리얼 등)
             if (document.getElementById('res-model')) document.getElementById('res-model').textContent = data.deviceInfo?.model || '-';
             if (document.getElementById('res-serial')) document.getElementById('res-serial').textContent = data.deviceInfo?.serial || '-';
             if (document.getElementById('res-phone')) document.getElementById('res-phone').textContent = data.deviceInfo?.phoneNumber || '-';
@@ -1662,185 +1729,124 @@ export function initScanController(ctx) {
         },
 
         // 위협 리스트 렌더링 (iOS/Android 공통 - 로직 개선)
-        renderSuspiciousList(suspiciousApps, isIos = false) {
-            const suspList = document.getElementById('suspicious-list-container');
+        
+// 위협 리스트 렌더링 (iOS/Android 공통 - 보고서형)
+renderSuspiciousList(suspiciousApps, isIos = false) {
+    const container = document.getElementById('spyware-detail-container') || document.getElementById('suspicious-list-container');
+    if (!container) return;
 
-            // iOS일 때 제목 변경 
-            const headerElement = suspList.previousElementSibling;
-            if (headerElement && headerElement.tagName === 'H3') {
-                headerElement.textContent = isIos ? "🚨 정밀 분석 결과" : "🚨 정밀 분석 결과";
-            }
+    const list = Array.isArray(suspiciousApps) ? suspiciousApps.slice() : [];
+    if (list.length === 0) {
+        container.innerHTML = `<div class="empty-soft">${isIos ? '정밀 분석 결과, 알려진 스파이웨어 흔적이 발견되지 않았습니다.' : '정밀 분석 결과, 스파이앱으로 확정된 항목이 없습니다.'}</div>`;
+        return;
+    }
 
-            if (suspiciousApps && suspiciousApps.length > 0) {
-                let html = '<ul style="list-style:none; padding:0;">';
-                suspiciousApps.forEach(app => {
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-                    const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
-                    const reason = app.reason || "알 수 없는 위협";
+    const makeChip = (r) => {
+        const s = String(r?.severity || '').toUpperCase();
+        const cls = (s === 'HIGH') ? 'high' : (s === 'MEDIUM' ? 'medium' : '');
+        const title = r?.title || r?.code || '근거';
+        return `<span class="reason-badge ${cls}">${esc(title)}</span>`;
+    };
 
-                    let vtBadge = '';
-                    if (app.vtResult && app.vtResult.malicious > 0) {
-                        vtBadge = `<span style="background:#d9534f; color:white; padding:2px 5px; border-radius:4px; font-size:11px; margin-left:5px;">🦠 VT: ${app.vtResult.malicious}</span>`;
-                    } else if (isIos) {
-                        vtBadge = `<span style="background:#0275d8; color:white; padding:2px 5px; border-radius:4px; font-size:11px; margin-left:5px;">🛡️ MVT 탐지</span>`;
-                    }
+    const html = [`<div class="evidence-list">`];
 
-                    // 해시값 표시 
-                    const hashInfo = (isIos && app.hash && app.hash !== 'N/A')
-                        ? `<div style="font-size:11px; color:#888; margin-top:4px; font-family:monospace;">Hash: ${app.hash}</div>`
-                        : '';
+    list.forEach(app => {
+        const name = app.cachedTitle || Utils.formatAppName(app.packageName);
+        const pkg = app.packageName || '-';
+        const reasons = Array.isArray(app.riskReasons) ? app.riskReasons : [];
+        const narration = app.aiNarration || app.reason || '';
 
-                    html += `
-                            <li style="padding:15px; border-bottom:1px solid #eee; border-left: 4px solid #D9534F; background-color: #fff5f5; margin-bottom: 10px; border-radius: 4px;">
-                                <div style="color:#D9534F; font-weight:bold; font-size: 15px; margin-bottom: 4px;">
-                                    🚨 ${dName} ${vtBadge} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
-                                </div>
-                                <div style="font-size:13px; color:#555;">${reason}</div>
-                                ${hashInfo}
-                            </li>`;
-                });
-                suspList.innerHTML = html + '</ul>';
-            } else {
-                // 안전할 때 메시지 (iOS/Android 구분)
-                const safeMessage = isIos
-                    ? '정밀 분석 결과, 알려진 스파이웨어 흔적이 발견되지 않았습니다.'
-                    : '탐지된 스파이앱이 없습니다.';
+        const chips = reasons.length ? `<div class="reason-badges">${reasons.map(makeChip).join('')}</div>` : '';
+        const details = reasons.map(r => {
+            const title = r?.title || r?.code || '근거';
+            const detail = r?.detail || '';
+            return `<div class="reason-detail"><b>${esc(title)}</b><br/>${esc(detail)}</div>`;
+        }).join('');
 
-                suspList.innerHTML = `
-                        <div style="text-align:center; padding:30px; background:#f8f9fa; border-radius:8px;">
-                            <div style="font-size:40px; margin-bottom:10px;">✅</div>
-                            <h3 style="color:#5CB85C; margin:0 0 5px 0;">안전함 (Clean)</h3>
-                            <p style="color:#666; font-size:14px; margin:0;">${safeMessage}</p>
-                        </div>
-                    `;
-            }
-        },
-        renderPrivacyThreatList(privacyApps) {
-            const container = document.getElementById('privacy-threat-list-container');
-            if (!container) return;
+        // ✅ 권장 조치(증거 보존 포함) - 요청 반영
+        const recommendation = `
+          <div class="recommend-box">
+            <div class="recommend-title">✅ 권장 조치</div>
+            <ul class="recommend-list">
+              <li><b>권한 무력화</b> : 증거 보존을 원하신다면 먼저 권한을 무력화하세요. <b>접근성/기기관리자 등 핵심 권한이 없으면 스파이앱은 정상적으로 활동하기 어렵습니다.</b></li>
+              <li><b>강제 삭제</b> : 증거 보존 측면에서는 일부 불리할 수 있지만, 본 보고서는 이미 출력 가능하므로 <b>찝찝하다면 삭제를 권장</b>합니다.</li>
+            </ul>
+          </div>
+        `;
 
-            container.innerHTML = '';
+        html.push(`
+            <details class="evidence-item" open>
+              <summary>
+                <span>🚨 ${esc(name)}</span>
+                <span class="evidence-meta">(${esc(pkg)})</span>
+              </summary>
+              ${narration ? `<div class="reason-detail">${esc(narration)}</div>` : ''}
+              ${chips}
+              ${details}
+              ${recommendation}
+            </details>
+        `);
+    });
 
-            if (!Array.isArray(privacyApps) || privacyApps.length === 0) {
-                container.innerHTML = `
-                                    <div style="text-align:center; padding:30px; background:#f9f9f9; border-radius:8px; color:#999;">
-                                        ✅ 탐지된 개인정보 유출 위협이 없습니다.
-                                    </div>`;
-                return;
-            }
+    html.push(`</div>`);
+    container.innerHTML = html.join('');
+},
 
-            const buildChips = (items) => {
-                if (!Array.isArray(items) || items.length === 0) return '';
-                return items.map(x => `<span style="display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #e9d8a6; background:#fff; font-size:12px; font-weight:700; margin-right:8px; margin-bottom:8px;">${x.label || x}</span>`).join('');
-            };
+        
+renderPrivacyThreatList(privacyApps) {
+    const c1 = document.getElementById('privacy-threat-detail-container');
+    const c2 = document.getElementById('privacy-threat-list-container') || document.getElementById('privacy-threat-container');
+    const containers = [c1, c2].filter(Boolean);
+    if (containers.length === 0) return;
 
-            const buildReasons = (reasons) => {
-                // reasons가 문자열 배열이 아닐 수 있어(예: {title, detail} 객체). 안전하게 문자열로 정규화
-                const escapeHtml = (v) => String(v)
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#39;');
+    const list = Array.isArray(privacyApps) ? privacyApps.slice() : [];
+    if (!list.length) {
+        containers.forEach(c => c.innerHTML = `<div class="empty-soft">개인정보 유출 위협으로 분류된 앱이 없습니다.</div>`);
+        return;
+    }
 
-                if (!Array.isArray(reasons) || reasons.length === 0) return '';
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-                const toReasonText = (r) => {
-                    if (r == null) return '';
-                    if (typeof r === 'string') return r;
-                    if (typeof r === 'number' || typeof r === 'boolean') return String(r);
+    const html = [`<div class="evidence-list">`];
+    list.forEach(app => {
+        const name = app.cachedTitle || Utils.formatAppName(app.packageName);
+        const pkg = app.packageName || '-';
+        const reasons = Array.isArray(app.riskReasons) ? app.riskReasons : [];
+        const narration = app.aiNarration || app.reason || '';
 
-                    if (typeof r === 'object') {
-                        // 다양한 키 케이스를 흡수
-                        const title = r.title ?? r.name ?? r.rule ?? r.label ?? r.type ?? r.code ?? '';
-                        const detail = r.detail ?? r.desc ?? r.description ?? r.reason ?? r.value ?? '';
+        const badges = reasons.map(r => {
+            const s = String(r?.severity || '').toUpperCase();
+            const cls = (s === 'HIGH') ? 'high' : (s === 'MEDIUM' ? 'medium' : '');
+            const title = r?.title || r?.code || '근거';
+            return `<span class="reason-badge ${cls}">${esc(title)}</span>`;
+        }).join('');
 
-                        if (title && detail) return `${title} - ${detail}`;
-                        if (title) return String(title);
-                        if (detail) return String(detail);
+        const details = reasons.map(r => {
+            const title = r?.title || r?.code || '근거';
+            const detail = r?.detail || '';
+            return `<div class="reason-detail"><b>${esc(title)}</b><br/>${esc(detail)}</div>`;
+        }).join('');
 
-                        try {
-                            return JSON.stringify(r);
-                        } catch (e) {
-                            return String(r);
-                        }
-                    }
+        html.push(`
+            <details class="evidence-item">
+              <summary>
+                <span>⚠️ ${esc(name)}</span>
+                <span class="evidence-meta">(${esc(pkg)})</span>
+              </summary>
+              ${narration ? `<div class="reason-detail">${esc(narration)}</div>` : ''}
+              ${badges ? `<div class="reason-badges">${badges}</div>` : ''}
+              ${details}
+            </details>
+        `);
+    });
+    html.push(`</div>`);
 
-                    return String(r);
-                };
+    const out = html.join('');
+    containers.forEach(c => c.innerHTML = out);
+},
 
-                return reasons
-                    .filter(Boolean)
-                    .slice(0, 8)
-                    .map((r) => {
-                        const t = toReasonText(r).trim();
-                        if (!t) return '';
-
-                        // title/desc 분리 (예: "타이틀 - 설명", "타이틀: 설명")
-                        let title = t;
-                        let desc = '';
-                        const separators = [' - ', ' — ', ' – ', ': ', ' : '];
-                        for (const sep of separators) {
-                            const idx = t.indexOf(sep);
-                            if (idx > 0 && idx < t.length - sep.length) {
-                                title = t.slice(0, idx).trim();
-                                desc = t.slice(idx + sep.length).trim();
-                                break;
-                            }
-                        }
-
-                        // 오른쪽(초기 디자인)처럼: 굵은 제목 + 얇은 설명(있을 때만)
-                        return `<li style="display:flex; gap:10px; align-items:flex-start; margin: 8px 0;">
-            <span style="margin-top:6px; width:6px; height:6px; border-radius:50%; background:#F0AD4E; flex: 0 0 6px;"></span>
-            <div style="min-width:0;">
-                <div style="font-weight:800; color:#333; line-height:1.35;">${escapeHtml(title)}</div>
-                ${desc ? `<div style="font-size:12px; color:#666; line-height:1.45; margin-top:2px; word-break:break-word;">${escapeHtml(desc)}</div>` : ''}
-            </div>
-        </li>`;
-                    })
-                    .filter(Boolean)
-                    .join('');
-            };
-
-            const html = privacyApps.map(app => {
-                const dName = app.cachedTitle || Utils.formatAppName(app.packageName);
-                const policyLabel = app.policyLabel || app.policy || '';
-                const aiText = app.aiNarration || app.ai || app.reason || '[개인정보 유출 위협] 위치 기반 정보 공유 가능성이 있습니다.';
-                const reasons = app.riskReasons || app.reasons || [];
-                const recs = app.recommendation || app.recommendations || [
-                    { label: '공유 설정/기록 점검' },
-                    { label: '백그라운드 실행 제한' }
-                ];
-
-                return `
-                                    <div style="padding:16px; background:#fcf8e3; border:1px solid #faebcc; border-radius:10px; margin-bottom:12px;">
-                                        <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-                                            <div style="color:#8a6d3b; font-weight:900; font-size:15px;">
-                                                ⚠️ ${dName} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
-                                            </div>
-                                            ${policyLabel ? `<div style="font-size:12px; font-weight:800; color:#8a6d3b; padding:4px 10px; border-radius:999px; border:1px solid #f3d3b4; background:#fff;">정책: ${policyLabel}</div>` : ''}
-                                        </div>
-
-                                        <div style="margin-top:10px; padding:12px; background:#fff7e6; border:1px solid #f3d3b4; border-radius:10px;">
-                                            <div style="font-weight:900; margin-bottom:6px;">🤖 AI 안내</div>
-                                            <div style="font-size:13px; line-height:1.6; color:#555;">${aiText}</div>
-                                        </div>
-
-                                        <div style="margin-top:10px; padding:12px; background:#fff; border:1px solid #f3d3b4; border-radius:10px;">
-                                            <div style="font-weight:900; margin-bottom:6px;">🤖 AI 판단 근거</div>
-                                            ${buildReasons(reasons)}
-                                        </div>
-
-                                        <div style="margin-top:10px;">
-                                            <div style="font-weight:900; margin-bottom:8px; color:#3c763d;">✅ 권장 조치</div>
-                                            <div>${buildChips(recs)}</div>
-                                        </div>
-                                    </div>
-                                `;
-            }).join('');
-
-            container.innerHTML = html;
-        },
 
         forceRenderIosCoreAreas() {
             try {

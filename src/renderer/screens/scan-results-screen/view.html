@@ -10,19 +10,55 @@
 </div>
 <div id="results-dashboard-view">
 <div class="result-content-section active" id="res-summary">
-<div class="content-card info-summary-card">
-<h3>📱 기기 정보</h3>
-<div class="device-info-grid">
-<div class="info-item">모델명: <span id="res-model">-</span></div>
-<div class="info-item">S/N: <span id="res-serial">-</span></div>
-<div class="info-item">루팅여부: <span id="res-root">-</span></div>
-<div class="info-item">전화번호: <span id="res-phone">-</span></div>
-</div>
-</div>
-<div class="content-card warning-card">
-<h3>⚠️ 탐지 결과</h3>
-<div id="suspicious-list-container"></div>
-</div>
+  <div class="content-card overview-card">
+    <h3>🧾 검사 요약</h3>
+    <div class="summary-metrics">
+      <div class="metric-card metric-danger">
+        <div class="metric-label">스파이앱 탐지</div>
+        <div class="metric-value"><span id="res-spyware-count">0</span><span class="metric-unit">건</span></div>
+      </div>
+      <div class="metric-card metric-warn">
+        <div class="metric-label">개인정보 유출 위협</div>
+        <div class="metric-value"><span id="res-privacy-count">0</span><span class="metric-unit">건</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">분석한 앱</div>
+        <div class="metric-value"><span id="res-total-apps">0</span><span class="metric-unit">개</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">검사 방식</div>
+        <div class="metric-value metric-small" id="res-scan-mode">-</div>
+      </div>
+    </div>
+
+    <div class="summary-narration">
+      <p id="res-summary-narration" class="sub-text">-</p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <h3>🔎 검사 진행 방식</h3>
+    <p class="sub-text">수집 → 분석 → 판정까지의 과정을 요약해 보여줍니다.</p>
+    <ol class="scan-steps" id="res-scan-steps"></ol>
+  </div>
+
+  <div class="content-card danger-soft-card">
+    <div class="card-header-row">
+      <h3>🚨 스파이앱 탐지 근거</h3>
+      <span class="pill pill-danger">최종 필터 확정</span>
+    </div>
+    <p class="sub-text">AI 분석 결과가 의심으로 분류된 앱 중, <b>접근성/기기관리자/민감 권한/지속성</b> 등의 조합 신호가 강한 경우에만 스파이앱으로 확정합니다.</p>
+    <div id="spyware-detail-container"></div>
+  </div>
+
+  <div class="content-card warn-soft-card">
+    <div class="card-header-row">
+      <h3>⚠️ 개인정보 유출 위협</h3>
+      <span class="pill pill-warn">정책 기반</span>
+    </div>
+    <p class="sub-text">민감 정보 접근 권한 및 앱 동작 특성을 바탕으로 개인정보 유출 위험을 평가합니다.</p>
+    <div id="privacy-threat-detail-container"></div>
+  </div>
 </div>
 
 <div class="result-content-section" id="res-ios-web">
