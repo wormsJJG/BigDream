@@ -138,7 +138,6 @@ export function initScanController(ctx) {
     const openScanFileBtn = document.getElementById('select-file-btn');
     if (openScanFileBtn) {
         openScanFileBtn.addEventListener('click', async () => {
-
             openScanFileBtn.disabled = true;
             openScanFileBtn.textContent = "파일 여는 중...";
 
@@ -147,30 +146,65 @@ export function initScanController(ctx) {
 
                 if (result.success) {
                     const data = result.data;
-                    const osMode = result.osMode; // 저장된 데이터에서 OS 모드를 가져옴
+                    const osMode = result.osMode;
 
-                    // 1. 상태 업데이트 (렌더링에 OS 모드가 필요하므로)
-                    State.currentDeviceMode = normalizeDeviceMode(osMode || data?.deviceInfo?.os) || osMode;
+                    // 1) 상태 업데이트
+                    State.currentDeviceMode = osMode;
                     State.lastScanData = data;
                     window.lastScanData = data;
 
-                    // 2. UI 전환
-                    ViewManager.activateMenu('nav-result');
-                    ViewManager.showScreen(loggedInView, 'scan-results-screen');
-                    requestAnimationFrame(() => {
-                        ResultsRenderer.render(data);
-                    });
-                    // 3. 네비게이션 버튼 표시
-                    document.getElementById('nav-create').classList.add('hidden');
-                    document.getElementById('nav-open').classList.add('hidden');
-                    document.getElementById('nav-result').classList.remove('hidden');
+                    // 2) UI 전환
+                    // 만약 에러가 여기서 난다면 아래 줄을 주석 처리해보세요.
+                    try { ViewManager.activateMenu('nav-result'); } catch (e) { }
 
-                    await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo.model}`);
+                    ViewManager.showScreen(loggedInView, 'scan-results-screen');
+
+                    requestAnimationFrame(() => {
+                        try {
+                            ResultsRenderer.render(data);
+                        } catch (e) {
+                            console.error('[BD-Scanner] ResultsRenderer.render failed:', e);
+                        }
+
+                        // 3) 첫 진입 흰 화면 방지 
+                        const sections = document.querySelectorAll('.result-content-section');
+                        if (sections.length > 0) {
+                            sections.forEach(sec => {
+                                if (sec.id === 'res-summary') {
+                                    sec.style.display = 'block';
+                                    sec.classList.add('active');
+                                } else {
+                                    sec.style.display = 'none';
+                                    sec.classList.remove('active');
+                                }
+                            });
+                        }
+
+                        // 탭 하이라이트 강제 적용
+                        const firstTab = document.querySelector('.res-tab[data-target="res-summary"]');
+                        if (firstTab) {
+                            document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
+                            firstTab.classList.add('active');
+                        }
+                    });
+
+                    // 4) 네비 버튼 표시/숨김 
+                    const navCreate = document.getElementById('nav-create');
+                    const navOpen = document.getElementById('nav-open');
+                    const navResult = document.getElementById('nav-result');
+
+                    if (navCreate) navCreate.classList.add('hidden');
+                    if (navOpen) navOpen.classList.add('hidden');
+                    if (navResult) navResult.classList.remove('hidden');
+
+                    await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
 
                 } else if (result.message !== '열기 취소') {
                     await CustomUI.alert(`❌ 파일 열기 실패: ${result.error || result.message}`);
                 }
+
             } catch (error) {
+                console.error("Critical Error:", error);
                 await CustomUI.alert(`시스템 오류: ${error.message}`);
             } finally {
                 openScanFileBtn.disabled = false;
@@ -183,22 +217,22 @@ export function initScanController(ctx) {
         currentLogId: null,
 
         toggleLaser(isVisible) {
-    const show = !!isVisible;
+            const show = !!isVisible;
 
-    // Android: dashboard beam
-    const dashBeam = document.getElementById('dashboardScannerBeam');
-    // iOS(또는 legacy progress): progress beam
-    const legacyBeam = document.getElementById('scannerBeam');
+            // Android: dashboard beam
+            const dashBeam = document.getElementById('dashboardScannerBeam');
+            // iOS(또는 legacy progress): progress beam
+            const legacyBeam = document.getElementById('scannerBeam');
 
-    if (State.currentDeviceMode === 'android') {
-        if (dashBeam) dashBeam.style.display = show ? 'block' : 'none';
-        // 혹시 남아있는 legacy beam이 보이지 않게 안전하게 끔
-        if (legacyBeam) legacyBeam.style.display = 'none';
-    } else {
-        if (legacyBeam) legacyBeam.style.display = show ? 'block' : 'none';
-        if (dashBeam) dashBeam.style.display = 'none';
-    }
-},
+            if (State.currentDeviceMode === 'android') {
+                if (dashBeam) dashBeam.style.display = show ? 'block' : 'none';
+                // 혹시 남아있는 legacy beam이 보이지 않게 안전하게 끔
+                if (legacyBeam) legacyBeam.style.display = 'none';
+            } else {
+                if (legacyBeam) legacyBeam.style.display = show ? 'block' : 'none';
+                if (dashBeam) dashBeam.style.display = 'none';
+            }
+        },
 
         async startAndroidScan() {
             this.toggleLaser(true);
