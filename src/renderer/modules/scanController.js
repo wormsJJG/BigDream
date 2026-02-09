@@ -222,7 +222,7 @@ export function initScanController(ctx) {
 
             try {
                 // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
-                ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
+                ViewManager.updateProgress(0, "디바이스 파일 시스템에 접근 중...");
 
                 // 2. 실제 데이터 수집
                 const scanData = await window.electronAPI.runScan();
@@ -642,7 +642,7 @@ export function initScanController(ctx) {
             }
 
             if (hackAlert) {
-                hackAlert.innerHTML = 'SCAN<br>COMPLETE';
+                hackAlert.innerHTML = 'SCAN<br>COMPLETED';
                 hackAlert.style.color = 'var(--success-color)';
                 hackAlert.style.textShadow = '0 0 15px var(--success-color)';
             }
