@@ -169,6 +169,8 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
               const spywareApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.SPYWARE);
               const privacyThreatApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.PRIVACY_RISK);
 
+              const runningAppsCount = processedApps.filter(app => app.isRunningBg).length;
+
               return { deviceInfo, allApps: processedApps, suspiciousApps: spywareApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
           } catch (err) {
               console.error(err);
