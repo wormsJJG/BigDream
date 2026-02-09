@@ -6,6 +6,8 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
   // NOTE: bootstrap.js passes a single options object.
   if (!client) throw new Error('createAndroidService requires client');
   if (!adb) throw new Error('createAndroidService requires adb');
+  const { evaluateAndroidAppRisk, RISK_LEVELS } = require('../../shared/risk/riskRules');
+  
   const service = {
       /**
        * Check first connected device status + model.
@@ -145,12 +147,29 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                   await service.runVirusTotalCheck(serial, vtTargets);
               }
 
-              const privacyThreatApps = suspiciousApps.filter(app => app.reason && app.reason.includes('개인정보'));
-              suspiciousApps = suspiciousApps.filter(app => !app.reason || !app.reason.includes('개인정보'));
+              // 2) ✅ 최종 분류 (정책 기반)
+              processedApps.forEach((app) => {
+                  const evaluated = evaluateAndroidAppRisk(app);
 
-              const runningAppsCount = processedApps.filter(app => app.isRunningBg).length;
+                  app.riskLevel = evaluated.riskLevel;
+                  app.riskReasons = evaluated.riskReasons;
+                  app.recommendation = evaluated.recommendation;
+                  app.aiNarration = evaluated.aiNarration;
 
-              return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
+                  // UI 호환용 reason도 유지 (대표 문장 1개)
+                  if (app.riskLevel === RISK_LEVELS.SPYWARE) {
+                      app.reason = `[VT 확진] ${evaluated.aiNarration}`;
+                  } else if (app.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
+                      app.reason = `[개인정보 유출 위협] ${evaluated.aiNarration}`;
+                  } else if (!app.reason) {
+                      app.reason = '';
+                  }
+              });
+
+              const spywareApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.SPYWARE);
+              const privacyThreatApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.PRIVACY_RISK);
+
+              return { deviceInfo, allApps: processedApps, suspiciousApps: spywareApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
           } catch (err) {
               console.error(err);
               return { error: err.message };
