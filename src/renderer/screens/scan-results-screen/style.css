@@ -427,3 +427,99 @@
     display: block !important;
 }
 
+
+
+/* iOS 결과 - 주요 검사 파일 정렬/가독성 */
+.ios-major-files{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:10px;
+}
+.ios-major-label{
+    display:inline-flex;
+    align-items:center;
+    height:22px;
+    padding:0 10px;
+    border-radius:999px;
+    background:#e8f0ff;
+    border:1px solid #cfe0ff;
+    color:#1f4bd6;
+    font-size:12px;
+    font-weight:700;
+    white-space:nowrap;
+}
+.ios-major-files-text{
+    color:#111 !important;
+    font-size:12.5px;
+    font-weight:700;
+    line-height:1.4;
+    word-break:break-word;
+}
+.ios-major-file{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight:700;
+}
+.ios-major-file-empty{
+    color:#666;
+    font-weight:600;
+}
+
+/* iOS 검사 대상 애플리케이션 - 3열 카드 스타일 고정 */
+.ios-app-grid{
+    display:grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap:12px;
+}
+.ios-app-card{
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:10px;
+    padding:12px 12px;
+    text-align:left;
+}
+.ios-app-name{
+    color:#222 !important;
+    font-size:14px !important;
+    font-weight:800 !important;
+    line-height:1.35;
+}
+.ios-app-bundle{
+    margin-top:6px;
+    color:#6b7280 !important;
+    font-size:12px !important;
+    font-weight:600;
+    word-break:break-all;
+}
+
+/* 개인정보 유출 위협 - AI 판단 근거 리스트(우측 초기 디자인 스타일) */
+.privacy-ai-reason-list{
+    list-style:none;
+    padding:0;
+    margin:0;
+}
+.privacy-ai-reason-item{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    margin:6px 0;
+    color:#333;
+    font-size:13px;
+    line-height:1.55;
+}
+.privacy-ai-reason-dot{
+    width:7px;
+    height:7px;
+    border-radius:999px;
+    background:#F0AD4E;
+    margin-top:7px;
+    flex:0 0 7px;
+}
+.privacy-ai-reason-title{
+    font-weight:800;
+    color:#222;
+}
+.privacy-ai-reason-desc{
+    margin-top:2px;
+    color:#555;
+}
