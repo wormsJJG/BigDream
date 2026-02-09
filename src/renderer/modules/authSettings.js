@@ -28,18 +28,21 @@ export function initAuthSettings(ctx) {
         State.androidTargetMinutes = result.androidTargetMinutes || 0;
         State.agencyName = result.agencyName || '업체명 없음';
         State.quota = (result.quota !== undefined) ? result.quota : 0;
-        updateAgencyDisplay();
+    }
+
+    function isAdminRole(role) {
+        // 관리자만 '무제한/관리자 페이지' 권한을 가짐
+        return role === 'admin';
     }
 
     //회사 정보 UI 업데이트 함수
     function updateAgencyDisplay() {
-        // ⚠️ 참고: index.html에 #agency-info-display, #agency-name, #agency-quota 요소가 있다고 가정
         const nameEl = document.getElementById('agency-name');
         const quotaEl = document.getElementById('agency-quota');
 
         if (nameEl && quotaEl) {
             // 관리자 계정은 쿼터 무제한으로 표시
-            const isAdmin = State.userRole && State.userRole !== 'user';
+            const isAdmin = isAdminRole(State.userRole);
             if (isAdmin) {
                 nameEl.textContent = `(주) 관리자 계정`;
                 quotaEl.textContent = `남은 횟수 : 무제한`;
@@ -115,17 +118,16 @@ export function initAuthSettings(ctx) {
 
                 // 4. 화면 전환 분기 처리
                 State.isLoggedIn = true;
-                State.userRole = role; 
+                State.userRole = role;
 
                 const isAdmin = role && role !== 'user';
                 if (isAdmin) {
 
                     ViewManager.showView('logged-in-view');
                     ViewManager.showScreen(loggedInView, 'create-scan-screen');
-
+                    updateAgencyDisplay()
                     document.body.classList.add('is-admin');
                     await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
-
                     setTimeout(() => {
                         AdminManager.init();
                     }, 500);
@@ -174,7 +176,7 @@ export function initAuthSettings(ctx) {
                     ((ctx.services && ctx.services.deviceManager) ? ctx.services.deviceManager.stopPolling() : undefined);
                     State.isLoggedIn = false;
                     State.androidTargetMinutes = 0;
-                    State.agencyName = 'BD SCANNER'; 
+                    State.agencyName = 'BD SCANNER';
                     State.quota = -1;
 
                     ViewManager.showView('logged-out-view');
@@ -186,7 +188,7 @@ export function initAuthSettings(ctx) {
                 const privacyNotice = document.getElementById('privacy-footer-notice');
                 if (privacyNotice) privacyNotice.style.display = 'none';
 
-                window.location.reload(); 
+                window.location.reload();
             }
         });
     }
