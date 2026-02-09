@@ -137,9 +137,10 @@ export function initScanController(ctx) {
 
                     // 2. UI 전환
                     ViewManager.activateMenu('nav-result');
-                    ResultsRenderer.render(data);
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
-
+                    requestAnimationFrame(() => {
+                        ResultsRenderer.render(data);
+                    });
                     // 3. 네비게이션 버튼 표시
                     document.getElementById('nav-create').classList.add('hidden');
                     document.getElementById('nav-open').classList.add('hidden');
@@ -181,7 +182,7 @@ export function initScanController(ctx) {
 
                 // 2. 실제 데이터 수집
                 const scanData = await window.electronAPI.runScan();
-                const apps = scanData.allApps || [];
+                const apps = scanData.allApps || scanData.apps || scanData.applications || scanData.installedApps || scanData.appList || scanData.targetApps || scanData.mvtResults?.apps || scanData.mvtResults?.applications || [];
                 const totalApps = apps.length;
 
                 // 앱이 하나도 없는 경우(예외)는 바로 종료
@@ -469,8 +470,10 @@ export function initScanController(ctx) {
 
             setTimeout(() => {
 
-                ResultsRenderer.render(data);
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
+                requestAnimationFrame(() => {
+                    ResultsRenderer.render(data);
+                });
             }, 1500);
         },
 
@@ -590,7 +593,7 @@ export function initScanController(ctx) {
                     if (appsHeader) appsHeader.textContent = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
                     if (iosAppDesc) {
                         iosAppDesc.style.display = 'block'; // iOS에서만 노출
-                        iosAppDesc.innerHTML = `MVT 분석은 아래 목록에 포함된 **${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
+                        iosAppDesc.innerHTML = `${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
                     }
 
                     // 3. 데이터 렌더링 호출
@@ -600,14 +603,14 @@ export function initScanController(ctx) {
                     this.renderIosCoreAreas(data.mvtResults || {});
 
                     // (2-1) iOS 개인정보 유출 위협: 정책 기반(앱 번들ID) + AI 안내
-                    const iosPrivacyApps = this.buildIosPrivacyThreatApps(data.allApps || [], data.privacyThreatApps || []);
+                    const iosPrivacyApps = this.buildIosPrivacyThreatApps(data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || [], data.privacyThreatApps || []);
                     this.renderPrivacyThreatList(iosPrivacyApps);
 
                     // (3) 앱 목록 탭: iOS 전용 리스트
                     if (appGrid) {
                         appGrid.innerHTML = '';
                         appGrid.className = ""; // iOS는 리스트 형태이므로 클래스 초기화
-                        this.renderIosInstalledApps(data.allApps || [], appGrid);
+                        this.renderIosInstalledApps(data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || [], appGrid);
                     }
 
                     // 초기 화면 설정: 요약 섹션만 보이고 나머지는 숨김
@@ -646,13 +649,13 @@ export function initScanController(ctx) {
                     if (appGrid) {
                         appGrid.innerHTML = '';
                         appGrid.className = 'app-grid';
-                        (data.allApps || []).forEach(app => this.createAppIcon(app, appGrid));
+                        (data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || []).forEach(app => this.createAppIcon(app, appGrid));
                     }
 
                     // (3) 백그라운드 앱 (백그라운드 탭)
                     if (bgAppGrid) {
                         bgAppGrid.innerHTML = '';
-                        const bgApps = (data.allApps || []).filter(a => a.isRunningBg);
+                        const bgApps = (data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || []).filter(a => a.isRunningBg);
                         if (bgApps.length > 0) {
                             bgApps.forEach(app => this.createAppIcon(app, bgAppGrid));
                         } else {
@@ -971,53 +974,85 @@ export function initScanController(ctx) {
                 };
             });
         },
-
-
-
+        renderMvtAnalysis(mvtResults, isIos) {
+            const mvtContainer = document.getElementById('mvt-analysis-container');
+            if (!mvtContainer) return;
+            const sections = [
+                { id: 'web', title: '🌐 1. 브라우저 및 웹 활동', files: 'History.db, Favicons.db' },
+                { id: 'messages', title: '💬 2. 메시지 및 통신 기록', files: 'sms.db, ChatStorage.sqlite' },
+                { id: 'system', title: '⚙️ 3. 시스템 로그 및 프로세스 활동', files: 'DataUsage.sqlite, Crash Reports' },
+                { id: 'apps', title: '🗂️ 4. 설치된 앱 및 프로파일', files: 'Manifest.db, Profiles' },
+                { id: 'artifacts', title: '📁 5. 기타 시스템 파일', files: 'shutdown.log, LocalStorage' }
+            ];
+            let html = '';
+            sections.forEach(section => {
+                const result = mvtResults[section.id] || { status: 'safe', warnings: [] };
+                const isWarning = result.warnings && result.warnings.length > 0;
+                html += `
+                    <div class="analysis-section" style="margin-bottom:12px; border-left: 5px solid ${isWarning ? '#f57c00' : '#4caf50'}; background:#fcfcfc; border:1px solid #eee; border-radius:4px;">
+                        <div class="analysis-header" onclick="window.toggleAnalysis(this)" style="padding:15px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size: 15px; font-weight: 700;">${section.title}</span>
+                            <span style="color:${isWarning ? '#f57c00' : '#5cb85c'}; font-weight:bold;">${isWarning ? '경고' : '안전'}</span>
+                        </div>
+                        <div class="analysis-content" style="display:${isWarning ? 'block' : 'none'}; padding:15px; border-top:1px solid #eee; background:#fff; font-size:13px; color:#666;">
+                            <p>주요 검사 파일: ${section.files}</p>
+                            ${isWarning ? `<ul style="margin-top:10px; color:#d9534f;">${result.warnings.map(w => `<li>${w}</li>`).join('')}</ul>` : '<p style="color:#5cb85c; margin-top:5px;">발견된 이상 징후가 없습니다.</p>'}
+                        </div>
+                    </div>`;
+            });
+            mvtContainer.innerHTML = html;
+        },
 
         // [아이폰용 앱 리스트 렌더링 함수]
         renderIosInstalledApps(apps, container) {
-
             if (!container) return;
 
-            const appList = Array.isArray(apps) ? apps : [];
+            const list = Array.isArray(apps) ? apps : [];
+            container.innerHTML = '';
 
-            if (appList.length === 0) {
+            if (!list.length) {
                 container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📱</div>
-                    <div class="empty-title">검사 대상 애플리케이션이 없습니다.</div>
-                    <div class="empty-desc">iOS 백업/추출 데이터에서 확인된 앱 목록이 없습니다.</div>
-                </div>
-            `;
+                        <div style="padding: 18px; background:#fff; border:1px solid #eee; border-radius:10px; color:#777;">
+                            검사 대상 애플리케이션이 없습니다.
+                        </div>
+                    `;
                 return;
             }
 
-            // Android "설치된 앱" 화면과 동일한 그리드 스타일(한 줄 3개)
-            const itemsHtml = appList.map((app) => {
-                const displayName = app?.displayName || app?.name || app?.cachedTitle || app?.appName || '알 수 없는 앱';
-                const bundleId = app?.bundleId || app?.packageName || app?.id || app?.bundle || '';
+            const sorted = [...list].sort((a, b) => {
+                const an = (a.cachedTitle || a.name || a.displayName || a.packageName || a.bundleId || '').toString();
+                const bn = (b.cachedTitle || b.name || b.displayName || b.packageName || b.bundleId || '').toString();
+                return an.localeCompare(bn);
+            });
 
-                // createAppIcon은 Android용 스타일(app-grid/app-item)을 이미 갖고 있으므로
-                // iOS도 동일한 데이터 형태로 맞춰 재사용한다.
-                const normalized = {
-                    packageName: bundleId,
-                    cachedTitle: displayName,
-                    cachedIconUrl: app?.iconUrl || app?.cachedIconUrl || '',
-                };
+            const grid = document.createElement('div');
+            grid.className = 'ios-app-grid';
 
-                return this.createAppIcon(normalized);
-            }).join('');
+            sorted.forEach(app => {
+                const name = app.cachedTitle || app.name || app.displayName || Utils.formatAppName(app.packageName || app.bundleId || '');
+                const bundle = app.packageName || app.bundleId || '';
 
-            container.innerHTML = `
-            <div class="app-grid-container">
-                <div class="app-grid">
-                    ${itemsHtml}
-                </div>
-            </div>
-        `;
+                const card = document.createElement('div');
+                card.className = 'ios-app-card';
+
+                const titleEl = document.createElement('div');
+                titleEl.className = 'ios-app-name';
+                titleEl.textContent = name;
+
+                card.appendChild(titleEl);
+
+                if (bundle) {
+                    const subEl = document.createElement('div');
+                    subEl.className = 'ios-app-bundle';
+                    subEl.textContent = bundle;
+                    card.appendChild(subEl);
+                }
+
+                grid.appendChild(card);
+            });
+
+            container.appendChild(grid);
         },
-
 
         // -------------------------------------------------
         // MVT 상세 분석 렌더링 함수 (iOS 전용)
@@ -1106,13 +1141,6 @@ export function initScanController(ctx) {
                 rootEl.style.color = '#5CB85C';
             }
         },
-
-        // -------------------------------------------------
-        // iOS 설치된 앱 목록 렌더링 
-        // -------------------------------------------------
-
-
-
 
         // 아이콘 생성 로직 (Android 전용)
         createAppIcon(app, container) {
@@ -1276,14 +1304,71 @@ export function initScanController(ctx) {
             };
 
             const buildReasons = (reasons) => {
-                if (!Array.isArray(reasons) || reasons.length === 0) return `
-                                    <ul style="margin:0; padding-left:18px; color:#444; font-size:13px; line-height:1.55;">
-                                        <li>위치/공유 기능 특성상 외부 공개 가능성이 있어 주의가 필요합니다.</li>
-                                    </ul>`;
-                return `
-                                    <ul style="margin:0; padding-left:18px; color:#444; font-size:13px; line-height:1.55;">
-                                        ${reasons.map(r => `<li>${r}</li>`).join('')}
-                                    </ul>`;
+                // reasons가 문자열 배열이 아닐 수 있어(예: {title, detail} 객체). 안전하게 문자열로 정규화
+                const escapeHtml = (v) => String(v)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+
+                if (!Array.isArray(reasons) || reasons.length === 0) return '';
+
+                const toReasonText = (r) => {
+                    if (r == null) return '';
+                    if (typeof r === 'string') return r;
+                    if (typeof r === 'number' || typeof r === 'boolean') return String(r);
+
+                    if (typeof r === 'object') {
+                        // 다양한 키 케이스를 흡수
+                        const title = r.title ?? r.name ?? r.rule ?? r.label ?? r.type ?? r.code ?? '';
+                        const detail = r.detail ?? r.desc ?? r.description ?? r.reason ?? r.value ?? '';
+
+                        if (title && detail) return `${title} - ${detail}`;
+                        if (title) return String(title);
+                        if (detail) return String(detail);
+
+                        try {
+                            return JSON.stringify(r);
+                        } catch (e) {
+                            return String(r);
+                        }
+                    }
+
+                    return String(r);
+                };
+
+                return reasons
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((r) => {
+        const t = toReasonText(r).trim();
+        if (!t) return '';
+
+        // title/desc 분리 (예: "타이틀 - 설명", "타이틀: 설명")
+        let title = t;
+        let desc = '';
+        const separators = [' - ', ' — ', ' – ', ': ', ' : '];
+        for (const sep of separators) {
+            const idx = t.indexOf(sep);
+            if (idx > 0 && idx < t.length - sep.length) {
+                title = t.slice(0, idx).trim();
+                desc = t.slice(idx + sep.length).trim();
+                break;
+            }
+        }
+
+        // 오른쪽(초기 디자인)처럼: 굵은 제목 + 얇은 설명(있을 때만)
+        return `<li style="display:flex; gap:10px; align-items:flex-start; margin: 8px 0;">
+            <span style="margin-top:6px; width:6px; height:6px; border-radius:50%; background:#F0AD4E; flex: 0 0 6px;"></span>
+            <div style="min-width:0;">
+                <div style="font-weight:800; color:#333; line-height:1.35;">${escapeHtml(title)}</div>
+                ${desc ? `<div style="font-size:12px; color:#666; line-height:1.45; margin-top:2px; word-break:break-word;">${escapeHtml(desc)}</div>` : ''}
+            </div>
+        </li>`;
+    })
+    .filter(Boolean)
+    .join('');
             };
 
             const html = privacyApps.map(app => {

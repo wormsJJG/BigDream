@@ -491,3 +491,35 @@
     font-weight:600;
     word-break:break-all;
 }
+
+/* 개인정보 유출 위협 - AI 판단 근거 리스트(우측 초기 디자인 스타일) */
+.privacy-ai-reason-list{
+    list-style:none;
+    padding:0;
+    margin:0;
+}
+.privacy-ai-reason-item{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    margin:6px 0;
+    color:#333;
+    font-size:13px;
+    line-height:1.55;
+}
+.privacy-ai-reason-dot{
+    width:7px;
+    height:7px;
+    border-radius:999px;
+    background:#F0AD4E;
+    margin-top:7px;
+    flex:0 0 7px;
+}
+.privacy-ai-reason-title{
+    font-weight:800;
+    color:#222;
+}
+.privacy-ai-reason-desc{
+    margin-top:2px;
+    color:#555;
+}
