@@ -731,8 +731,20 @@
 }
 
 /* 반응형 */
-@media (max-width: 1100px){
+@media (max-width: 1100px) {
     #scan-results-screen .overview-card .summary-metrics{
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+}
+
+/* --- [UI FIX] Equalize action button sizes (무력화/강제삭제) --- */
+#scan-results-screen #neutralize-btn,
+#scan-results-screen #uninstall-btn {
+  min-height: 42px;
+  min-width: 210px;
+  padding: 10px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
