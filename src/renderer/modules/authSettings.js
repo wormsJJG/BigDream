@@ -211,36 +211,53 @@ export function initAuthSettings(ctx) {
                 });
     
                 // 2. 결과 대시보드 메인 컨테이너 켜기
-                const dashboard = document.getElementById('results-dashboard-view');
-                const resultsScreen = document.getElementById('scan-results-screen');
-                if (resultsScreen) {
-                    resultsScreen.classList.remove('hidden');
-                    resultsScreen.style.display = 'block';
-                }
-                if (dashboard) {
-                    dashboard.classList.remove('hidden');
-                    dashboard.style.display = 'block';
-                }
-    
-                // 3. 탭 버튼 활성화 상태 변경
-                document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-    
-                // 4. 오른쪽 콘텐츠 영역 전환 (매우 중요)
-                document.querySelectorAll('.result-content-section').forEach(section => {
-                    if (section.id === targetId) {
-                        section.style.display = 'block';
-                        section.classList.add('active');
-                    } else {
-                        section.style.display = 'none';
-                        section.classList.remove('active');
+                if (targetId === 'scan-dashboard-screen') {
+                    
+                    // 결과 화면 숨김
+                    const resultsScreen = document.getElementById('scan-results-screen');
+                    if (resultsScreen) {
+                        resultsScreen.classList.add('hidden');
+                        resultsScreen.style.display = 'none'; // ViewManager가 처리하지만 확실히
                     }
-                });
+
+                    // 대시보드 화면 표시
+                    ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
+                    
+                    if (ctx.controllers?.scanController?.startAndroidDashboardPolling) {
+                        ctx.controllers.scanController.startAndroidDashboardPolling();
+                    }
+
+                } else {
+                    
+                    // 대시보드 화면 숨김
+                    const dashboardScreen = document.getElementById('scan-dashboard-screen');
+                    if (dashboardScreen) {
+                        dashboardScreen.classList.add('hidden');
+                        dashboardScreen.style.display = 'none';
+                    }
+
+                    // 결과 화면 표시
+                    ViewManager.showScreen(loggedInView, 'scan-results-screen');
+
+                    // 결과 화면 내부의 세부 섹션(탭 콘텐츠) 전환
+                    document.querySelectorAll('.result-content-section').forEach(section => {
+                        if (section.id === targetId) {
+                            section.style.display = 'block';
+                            section.classList.add('active');
+                        } else {
+                            section.style.display = 'none';
+                            section.classList.remove('active');
+                        }
+                    });
+                }
+
+                // 4. 개인정보 안내 문구 처리 (공통)
                 const privacyNotice = document.getElementById('privacy-footer-notice');
                 if (privacyNotice) {
                     privacyNotice.style.display = 'block';
                 }
-                console.log(`[Tab Switch] ${targetId} 전환 성공`);
+                
+                console.log(`[Tab Switch] ${targetId} 탭으로 전환 완료`);
             });
         });
     

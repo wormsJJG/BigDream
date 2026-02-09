@@ -1,6 +1,7 @@
 // Auto-split module: scanController
 
 import { Utils } from '../core/utils.js';
+import { setCircularGauge } from '../lib/circularGauge.js';
 export function initScanController(ctx) {
     
     // Shared access to AppDetailManager (module-safe)
@@ -487,7 +488,7 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                     if (el) el.textContent = (val === undefined || val === null || val === '') ? '-' : String(val);
                 };
 
-                const setGauge = (gaugeId, valId, percent) => {
+                const setGauge = (gaugeId, valId, percent,) => {
                     const el = document.getElementById(gaugeId);
                     const valEl = document.getElementById(valId);
                     const p = Number(percent);
@@ -500,52 +501,8 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                         return;
                     }
 
-                    // Keep CSS variable for any existing styling (optional)
-                    const deg = (safe >= 100) ? 359.9 : Math.max(0, Math.min(359.9, safe * 3.6));
-                    el.style.setProperty('--gauge-deg', `${deg}deg`);
-
-                    // --- SVG gauge renderer (fixes Chromium conic-gradient seam artifacts) ---
-                    // Build once per gauge container.
-                    let svg = el.querySelector('svg.gauge-svg');
-                    if (!svg) {
-                        svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                        svg.setAttribute('class', 'gauge-svg');
-                        svg.setAttribute('viewBox', '0 0 42 42');
-
-                        const track = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                        track.setAttribute('class', 'gauge-track');
-                        track.setAttribute('cx', '21');
-                        track.setAttribute('cy', '21');
-                        track.setAttribute('r', '18');
-
-                        const prog = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                        prog.setAttribute('class', 'gauge-progress');
-                        prog.setAttribute('cx', '21');
-                        prog.setAttribute('cy', '21');
-                        prog.setAttribute('r', '18');
-
-                        svg.appendChild(track);
-                        svg.appendChild(prog);
-
-                        // Ensure SVG sits behind the numeric value.
-                        el.prepend(svg);
-                    }
-
-                    const r = 18;
-                    const circumference = 2 * Math.PI * r;
-                    const prog = el.querySelector('circle.gauge-progress');
-                    if (!prog) {
-                        return;
-                    }
-
-                    // Start at 12 o'clock.
-                    prog.style.transformOrigin = '50% 50%';
-                    prog.style.transform = 'rotate(-90deg)';
-
-                    // Stroke dash for progress.
-                    prog.style.strokeDasharray = String(circumference);
-                    const offset = circumference * (1 - (safe / 100));
-                    prog.style.strokeDashoffset = String(offset);
+                    // SVG donut gauge (library)
+                    setCircularGauge(el, safe);
                 };
 
                 if (metrics) {
@@ -562,6 +519,12 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                     // Temp
                     const t = (metrics.deviceTempC !== undefined) ? Number(metrics.deviceTempC) : null;
                     setText('live-temp-text', (t === null || !Number.isFinite(t)) ? '--.- °C' : `${t.toFixed(1)} °C`);
+                    
+                    const tPct = (t === null || !Number.isFinite(t)) ? 0 : (t / 100) * 100;
+                    if (document.getElementById('live-temp-val')) {
+                      document.getElementById('live-temp-val').textContent = (t === null || !Number.isFinite(t)) ? '-' : String(Math.round(t));
+                    }
+                    setGauge('temp-gauge', 'live-temp-val', tPct);
 
                     // Connection badge
                     const status = document.getElementById('dash-connection');
@@ -606,6 +569,7 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                     }
                 }
             },
+            
     
             finishScan(data) {
                 console.log("--- 검사 종료: 결과 대시보드 준비 ---");

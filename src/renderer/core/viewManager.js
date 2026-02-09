@@ -53,10 +53,13 @@ export function createViewManager(State) {
             const iosSubMenu = document.getElementById('ios-sub-menu');
             const navCreate = document.getElementById('nav-create');
             const navOpen = document.getElementById('nav-open');
-            const isIos = State.currentDeviceMode === 'ios';
+
+            const _mode = String(State.currentDeviceMode || '').toLowerCase();
+            const isIos = _mode.includes('ios');
 
             const shouldShowResultMenu = (
                 screenId === 'scan-results-screen' ||
+                screenId === 'scan-dashboard-screen' ||   
                 screenId === 'app-detail-view' ||
                 screenId === 'res-privacy' ||
                 (window.lastScanData && screenId === 'admin-screen')
@@ -76,30 +79,42 @@ export function createViewManager(State) {
                     if (subMenu) {
                         subMenu.classList.remove('hidden');
                         subMenu.style.setProperty('display', 'block', 'important');
+                        
+                        const isScanComplete = !!window.lastScanData;
 
-                        const tabs = subMenu.querySelectorAll('li.res-tab');
-                        tabs.forEach(tab => {
-                            const target = tab.dataset.target;
-                            if (target === 'res-network' || target === 'res-threats') {
-                                tab.style.setProperty('display', 'none', 'important');
-                            } else {
-                                tab.style.setProperty('display', 'block', 'important');
-                            }
-                        });
+                            const tabs = subMenu.querySelectorAll('li.res-tab');
+                            tabs.forEach(tab => {
+                                const target = tab.dataset.target;
+
+                                if (target === 'scan-dashboard-screen') {
+                                    tab.style.display = 'block';
+                                } 
+                                else {
+                                    if (isScanComplete) {
+                                        if (target === 'res-network' || target === 'res-threats') {
+                                            tab.style.display = 'none';
+                                        } else {
+                                            tab.style.display = 'block';
+                                        }
+                                    } else {
+                                        tab.style.display = 'none';
+                                    }
+                                }
+                            });
+                        }
                     }
-                }
-
                 if (navCreate) navCreate.style.display = 'none';
                 if (navOpen) navOpen.style.display = 'none';
             } else {
                 if (subMenu) {
-                    subMenu.classList.add('hidden');
+                    subMenu.classList.add('hidden'); 
                     subMenu.style.setProperty('display', 'none', 'important');
                 }
                 if (iosSubMenu) {
-                    iosSubMenu.classList.add('hidden');
+                    iosSubMenu.classList.add('hidden'); 
                     iosSubMenu.style.setProperty('display', 'none', 'important');
                 }
+                
                 if (navCreate) navCreate.style.display = 'block';
                 if (navOpen) navOpen.style.display = 'block';
             }
@@ -138,8 +153,8 @@ export function createViewManager(State) {
 
             // Optional dashboard widgets
             const percentText = document.getElementById('progress-percent-text');
-            const procCount = document.getElementById('process-count');
-            const procTotal = document.getElementById('process-total');
+            const procGauge = document.getElementById('proc-gauge');
+            const procVal = document.getElementById('live-proc-val');
 
             const androidStatusBar = document.getElementById('android-progress-bar');
             const androidStatusText = document.getElementById('android-scan-status-text');
@@ -268,6 +283,15 @@ export function createViewManager(State) {
                 if (androidProgressPercentText) {
                     androidProgressPercentText.textContent = `${Math.round(percent)}%`;
                 }
+
+                // if (procGauge) {
+                //     const safePct = Math.max(0, Math.min(100, percent));
+                //     // CSS 변수(--brand) 색상으로 채우기 (conic-gradient 활용)
+                //     procGauge.style.background = `conic-gradient(var(--brand) 0% ${safePct}%, #1E293B ${safePct}% 100%)`;
+                // }
+                // if (procVal) {
+                //     procVal.textContent = Math.round(percent) + '%';
+                // }
 
                 if (androidRunningText) {
                     const p = Number(percent);
