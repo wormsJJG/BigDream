@@ -10,6 +10,72 @@ export function initActionHandlers(ctx) {
     const { auth, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } = services.auth;
     const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit } = services.firestore;
 
+    // --- Timestamp/Date normalization (IPC returns plain objects, not Firestore Timestamp prototypes) ---
+    const toDateSafe = (value) => {
+        if (!value) return null;
+
+        // Date instance
+        if (value instanceof Date) return value;
+
+        // Milliseconds number
+        if (typeof value === 'number') {
+            const d = new Date(value);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        // ISO string
+        if (typeof value === 'string') {
+            const d = new Date(value);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        if (typeof value === 'object') {
+            // Firestore Timestamp (prototype preserved)
+            if (typeof value.toDate === 'function') {
+                try {
+                    const d = value.toDate();
+                    if (d instanceof Date) return d;
+                    const dd = new Date(d);
+                    return isNaN(dd.getTime()) ? null : dd;
+                } catch (_) { /* ignore */ }
+            }
+
+            // Firestore Timestamp serialized over IPC (seconds/nanoseconds)
+            const sec = (typeof value.seconds === 'number')
+                ? value.seconds
+                : (typeof value._seconds === 'number' ? value._seconds : null);
+
+            const nsec = (typeof value.nanoseconds === 'number')
+                ? value.nanoseconds
+                : (typeof value._nanoseconds === 'number' ? value._nanoseconds : 0);
+
+            if (sec !== null) {
+                const ms = sec * 1000 + Math.floor((nsec || 0) / 1e6);
+                const d = new Date(ms);
+                return isNaN(d.getTime()) ? null : d;
+            }
+
+            // Some serializers may use milliseconds
+            if (typeof value.milliseconds === 'number') {
+                const d = new Date(value.milliseconds);
+                return isNaN(d.getTime()) ? null : d;
+            }
+        }
+
+        return null;
+    };
+
+    const formatDateKR = (value) => {
+        const d = toDateSafe(value);
+        return d ? d.toLocaleDateString('ko-KR') : '-';
+    };
+
+    const formatDateTimeKR = (value) => {
+        const d = toDateSafe(value);
+        return d ? d.toLocaleString('ko-KR') : '-';
+    };
+
+
     // [9] 액션 핸들러 (삭제/무력화/인쇄)
     // =========================================================
 
@@ -719,30 +785,26 @@ export function initActionHandlers(ctx) {
 
             const fullEmail = inputId + ID_DOMAIN;
 
-            // 생성 확인 메시지에 유형 정보 포함
-            const roleText = roleSelect.options[roleSelect.selectedIndex].text;
-            if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n기본 횟수: ${quota}회`)) return;
-
-            // 보조 앱을 이용한 생성
-            const secondaryAppName = "secondaryApp-" + Date.now();
-            const config = auth.app.options;
+            // 생성 확인 메시지
+            const roleText = roleSelect.options[roleSelect.selectedIndex]?.text || selectedRole;
+            if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n유형: ${roleText}\n기본 횟수: ${quota}회`)) return;
 
             try {
-                const secondaryApp = initializeApp(config, secondaryAppName);
-                const secondaryAuth = getAuth(secondaryApp);
-                const userCred = await createUserWithEmailAndPassword(secondaryAuth, fullEmail, password);
-                const newUser = userCred.user;
+                // ✅ Renderer에서는 Firebase SDK로 계정 생성 금지. Main(IPC)에서 생성한다.
+                const created = await services.auth.createUser(fullEmail, password);
+                const newUid = created?.uid;
+                if (!newUid) throw new Error('계정 생성에 실패했습니다(uid 없음)');
 
                 // Firestore에 업체명과 횟수 저장
-                await setDoc(doc(null, "users", newUser.uid), {
-                    companyName: companyName, // 업체명
-                    userId: inputId,          // 아이디
-                    email: fullEmail,         // 이메일(풀버전)
-                    role: selectedRole,             // 권한
-                    isLocked: false,          // 잠금여부
-                    quota: quota,             // 검사 횟수 저장
+                await setDoc(doc(null, "users", newUid), {
+                    companyName: companyName,   // 업체명
+                    userId: inputId,            // 아이디
+                    email: fullEmail,           // 이메일(풀버전)
+                    role: selectedRole,         // 권한
+                    isLocked: false,            // 잠금여부
+                    quota: quota,               // 검사 횟수 저장
                     android_scan_duration: 0,
-                    createdAt: new Date(),
+                    createdAt: serverTimestamp(), // 생성일(서버 시간)
                     lastScanDate: null
                 });
 
@@ -754,10 +816,9 @@ export function initActionHandlers(ctx) {
                 if (quotaInput) quotaInput.value = 40;
 
                 this.loadUsers(); // 목록 새로고침
-
             } catch (error) {
                 console.error(error);
-                await CustomUI.alert("생성 실패: " + error.message);
+                await CustomUI.alert("생성 실패: " + (error?.message || error));
             }
         },
 
@@ -877,7 +938,7 @@ export function initActionHandlers(ctx) {
                         <div>
                             <h2 style="margin:0;">${userData.companyName || '업체명 없음'}</h2>
                             <div style="color:#666; margin-top:5px;">
-                                ID: ${userData.userId} | 가입: ${userData.createdAt ? new Date(userData.createdAt.toDate()).toLocaleDateString() : '-'}
+                                ID: ${userData.userId} | 가입: ${formatDateKR(userData.createdAt)}
                             </div>
                         </div>
                         <div style="text-align:right;">
@@ -986,7 +1047,8 @@ export function initActionHandlers(ctx) {
             docs.forEach(doc => {
                 const data = doc.data();
                 if (!data.startTime) return;
-                const date = data.startTime.toDate();
+                const date = toDateSafe(data.startTime);
+                if (!date) return;
 
                 stats.total++;
 
@@ -1059,11 +1121,9 @@ export function initActionHandlers(ctx) {
 
                     const log = doc.data();
 
-                    const startTime = log.startTime && typeof log.startTime.toDate === 'function' ?
-                        new Date(log.startTime.toDate()) : null;
+                    const startTime = toDateSafe(log.startTime);
 
-                    const endTime = log.endTime && typeof log.endTime.toDate === 'function' ?
-                        new Date(log.endTime.toDate()) : null;
+                    const endTime = toDateSafe(log.endTime);
 
                     const dateStr = startTime ? startTime.toLocaleString('ko-KR') : '-';
                     const statusClass = log.status === 'completed' ? 'color:green' : (log.status === 'error' ? 'color:red' : 'color:orange');
@@ -1107,16 +1167,8 @@ export function initActionHandlers(ctx) {
             snapshot.forEach(doc => {
                 const r = doc.data();
 
-                // Firestore Timestamp 객체 안전 체크 및 날짜 문자열 변환
-                let dateStr = '-';
-                if (r.reportedAt && typeof r.reportedAt.toDate === 'function') {
-                    const dateObj = r.reportedAt.toDate();
-                    dateStr = dateObj.toLocaleString('ko-KR');
-                } else if (r.reportedAt) {
-                    // Timestamp 객체가 아닐 경우
-                    const dateObj = new Date(r.reportedAt);
-                    dateStr = dateObj.toLocaleString('ko-KR');
-                }
+                // 날짜 문자열 변환 (IPC로 넘어오면 Timestamp prototype이 사라질 수 있음)
+                const dateStr = formatDateTimeKR(r.reportedAt);
 
                 // 탐지 결과 표시
                 const threat = r.threatCount > 0 ? `<b style="color:red;">위협 ${r.threatCount}건</b>` : '<span style="color:green;">안전</span>';
@@ -1161,14 +1213,14 @@ export function initActionHandlers(ctx) {
                     // 2. 상태가 started인데 endTime이 없는 경우 (진행중일수도 있으나 오래된거면 튕긴것)
                     else if (log.status === 'started' && !log.endTime) {
                         // 시작한지 1시간 지났는데 안 끝난거면 튕긴걸로 간주
-                        const startTime = log.startTime ? log.startTime.toDate() : new Date();
+                        const startTime = toDateSafe(log.startTime) || new Date();
                         const diff = (new Date() - startTime) / 1000 / 60; // 분
                         if (diff > 60) type = 'INCOMPLETE';
                     }
 
                     if (type) {
                         count++;
-                        const date = log.startTime ? new Date(log.startTime.toDate()).toLocaleString() : '-';
+                        const date = formatDateTimeKR(log.startTime);
                         const badgeClass = type === 'ERROR' ? 'badge-error' : 'badge-incomplete';
                         const msg = type === 'ERROR' ? (log.errorMessage || '원인 불명 에러') : '종료 기록 없음(강제종료 의심)';
 
@@ -1212,7 +1264,7 @@ export function initActionHandlers(ctx) {
 
                 querySnapshot.forEach((docSnap) => {
                     const report = docSnap.data();
-                    const date = report.reportedAt ? new Date(report.reportedAt.toDate()).toLocaleString() : '-';
+                    const date = formatDateTimeKR(report.reportedAt);
 
                     // ★ [핵심] 저장된 이름을 바로 씀 (없으면 기존 방식대로 ID 표시)
                     // 예전 로그(이름 저장 안 된 것)를 위해 OR(||) 연산자 사용
@@ -1248,16 +1300,49 @@ export function initActionHandlers(ctx) {
     // ★★★ [수정 2] AdminManager를 전역 window 객체에 등록 (HTML onclick에서 접근 가능하게) ★★★
     window.AdminManager = AdminManager;
 
-    // [전역 함수] 전송된 리포트 상세보기 (임시)
+    // [전역 함수] 전송된 리포트 상세보기
+    // (중요) 기존 구현은 admin-screen만 hide하고 detail-screen을 show하는 방식이라,
+    //        detail-screen이 logged-in-view 바깥에 있는 현재 레이아웃에서는 화면이 하얗게 비는 문제가 발생.
+    //        -> ViewManager.showScreen으로 스크린 전환을 통일하고, 템플릿/DOM 준비 후 바인딩.
     window.viewReportDetail = async (reportId) => {
-        // 1. 화면 요소 가져오기
+        const loggedInView = document.getElementById('logged-in-view');
         const detailScreen = document.getElementById('admin-report-detail-screen');
-        const adminScreen = document.getElementById('admin-screen');
+        if (!loggedInView || !detailScreen) return;
 
-        if (!detailScreen || !adminScreen) return;
+        const waitFrame = () => new Promise(r => requestAnimationFrame(r));
 
+        // 상세 화면 템플릿이 아직 로드되지 않은 경우(초기 진입 타이밍) 안전 로드
+        const ensureDetailTemplateLoaded = async () => {
+            if (detailScreen.innerHTML && detailScreen.innerHTML.trim().length > 0) return;
+            try {
+                if (window?.bdScanner?.app?.readTextFile) {
+                    const html = await window.bdScanner.app.readTextFile('src/renderer/screens/admin-report-detail-screen/view.html');
+                    if (html) detailScreen.innerHTML = html;
+                }
+            } catch (e) {
+                // 템플릿 로드는 templateLoader가 처리하는 것이 기본이므로, 실패해도 아래 DOM 체크로 방어.
+                console.warn('[viewReportDetail] template load failed:', e);
+            }
+        };
+
+        // 화면 전환을 먼저 수행하여 레이아웃/DOM이 붙은 상태에서 바인딩
         try {
+            if (ViewManager?.showScreen) {
+                ViewManager.showScreen(loggedInView, 'admin-report-detail-screen');
+            } else {
+                // 혹시 ViewManager가 전역에 없으면 최소한 display만 보장
+                detailScreen.classList.remove('hidden');
+                detailScreen.classList.add('active');
+                detailScreen.style.display = 'block';
+            }
+
+            // 템플릿/DOM 준비 대기
+            await ensureDetailTemplateLoaded();
+            await waitFrame();
+            await waitFrame();
+
             // DB에서 데이터 가져오기
+            // Firestore helper in this project is exposed via services.firestore and accepts a dummy first arg.
             const docRef = doc(null, "reported_logs", reportId);
             const docSnap = await getDoc(docRef);
 
@@ -1273,42 +1358,56 @@ export function initActionHandlers(ctx) {
             let dateStr = '-';
             if (data.reportedAt) {
                 // Timestamp 객체면 toDate(), 아니면 그대로 사용
-                const dateObj = data.reportedAt.toDate ? data.reportedAt.toDate() : new Date(data.reportedAt);
-                dateStr = dateObj.toLocaleString('ko-KR');
+                dateStr = formatDateTimeKR(data.reportedAt);
             }
 
-            document.getElementById('view-doc-id').textContent = reportId.substring(0, 8).toUpperCase();
-            document.getElementById('view-report-time').textContent = dateStr;
+            const elDocId = document.getElementById('view-doc-id');
+            const elReportTime = document.getElementById('view-report-time');
+            if (elDocId) elDocId.textContent = reportId.substring(0, 8).toUpperCase();
+            if (elReportTime) elReportTime.textContent = dateStr;
 
             // --- [2] 요약 정보 카드 (데이터 구조 직접 접근) ---
             // Agency Info
-            document.getElementById('view-agency-name').textContent = data.agencyName || '-';
-            document.getElementById('view-agency-id').textContent = data.agencyId || '-';
-            document.getElementById('view-agency-email').textContent = data.agencyEmail || '-';
+            const elAgencyName = document.getElementById('view-agency-name');
+            const elAgencyId = document.getElementById('view-agency-id');
+            const elAgencyEmail = document.getElementById('view-agency-email');
+            if (elAgencyName) elAgencyName.textContent = data.agencyName || '-';
+            if (elAgencyId) elAgencyId.textContent = data.agencyId || '-';
+            if (elAgencyEmail) elAgencyEmail.textContent = data.agencyEmail || '-';
 
             // Client Info
             const client = data.clientInfo || {};
-            document.getElementById('view-client-name').textContent = client.name || '익명';
-            document.getElementById('view-client-phone').textContent = client.phone || '-';
-            document.getElementById('view-client-dob').textContent = client.dob || '-';
+            const elClientName = document.getElementById('view-client-name');
+            const elClientPhone = document.getElementById('view-client-phone');
+            const elClientDob = document.getElementById('view-client-dob');
+            if (elClientName) elClientName.textContent = client.name || '익명';
+            if (elClientPhone) elClientPhone.textContent = client.phone || '-';
+            if (elClientDob) elClientDob.textContent = client.dob || '-';
 
             // Device Info
             const device = data.deviceInfo || {};
-            document.getElementById('view-device-model').textContent = device.model || '-';
-            document.getElementById('view-device-os').textContent = (device.os || '-').toUpperCase();
-            document.getElementById('view-device-serial').textContent = device.serial || '-';
+            const elDevModel = document.getElementById('view-device-model');
+            const elDevOs = document.getElementById('view-device-os');
+            const elDevSerial = document.getElementById('view-device-serial');
+            if (elDevModel) elDevModel.textContent = device.model || '-';
+            if (elDevOs) elDevOs.textContent = (device.os || '-').toUpperCase();
+            if (elDevSerial) elDevSerial.textContent = device.serial || '-';
 
             // Message
-            document.getElementById('view-message-text').textContent = data.message || '특이사항 없음';
+            const elMsg = document.getElementById('view-message-text');
+            if (elMsg) elMsg.textContent = data.message || '특이사항 없음';
 
             // --- [3] 위협 앱 상세 리스트 생성 (핵심) ---
             const apps = data.suspiciousApps || [];
             const threatListEl = document.getElementById('view-threat-list');
-            document.getElementById('view-threat-count').textContent = apps.length;
+            const elThreatCount = document.getElementById('view-threat-count');
+            if (elThreatCount) elThreatCount.textContent = apps.length;
+            if (threatListEl) threatListEl.innerHTML = ''; // 초기화
 
-            threatListEl.innerHTML = ''; // 초기화
-
-            if (apps.length === 0) {
+            if (!threatListEl) {
+                // 템플릿이 없거나 로드 실패한 경우 화면만 전환된 상태가 될 수 있음
+                console.warn('[viewReportDetail] threat list element missing - template may not be loaded');
+            } else if (apps.length === 0) {
                 threatListEl.innerHTML = `<div style="text-align:center; padding:30px; color:#28a745; background:white; border-radius:8px;">✅ 탐지된 위협이 없습니다. (Clean Device)</div>`;
             } else {
                 apps.forEach((app, index) => {
@@ -1371,14 +1470,8 @@ export function initActionHandlers(ctx) {
                 });
             }
 
-            // --- [4] 화면 전환 ---
-            adminScreen.style.display = 'none';
-            adminScreen.classList.remove('active');
-
-            detailScreen.style.display = 'block';
-            detailScreen.classList.add('active');
-            detailScreen.classList.remove('hidden');
-            detailScreen.scrollTop = 0; // 스크롤 맨 위로
+            // 스크롤 맨 위로
+            detailScreen.scrollTop = 0;
 
         } catch (e) {
             console.error("상세보기 오류:", e);
@@ -1387,19 +1480,28 @@ export function initActionHandlers(ctx) {
     };
 
     // [뒤로가기 버튼 이벤트]
-    const detailBackBtn = document.getElementById('admin-detail-back-btn');
-    if (detailBackBtn) {
-        detailBackBtn.addEventListener('click', () => {
+    // 템플릿 로드 타이밍 때문에 정적 바인딩이 실패할 수 있어 이벤트 위임으로 처리
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('#admin-detail-back-btn') : null;
+        if (!btn) return;
+
+        const loggedInView = document.getElementById('logged-in-view');
+        if (ViewManager?.showScreen && loggedInView) {
+            ViewManager.showScreen(loggedInView, 'admin-screen');
+        } else {
             const detailScreen = document.getElementById('admin-report-detail-screen');
             const adminScreen = document.getElementById('admin-screen');
-
-            detailScreen.style.display = 'none';
-            detailScreen.classList.remove('active');
-
-            adminScreen.style.display = 'block';
-            adminScreen.classList.add('active');
-        });
-    }
+            if (detailScreen) {
+                detailScreen.style.display = 'none';
+                detailScreen.classList.remove('active');
+            }
+            if (adminScreen) {
+                adminScreen.style.display = 'block';
+                adminScreen.classList.add('active');
+                adminScreen.classList.remove('hidden');
+            }
+        }
+    });
 
     window.toggleAnalysis = (header) => {
         const content = header.nextElementSibling;
@@ -1514,7 +1616,7 @@ export function initActionHandlers(ctx) {
             let html = `<ul class="file-list" style="max-height:400px;">`;
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const date = data.date ? new Date(data.date.toDate()).toLocaleString() : '날짜 없음';
+                const date = data.date ? formatDateTimeKR(data.date) : '날짜 없음';
                 const threatCount = data.threatCount || 0;
                 const style = threatCount > 0 ? 'color:red; font-weight:bold;' : 'color:green;';
 

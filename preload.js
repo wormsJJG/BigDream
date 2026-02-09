@@ -75,6 +75,7 @@ const bdScanner = {
     auth: {
       login: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
       logout: () => ipcRenderer.invoke('firebase-auth-logout'),
+      createUser: (email, password) => ipcRenderer.invoke('firebase-auth-create-user', { email, password }),
     },
     firestore: {
         call: (payload) => ipcRenderer.invoke(IPC.FIRESTORE.CALL, payload)
@@ -111,7 +112,11 @@ const electronAPI = {
     startFullScan: bdScanner.android.startFullScan,
     readTextFile: bdScanner.app.readTextFile,
     firestoreCall: bdScanner.firestore.call,
-    getAndroidDashboardData: bdScanner.android.getDashboardData
+    getAndroidDashboardData: bdScanner.android.getDashboardData,
+    // Firebase Auth (backward compatible helpers)
+    firebaseAuthLogin: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
+    firebaseAuthLogout: () => ipcRenderer.invoke('firebase-auth-logout'),
+    firebaseAuthCreateUser: (email, password) => ipcRenderer.invoke('firebase-auth-create-user', { email, password })
 };
 
 contextBridge.exposeInMainWorld('bdScanner', bdScanner);
