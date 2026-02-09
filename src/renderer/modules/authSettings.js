@@ -269,9 +269,9 @@ export function initAuthSettings(ctx) {
                 if (String(targetId || '').startsWith('res-ios-') && typeof window.__bd_forceRenderIosCoreAreas === 'function') {
                     window.__bd_forceRenderIosCoreAreas();
                 }
-            });
+            };
         });
-    });
+    })
 
     // 사이드바: 검사 생성
     const navCreate = document.getElementById('nav-create');
