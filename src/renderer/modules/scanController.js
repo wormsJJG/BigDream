@@ -607,7 +607,7 @@ export function initScanController(ctx) {
                 // 기존 검사 진행 텍스트 변경
                 const runningText = document.getElementById('android-scan-running-text');
                 if (runningText) {
-                    runningText.textContent = '검사 완료 (SAFE)';
+                    runningText.textContent = '검사 완료';
                     runningText.style.color = 'var(--success-color)';
                 }
 
