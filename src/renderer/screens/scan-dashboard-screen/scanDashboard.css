@@ -1,0 +1,316 @@
+/* Android Dashboard (scan-dashboard-screen)
+   - Light theme to match the rest of the app (base.css tokens)
+*/
+
+#scan-dashboard-screen{
+  /* Match global light background */
+  background: linear-gradient(180deg, #FFFFFF, var(--secondary-bg-color));
+  position: absolute;
+  inset: 0;
+  padding: 34px 34px 28px;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-color);
+}
+
+#scan-dashboard-screen h1{
+  margin: 0;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-color);
+}
+
+#scan-dashboard-screen .header-subtitle{
+  margin: 10px 0 0;
+  color: rgba(51,51,51,0.65);
+  font-size: 13px;
+}
+
+#scan-dashboard-screen .dashboard-header{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+#scan-dashboard-screen .status-badge{
+  text-align: right;
+  color: rgba(51,51,51,0.85);
+  font-weight: 700;
+}
+#scan-dashboard-screen .status-badge label{
+  display: block;
+  font-size: 11px;
+  color: rgba(51,51,51,0.45);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+#scan-dashboard-screen .status-badge span{
+  font-size: 14px;
+  color: var(--success-color);
+}
+
+#scan-dashboard-screen .metrics-grid{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+  flex: 0 0 auto;
+}
+
+#scan-dashboard-screen .metric-box{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--card-bg-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+  min-height: 82px;
+  overflow: visible;
+}
+
+#scan-dashboard-screen .metric-box.highlight{
+  background: #FFFFFF;
+}
+
+#scan-dashboard-screen .metric-info label{
+  display: block;
+  color: rgba(51,51,51,0.60);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+#scan-dashboard-screen .metric-value{
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  color: var(--text-color);
+}
+#scan-dashboard-screen .temp-text{
+  font-size: 24px;
+}
+
+/* circular gauge (donut) */
+#scan-dashboard-screen .circular-gauge{
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  position: relative;
+  display: grid;
+  place-items: center;
+
+  /* Light track. Fill is painted by JS through --gauge-deg */
+  background: conic-gradient(
+    from -90deg,
+    var(--primary-color) 0deg var(--gauge-deg, 0deg),
+    #E5E7EB var(--gauge-deg, 0deg) 360deg
+  );
+
+  border: 1px solid rgba(0,0,0,0.10);
+  flex: 0 0 auto;
+  overflow: visible;
+  margin-right: 2px;
+}
+
+/* Donut cut-out */
+#scan-dashboard-screen .circular-gauge::before{
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+}
+
+#scan-dashboard-screen .circular-gauge .gauge-val{
+  position: relative;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--primary-color);
+}
+
+#scan-dashboard-screen .bottom-layout{
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+#scan-dashboard-screen .info-card,
+#scan-dashboard-screen .scan-visual-container{
+  border-radius: 18px;
+  background: var(--card-bg-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 16px 50px rgba(0,0,0,0.10);
+}
+
+#scan-dashboard-screen .info-card{
+  padding: 18px 18px 10px;
+}
+#scan-dashboard-screen .info-card h4{
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: rgba(51,51,51,0.85);
+}
+#scan-dashboard-screen .spec-list .data-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  font-size: 12px;
+}
+#scan-dashboard-screen .spec-list .data-row:last-child{
+  border-bottom: 0;
+}
+#scan-dashboard-screen .spec-list label{
+  color: rgba(51,51,51,0.60);
+}
+#scan-dashboard-screen .spec-list span{
+  color: rgba(51,51,51,0.92);
+  font-weight: 700;
+}
+#scan-dashboard-screen .status-safe{ color: var(--success-color) !important; }
+#scan-dashboard-screen .status-stable{ color: rgba(51,51,51,0.85) !important; }
+
+#scan-dashboard-screen .scan-visual-container{
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+#scan-dashboard-screen .monitor-top{
+  display: grid;
+  place-items: center;
+  padding-top: 8px;
+}
+
+#scan-dashboard-screen .phone-frame{
+  width: 140px;
+  height: 260px;
+  border-radius: 28px;
+  background: #111827;
+  border: 1px solid rgba(0,0,0,0.10);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.18);
+}
+
+#scan-dashboard-screen .scan-beam{
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 60px;
+  top: -60px;
+  background: linear-gradient(180deg, transparent, rgba(58,83,155,0.45), transparent);
+  opacity: 0.9;
+}
+
+
+
+/* Scan beam animation (restored) */
+#scan-dashboard-screen .scan-beam{
+  animation: scanBeamSweep 1.9s ease-in-out infinite;
+}
+
+@keyframes scanBeamSweep{
+  0%{
+    top: -70px;
+    opacity: 0.0;
+  }
+  12%{
+    opacity: 0.85;
+  }
+  50%{
+    top: calc(100% - 10px);
+    opacity: 0.70;
+  }
+  70%{
+    opacity: 0.25;
+  }
+  100%{
+    top: calc(100% + 70px);
+    opacity: 0.0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #scan-dashboard-screen .scan-beam{
+    animation: none !important;
+  }
+}#scan-dashboard-screen .scan-running-text{
+  margin: 14px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: rgba(51,51,51,0.92);
+}
+
+#scan-dashboard-screen .progress-track{
+  height: 10px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+#scan-dashboard-screen #android-progress-bar{
+  width: 0%;
+  height: 100%;
+  background: var(--success-color);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(92,184,92,0.55);
+}
+
+#scan-dashboard-screen #android-progress-percent-text{
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--text-color);
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+/* console */
+#scan-dashboard-screen .status-console{
+  border-radius: 14px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  padding: 12px 12px;
+
+  line-height: 16px;
+  height: calc(16px * 4 + 20px);
+  min-height: calc(16px * 4 + 20px);
+  max-height: calc(16px * 4 + 20px);
+
+  overflow: hidden;
+  overflow-x: hidden;
+
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  color: rgba(16, 122, 72, 0.95);
+}
+
+#scan-dashboard-screen .status-console .log-line{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 16px;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  #scan-dashboard-screen .metrics-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #scan-dashboard-screen .bottom-layout{ grid-template-columns: 1fr; }
+}

@@ -6,7 +6,6 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
   // NOTE: bootstrap.js passes a single options object.
   if (!client) throw new Error('createAndroidService requires client');
   if (!adb) throw new Error('createAndroidService requires adb');
-  const { evaluateAndroidAppRisk, RISK_LEVELS } = require('../../shared/risk/riskRules');
   const service = {
       /**
        * Check first connected device status + model.
@@ -138,40 +137,20 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                   processedApps.push(...results);
               }
 
-                            let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
+              let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
 
-              // 1) VirusTotal 검사 (기존 흐름 유지)
               if (suspiciousApps.length > 0 && CONFIG?.VIRUSTOTAL_API_KEY && CONFIG.VIRUSTOTAL_API_KEY !== 'your_key') {
                   const vtTargets = suspiciousApps.filter(a => a.isSideloaded || a.isMasquerading || a.deviceAdminActive || a.accessibilityEnabled);
                   console.log(`🌐 VT 정밀 검사 진행 (${vtTargets.length}개)`);
                   await service.runVirusTotalCheck(serial, vtTargets);
               }
 
-              // 2) ✅ 최종 분류 (정책 기반)
-              processedApps.forEach((app) => {
-                  const evaluated = evaluateAndroidAppRisk(app);
-
-                  app.riskLevel = evaluated.riskLevel;
-                  app.riskReasons = evaluated.riskReasons;
-                  app.recommendation = evaluated.recommendation;
-                  app.aiNarration = evaluated.aiNarration;
-
-                  // UI 호환용 reason도 유지 (대표 문장 1개)
-                  if (app.riskLevel === RISK_LEVELS.SPYWARE) {
-                      app.reason = `[VT 확진] ${evaluated.aiNarration}`;
-                  } else if (app.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
-                      app.reason = `[개인정보 유출 위협] ${evaluated.aiNarration}`;
-                  } else if (!app.reason) {
-                      app.reason = '';
-                  }
-              });
-
-              const spywareApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.SPYWARE);
-              const privacyThreatApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.PRIVACY_RISK);
+              const privacyThreatApps = suspiciousApps.filter(app => app.reason && app.reason.includes('개인정보'));
+              suspiciousApps = suspiciousApps.filter(app => !app.reason || !app.reason.includes('개인정보'));
 
               const runningAppsCount = processedApps.filter(app => app.isRunningBg).length;
 
-              return { deviceInfo, allApps: processedApps, suspiciousApps: spywareApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
+              return { deviceInfo, allApps: processedApps, suspiciousApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
           } catch (err) {
               console.error(err);
               return { error: err.message };
@@ -633,6 +612,100 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
               if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
               return [];
           }
+      }
+
+      ,
+      // -------------------------------------------------
+      // Live dashboard data (battery/memory/temp/top/spec)
+      // -------------------------------------------------
+      async getDashboardData(serial) {
+          // Resolve serial if not provided
+          let targetSerial = serial;
+          if (!targetSerial) {
+              const devices = await client.listDevices();
+              targetSerial = devices?.[0]?.id;
+          }
+          if (!targetSerial) {
+              return { ok: false, error: 'NO_DEVICE' };
+          }
+
+          const readShell = async (cmd) => {
+              const stream = await client.shell(targetSerial, cmd);
+              const buf = await adb.util.readAll(stream);
+              return buf.toString('utf8');
+          };
+
+          // Battery (dumpsys battery)
+          const batteryOut = await readShell('dumpsys battery');
+          const levelMatch = batteryOut.match(/level:\s*(\d+)/i);
+          const tempMatch = batteryOut.match(/temperature:\s*(\d+)/i);
+          const batteryLevel = levelMatch ? parseInt(levelMatch[1], 10) : null;
+          // temperature is usually in tenths of a degree C
+          const deviceTempC = tempMatch ? (parseInt(tempMatch[1], 10) / 10) : null;
+
+          // Memory (MemTotal/MemAvailable)
+          const memOut = await readShell('cat /proc/meminfo');
+          const totalMatch = memOut.match(/MemTotal:\s*(\d+)\s*kB/i);
+          const availMatch = memOut.match(/MemAvailable:\s*(\d+)\s*kB/i);
+          let memUsagePercent = null;
+          if (totalMatch && availMatch) {
+              const total = parseInt(totalMatch[1], 10);
+              const avail = parseInt(availMatch[1], 10);
+              if (total > 0) {
+                  memUsagePercent = Math.round(((total - avail) / total) * 100);
+              }
+          }
+
+          // Spec (getprop)
+          const getprop = async (key) => (await readShell(`getprop ${key}`)).trim();
+          const model = await getprop('ro.product.model');
+          const abi = await getprop('ro.product.cpu.abi');
+          const androidVer = await getprop('ro.build.version.release');
+          // Rooted check (best-effort)
+          let rooted = 'SAFE';
+          try {
+              const suOut = (await readShell('which su')).trim();
+              if (suOut) rooted = 'ROOTED';
+          } catch (_) {
+              rooted = 'UNKNOWN';
+          }
+
+          // Top processes (best-effort)
+          let topText = '';
+          try {
+              topText = await readShell('toybox top -b -n 1 -m 6 -o %CPU');
+          } catch (e) {
+              try {
+                  topText = await readShell('top -b -n 1 | head -n 25');
+              } catch (_) {
+                  topText = '';
+              }
+          }
+
+          const top = [];
+          // Parse common top format: PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ ARGS
+          const lines = topText.split(/\r?\n/);
+          for (const line of lines) {
+              const m = line.trim().match(/^(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([0-9.]+)\s+([0-9.]+)\s+\S+\s+(.+)$/);
+              if (m) {
+                  top.push({ pid: m[1], cpu: m[2], mem: m[3], name: m[4] });
+                  if (top.length >= 5) break;
+              }
+          }
+
+          return {
+              ok: true,
+              serial: targetSerial,
+              metrics: { batteryLevel, memUsagePercent, deviceTempC },
+              spec: {
+                  model: model || '-',
+                  abi: abi || '-',
+                  android: androidVer ? `Android ${androidVer}` : 'ANDROID',
+                  serial: targetSerial,
+                  rooted
+              },
+              top
+          };
       }
   };
   return service;

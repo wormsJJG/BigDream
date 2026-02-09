@@ -283,6 +283,13 @@ export function initClientDevice(ctx) {
                     wrapper.classList.add('state-connected');
     
                     alertTitle.innerHTML = 'DEVICE<br>READY';
+
+                    // Android dashboard menu visibility
+                    if (State.currentDeviceMode === 'android') {
+                        State.androidDashboardEnabled = true;
+                        const dashNav = document.getElementById('nav-android-dashboard');
+                        if (dashNav) dashNav.style.display = 'block';
+                    }
                 }
                 else if (status === 'unauthorized') {
     
