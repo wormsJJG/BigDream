@@ -138,7 +138,6 @@ export function initScanController(ctx) {
     const openScanFileBtn = document.getElementById('select-file-btn');
     if (openScanFileBtn) {
         openScanFileBtn.addEventListener('click', async () => {
-
             openScanFileBtn.disabled = true;
             openScanFileBtn.textContent = "파일 여는 중...";
 
@@ -147,30 +146,65 @@ export function initScanController(ctx) {
 
                 if (result.success) {
                     const data = result.data;
-                    const osMode = result.osMode; // 저장된 데이터에서 OS 모드를 가져옴
+                    const osMode = result.osMode;
 
-                    // 1. 상태 업데이트 (렌더링에 OS 모드가 필요하므로)
-                    State.currentDeviceMode = normalizeDeviceMode(osMode || data?.deviceInfo?.os) || osMode;
+                    // 1) 상태 업데이트
+                    State.currentDeviceMode = osMode;
                     State.lastScanData = data;
                     window.lastScanData = data;
 
-                    // 2. UI 전환
-                    ViewManager.activateMenu('nav-result');
-                    ViewManager.showScreen(loggedInView, 'scan-results-screen');
-                    requestAnimationFrame(() => {
-                        ResultsRenderer.render(data);
-                    });
-                    // 3. 네비게이션 버튼 표시
-                    document.getElementById('nav-create').classList.add('hidden');
-                    document.getElementById('nav-open').classList.add('hidden');
-                    document.getElementById('nav-result').classList.remove('hidden');
+                    // 2) UI 전환
+                    // 만약 에러가 여기서 난다면 아래 줄을 주석 처리해보세요.
+                    try { ViewManager.activateMenu('nav-result'); } catch (e) { }
 
-                    await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo.model}`);
+                    ViewManager.showScreen(loggedInView, 'scan-results-screen');
+
+                    requestAnimationFrame(() => {
+                        try {
+                            ResultsRenderer.render(data);
+                        } catch (e) {
+                            console.error('[BD-Scanner] ResultsRenderer.render failed:', e);
+                        }
+
+                        // 3) 첫 진입 흰 화면 방지 
+                        const sections = document.querySelectorAll('.result-content-section');
+                        if (sections.length > 0) {
+                            sections.forEach(sec => {
+                                if (sec.id === 'res-summary') {
+                                    sec.style.display = 'block';
+                                    sec.classList.add('active');
+                                } else {
+                                    sec.style.display = 'none';
+                                    sec.classList.remove('active');
+                                }
+                            });
+                        }
+
+                        // 탭 하이라이트 강제 적용
+                        const firstTab = document.querySelector('.res-tab[data-target="res-summary"]');
+                        if (firstTab) {
+                            document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
+                            firstTab.classList.add('active');
+                        }
+                    });
+
+                    // 4) 네비 버튼 표시/숨김 
+                    const navCreate = document.getElementById('nav-create');
+                    const navOpen = document.getElementById('nav-open');
+                    const navResult = document.getElementById('nav-result');
+
+                    if (navCreate) navCreate.classList.add('hidden');
+                    if (navOpen) navOpen.classList.add('hidden');
+                    if (navResult) navResult.classList.remove('hidden');
+
+                    await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
 
                 } else if (result.message !== '열기 취소') {
                     await CustomUI.alert(`❌ 파일 열기 실패: ${result.error || result.message}`);
                 }
+
             } catch (error) {
+                console.error("Critical Error:", error);
                 await CustomUI.alert(`시스템 오류: ${error.message}`);
             } finally {
                 openScanFileBtn.disabled = false;
@@ -183,25 +217,46 @@ export function initScanController(ctx) {
         currentLogId: null,
 
         toggleLaser(isVisible) {
-            const beam = document.getElementById('scannerBeam');
-            if (beam) {
-                beam.style.display = isVisible ? 'block' : 'none';
-                console.log(`[UI] 레이저 빔 상태 변경: ${isVisible ? 'ON' : 'OFF'}`);
+            const show = !!isVisible;
+
+            // Android: dashboard beam
+            const dashBeam = document.getElementById('dashboardScannerBeam');
+            // iOS(또는 legacy progress): progress beam
+            const legacyBeam = document.getElementById('scannerBeam');
+
+            if (State.currentDeviceMode === 'android') {
+                if (dashBeam) dashBeam.style.display = show ? 'block' : 'none';
+                // 혹시 남아있는 legacy beam이 보이지 않게 안전하게 끔
+                if (legacyBeam) legacyBeam.style.display = 'none';
             } else {
-                console.error('[UI] scannerBeam 요소를 찾을 수 없습니다.');
+                if (legacyBeam) legacyBeam.style.display = show ? 'block' : 'none';
+                if (dashBeam) dashBeam.style.display = 'none';
             }
         },
 
         async startAndroidScan() {
             this.toggleLaser(true);
 
-            this.resetSmartphoneUI();
+            // 데이터 입자들을 보이게 설정
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.display = 'block';
+                p.style.opacity = '1';
+            });
 
-            this.startAndroidDashboardPolling();
+            const alertText = document.getElementById('phoneStatusAlert');
+            if (alertText) {
+                alertText.innerHTML = 'SYSTEM<br>SCANNING';
+                alertText.style.color = '#00d2ff';
+            }
+
+            // 폴링 및 UI 리셋
+            this.resetSmartphoneUI();
+            this.startAndroidDashboardPolling()
 
             try {
                 // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
-                ViewManager.updateProgress(1, "디바이스 파일 시스템에 접근 중...");
+                ViewManager.updateProgress(0, "디바이스 파일 시스템에 접근 중...");
 
                 // 2. 실제 데이터 수집
                 const scanData = await window.electronAPI.runScan();
@@ -368,6 +423,8 @@ export function initScanController(ctx) {
         },
 
         async startIosScan() {
+            this.toggleLaser(true)
+
             ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
                 // 1. 실제 검사 수행
@@ -596,30 +653,48 @@ export function initScanController(ctx) {
             // 진행바를 100%로 만들고 완료 문구 출력
             ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
 
-            // 1. 레이저 애니메이션 즉시 정지
+            // 휴대폰 내부 비주얼 변경 (애니메이션 종료)
+
+            // 1. 레이저 빔 즉시 정지
             this.toggleLaser(false);
 
-            // 2. 스마트폰 내부 화면 시각 효과 변경 
-            const scanScreen = document.getElementById('scan-dashboard-screen');
-            const phoneFrame = scanScreen ? scanScreen.querySelector('.phone-frame') : null;
+            // 2. 입자 애니메이션 중단 및 숨김
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.opacity = '0';
+                p.style.display = 'none';
+            });
 
-            if (phoneFrame) {
-                // 기존 검사 진행 텍스트 변경
-                const runningText = document.getElementById('android-scan-running-text');
-                if (runningText) {
-                    runningText.textContent = '검사 완료';
-                    runningText.style.color = 'var(--success-color)';
-                }
+            // 3. 스마트폰 내부 화면 요소 찾기 
+            const hackIcon = document.querySelector('.hack-icon');
+            const hackAlert = document.getElementById('phoneStatusAlert');
 
-                // 대시보드용 로그 컨테이너에 마지막 완료 메시지 추가
-                const logContainer = document.getElementById('log-container');
-                if (logContainer) {
-                    const doneLine = document.createElement('div');
-                    doneLine.className = 'log-line';
-                    doneLine.innerHTML = `<span style="color:var(--success-color)">[SYSTEM] Security Scan Successfully Completed.</span>`;
-                    logContainer.appendChild(doneLine);
-                    logContainer.scrollTop = logContainer.scrollHeight;
-                }
+            if (hackIcon) {
+                hackIcon.className = "fas fa-check-circle hack-icon";
+                hackIcon.style.color = "var(--success-color)";
+                hackIcon.style.animation = "none";
+            }
+
+            if (hackAlert) {
+                hackAlert.innerHTML = 'SCAN<br>COMPLETED';
+                hackAlert.style.color = 'var(--success-color)';
+                hackAlert.style.textShadow = '0 0 15px var(--success-color)';
+            }
+
+            // 4. 대시보드 하단 텍스트 및 로그 처리
+            const runningText = document.getElementById('android-scan-running-text');
+            if (runningText) {
+                runningText.textContent = '검사 완료';
+                runningText.style.color = 'var(--success-color)';
+            }
+
+            const logContainer = document.getElementById('log-container');
+            if (logContainer) {
+                const doneLine = document.createElement('div');
+                doneLine.className = 'log-line';
+                doneLine.innerHTML = `<span style="color:var(--success-color)">[SYSTEM] Security Scan Successfully Completed.</span>`;
+                logContainer.appendChild(doneLine);
+                logContainer.scrollTop = logContainer.scrollHeight;
             }
 
             // 3. 데이터 저장
@@ -1502,6 +1577,7 @@ export function initScanController(ctx) {
                 }
 
                 if (sortKey === 'nameAsc') {
+                  
                     const n = getName(a).localeCompare(getName(b));
                     if (n !== 0) return n;
                     const p = getPkg(a).localeCompare(getPkg(b));
