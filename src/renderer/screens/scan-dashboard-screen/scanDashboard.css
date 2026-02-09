@@ -241,24 +241,22 @@
   position: absolute;
   left: 0;
   right: 0;
-  height: 6px;
-  top: -60px;
+  height: 15px;
+  z-index: 10;
+  
+  background: linear-gradient(to bottom, transparent, var(--primary-color), transparent);
+  box-shadow: 0 0 12px var(--primary-color);
+  opacity: 0.8;
 
-  /* light-theme friendly beam */
-  background: linear-gradient(90deg, transparent, rgba(58,83,155,0.70), transparent);
-  box-shadow: 0 0 14px rgba(58,83,155,0.55);
-  opacity: 0.95;
-  z-index: 2;
-
-  animation: dashboardScanLine 1.9s infinite linear;
+  animation: dashboardScanLine 2.2s infinite ease-in-out;
 }
 
-/* Moves from above frame to below frame */
-@keyframes dashboardScanLine{
-  0%   { transform: translateY(-80px); }
-  100% { transform: translateY(360px); } /* 260px frame + extra */
+@keyframes dashboardScanLine {
+  0%   { top: -20px; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 260px; opacity: 0; }
 }
-
 #scan-dashboard-screen .scan-running-text{
   margin: 14px 0 0;
   font-size: 20px;
