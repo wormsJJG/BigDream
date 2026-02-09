@@ -195,14 +195,18 @@ export function initActionHandlers(ctx) {
             saveResultsBtn.textContent = "저장 중...";
 
             try {
-                const result = await window.electronAPI.saveScanResult(State.lastScanData);
+                const pureData = JSON.parse(JSON.stringify(State.lastScanData));
+
+                const result = await window.electronAPI.saveScanResult(pureData);
+
                 if (result.success) {
                     await CustomUI.alert(result.message);
                 } else {
                     await CustomUI.alert(`저장 실패: ${result.error || result.message}`);
                 }
             } catch (error) {
-                await CustomUI.alert(`로컬 저장 오류: ${error.message}`);
+                console.error("Serialization Error:", error);
+                await CustomUI.alert(`로컬 저장 오류: 데이터 형식이 올바르지 않습니다.`);
             } finally {
                 saveResultsBtn.disabled = false;
                 saveResultsBtn.textContent = "💾 로컬 저장";
@@ -258,10 +262,10 @@ export function initActionHandlers(ctx) {
             document.getElementById('print-date').textContent = dateStr;
             document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-            // 💡 [수정] 검사 업체명 바인딩 (State에서 가져옴)
+            // 검사 업체명 바인딩 (State에서 가져옴)
             document.getElementById('print-agency-name').textContent = State.agencyName;
 
-            // 💡 [추가] 검사자 정보 테이블 바인딩
+            // 검사자 정보 테이블 바인딩
             const examinerTable = document.getElementById('print-examiner-info');
             if (examinerTable) {
                 examinerTable.innerHTML = `
@@ -332,32 +336,41 @@ export function initActionHandlers(ctx) {
             const fileBody = document.getElementById('print-file-body');
 
             if (isIos) {
-                // 💡 [수정] iOS일 경우 파일 시스템 분석 섹션 전체 숨김
                 if (fileSection) fileSection.style.display = 'none';
             } else {
-                // Android일 경우 섹션 표시
                 if (fileSection) fileSection.style.display = 'block';
 
-                // APK 목록 바인딩
-                if (data.apkFiles.length > 0) {
-                    fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('');
+                if (data.apkFiles && data.apkFiles.length > 0) {
+                    fileBody.innerHTML = data.apkFiles.map((f, i) => {
+                        // f가 객체인 경우와 문자열인 경우를 모두 대응합니다.
+                        // 보통 f.apkPath 또는 f.packageName에 실제 경로가 들어있습니다.
+                        const filePath = (typeof f === 'object') ? (f.apkPath || f.path || f.packageName || '경로 정보 없음') : f;
+
+                        return `
+                <tr>
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td style="word-break:break-all; font-family:monospace; font-size:11px;">
+                        ${filePath}
+                    </td>
+                </tr>`;
+                    }).join('');
                 } else {
                     fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
                 }
             }
 
 
-            // 7. [부록] 전체 앱 목록 (Android 전용 앱 목록 표시 로직 유지)
+            // 7. 전체 앱 목록 
             const printArea = document.getElementById('printable-report');
-            // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
+            // 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
             const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
 
             if (isIos) {
-                // 💡 [수정] iOS일 경우 5번 섹션 숨김 (기존 로직)
+                // iOS일 경우 5번 섹션 숨김 
                 const fileSection = document.getElementById('print-file-system-section');
                 if (fileSection) fileSection.style.display = 'none';
 
-                // 💡 [수정] iOS일 경우 부록 섹션 번호를 6번에서 5번으로 변경
+                // iOS일 경우 부록 
                 if (appendixHeader) {
                     appendixHeader.textContent = appendixHeader.textContent.replace(/^6\./, '5.');
                 }
@@ -366,11 +379,10 @@ export function initActionHandlers(ctx) {
                 const fileSection = document.getElementById('print-file-system-section');
                 if (fileSection) fileSection.style.display = 'block';
 
-                // Android일 경우 부록 섹션 번호를 6번으로 유지
+                // Android일 경우 부록 
                 if (appendixHeader) {
                     appendixHeader.textContent = appendixHeader.textContent.replace(/^5\./, '6.');
                 }
-                // ... (기존 APK 목록 바인딩 로직 유지) ...
             }
 
             const appGrid = document.getElementById('print-all-apps-grid');
@@ -380,23 +392,38 @@ export function initActionHandlers(ctx) {
             const sortedApps = [...data.allApps].sort((a, b) => a.packageName.localeCompare(b.packageName));
 
             sortedApps.forEach(app => {
-
                 const div = document.createElement('div');
+                div.className = 'compact-item'; // 기본 스타일
 
-                if (app.reason) {
-                    // 1순위: 위협 앱 (빨간색)
-                    div.className = 'compact-item compact-threat';
-                } else if (app.isSideloaded) {
-                    // 2순위: 사이드로딩 앱 (회색)
-                    div.className = 'compact-item compact-sideload';
-                } else {
-                    // 3순위: 일반 앱 (흰색)
-                    div.className = 'compact-item';
+                // 1. [빨간색] 진짜 스파이앱인 경우 (3, 4번 섹션에 등장하는 앱)
+                const isSpy = data.suspiciousApps.some(s => s.packageName === app.packageName);
+
+                // 2. [노란색] 개인정보 유출 위협인 경우 (부록에서만 강조할 앱)
+                const isPrivacyRisk = data.privacyThreatApps && data.privacyThreatApps.some(p => p.packageName === app.packageName);
+
+                if (isSpy) {
+                    // 스파이앱: 빨간색 강조
+                    div.classList.add('compact-threat');
+                    div.style.backgroundColor = '#ffcccc';
+                    div.style.color = '#cc0000';
+                    div.style.fontWeight = 'bold';
+                    div.textContent = `[위협] ${formatAppName(app.packageName)} (${app.packageName})`;
                 }
-
-                // 앱 이름 표시 (위협이면 앞에 [위협] 표시)
-                const prefix = app.reason ? '[위협] ' : (app.isSideloaded ? '[외부] ' : '');
-                div.textContent = `${prefix}${formatAppName(app.packageName)} (${app.packageName})`;
+                else if (isPrivacyRisk) {
+                    div.style.backgroundColor = '#fff3cd';
+                    div.style.border = '1px solid #ffeeba';
+                    div.style.color = '#856404';
+                    div.textContent = `[주의] ${formatAppName(app.packageName)} (${app.packageName})`;
+                }
+                else if (app.isSideloaded) {
+                    // 사이드로딩(외부설치): 회색 강조
+                    div.classList.add('compact-sideload');
+                    div.textContent = `[외부] ${formatAppName(app.packageName)} (${app.packageName})`;
+                }
+                else {
+                    // 일반 앱: 흰색
+                    div.textContent = `${formatAppName(app.packageName)} (${app.packageName})`;
+                }
 
                 appGrid.appendChild(div);
             });
