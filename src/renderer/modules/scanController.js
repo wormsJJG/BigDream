@@ -23,6 +23,85 @@ export function initScanController(ctx) {
         mgr.show(appData, displayName);
     }
     const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
+
+    // [Patch] Normalize loaded scan JSON so "검사 열기"에서도 목록(앱/백그라운드/APK)이 안정적으로 렌더링되도록 보정
+    function normalizeLoadedScanData(payload, osMode) {
+        const mode = normalizeDeviceMode(osMode || payload?.deviceInfo?.os || payload?.osMode || payload?.deviceMode);
+        if (!payload || mode !== 'android') return payload;
+
+        // 1) allApps 보정 (다양한 키 호환)
+        const candidates = [
+            payload.allApps,
+            payload.apps,
+            payload.applications,
+            payload.installedApps,
+            payload.appList,
+            payload.targetApps,
+            payload?.results?.allApps,
+            payload?.results?.apps,
+            payload?.mvtResults?.apps, // 혹시 과거/혼합 포맷
+        ];
+        const apps = candidates.find(v => Array.isArray(v)) || [];
+        payload.allApps = Array.isArray(payload.allApps) ? payload.allApps : apps;
+
+        // 2) APK 목록 보정 (다양한 키 호환)
+        const apkCandidates = [
+            payload.apkFiles,
+            payload.apks,
+            payload.apkList,
+            payload.foundApks,
+            payload?.results?.apkFiles,
+            payload?.results?.apks,
+        ];
+        const apks = apkCandidates.find(v => Array.isArray(v)) || [];
+        payload.apkFiles = Array.isArray(payload.apkFiles) ? payload.apkFiles : apks;
+
+        // 2-1) 런타임 캐시 필드 제거 (검사 파일을 저장/불러오기 할 때 DOM 객체/Promise가 섞이면 렌더링이 깨집니다)
+        const stripRuntimeFields = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+            // 이 값들은 실행 중에만 의미가 있고, 파일 저장 시에는 제거되어야 합니다.
+            delete obj.__bd_el;
+            delete obj.__bd_fetchPromise;
+            delete obj.__bd_index;
+            delete obj.__bd_cached; // 혹시 있을 수 있는 잔여 키
+        };
+
+        (payload.allApps || []).forEach(stripRuntimeFields);
+        (payload.apkFiles || []).forEach(stripRuntimeFields);
+
+        // 3) 백그라운드 실행 표시 보정
+        // - 최신 포맷: allApps[*].isRunningBg가 이미 존재
+        // - 구/혼합 포맷: runningApps / backgroundApps / bgApps / runningPackages 등에서 패키지 추출 후 플래그 부여
+        const hasRunningFlag = Array.isArray(payload.allApps) && payload.allApps.some(a => a && typeof a.isRunningBg === 'boolean');
+        if (!hasRunningFlag) {
+            const runLists = [
+                payload.runningApps,
+                payload.backgroundApps,
+                payload.bgApps,
+                payload.runningPackages,
+                payload.bgPackages,
+                payload?.results?.runningApps,
+                payload?.results?.backgroundApps,
+            ];
+            const raw = runLists.find(v => Array.isArray(v)) || [];
+            const pkgSet = new Set(raw.map(x => (typeof x === 'string') ? x : (x?.packageName || x?.pkg || x?.name)).filter(Boolean));
+            if (pkgSet.size) {
+                (payload.allApps || []).forEach(app => {
+                    if (!app || !app.packageName) return;
+                    if (pkgSet.has(app.packageName)) app.isRunningBg = true;
+                });
+            }
+        }
+
+        // 4) runningCount 누락 보정
+        if (typeof payload.runningCount !== 'number') {
+            const c = (payload.allApps || []).filter(a => a && a.isRunningBg).length;
+            payload.runningCount = c;
+        }
+
+        return payload;
+    }
+
     // [Patch] reset Android dashboard UI so previous scan residue doesn't remain
     function bdResetAndroidDashboardUI() {
         // log lines
@@ -312,6 +391,9 @@ export function initScanController(ctx) {
                     const data = result.data;
                     const osMode = result.osMode;
 
+
+                    // [Patch] '검사 열기' 데이터 포맷 보정(앱/백그라운드/APK 목록)
+                    normalizeLoadedScanData(data, osMode);
                     // 1) 상태 업데이트
                     State.currentDeviceMode = osMode;
                     State.lastScanData = data;
@@ -1779,10 +1861,14 @@ export function initScanController(ctx) {
             // ✅ 검색/정렬 시 아이콘 재로딩 방지: listKey 별 DOM 캐시
             if (!app.__bd_el) app.__bd_el = {};
             const cachedEl = app.__bd_el[listKey];
-            if (cachedEl) {
+            // 파일에서 불러온 데이터에는 __bd_el이 "{}" 같은 일반 객체로 남아 있을 수 있어 DOM 재사용을 막아야 합니다.
+            if (cachedEl && typeof cachedEl === 'object' && cachedEl.nodeType === 1) {
                 // 이미 만들어진 DOM이 있으면 재사용 (아이콘/타이틀 재요청 없음)
                 container.appendChild(cachedEl);
                 return;
+            } else if (cachedEl) {
+                // 잘못된 캐시(plain object 등) 제거 후 정상 생성 흐름으로 진행
+                try { delete app.__bd_el[listKey]; } catch (_) {}
             }
 
             const isSuspicious = app.reason ? true : false;
