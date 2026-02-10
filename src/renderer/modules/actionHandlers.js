@@ -398,10 +398,20 @@ export function initActionHandlers(ctx) {
                 // Android: 기존 APK 목록 바인딩
                 if (fileSection) fileSection.style.display = 'block';
 
-                if (apkFiles.length > 0) {
-                    fileBody.innerHTML = apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('');
-                } else {
-                    fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
+                if (data.apkFiles && data.apkFiles.length > 0) {
+                    fileBody.innerHTML = data.apkFiles.map((f, i) => {
+                        // f가 객체인 경우와 문자열인 경우를 모두 대응합니다.
+                        // 보통 f.apkPath 또는 f.packageName에 실제 경로가 들어있습니다.
+                        const filePath = (typeof f === 'object') ? (f.apkPath || f.path || f.packageName || '경로 정보 없음') : f;
+
+                        return `
+                <tr>
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td style="word-break:break-all; font-family:monospace; font-size:11px;">
+                        ${filePath}
+                    </td>
+                </tr>`;
+                    }).join('');
                 }
             }
 
@@ -410,23 +420,6 @@ export function initActionHandlers(ctx) {
             const printArea = document.getElementById('printable-report');
             // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
             const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
-
-            // if (isIos) {
-            //     // 💡 [수정] iOS일 경우 5번 섹션 숨김 (기존 로직)
-            //     // const fileSection = document.getElementById('print-file-system-section');
-            //     // if (fileSection) fileSection.style.display = 'none';
-
-            //     // 💡 [수정] iOS일 경우 부록 섹션 번호를 6번에서 5번으로 변경
-            //     /* iOS에서도 부록 섹션 번호는 6번으로 유지합니다. */
-            // } else {
-            //     // Android일 경우 섹션 표시
-            //     const fileSection = document.getElementById('print-file-system-section');
-            //     if (fileSection) fileSection.style.display = 'block';
-
-            //     // Android일 경우 부록 섹션 번호를 6번으로 유지
-            //     /* Android 부록 섹션 번호는 기존(6번) 유지 */
-            //     // ... (기존 APK 목록 바인딩 로직 유지) ...
-            // }
 
             const appGrid = document.getElementById('print-all-apps-grid');
             appGrid.innerHTML = '';

@@ -399,109 +399,225 @@ export function initScanController(ctx) {
             }
         },
 
-        async startAndroidScan() {
+                async startAndroidScan() {
 
-            bdResetAndroidDashboardUI();
-            // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
-            State.lastScanData = null;
-            window.lastScanData = null;
-            this.toggleLaser(true);
+                    bdResetAndroidDashboardUI();
+                    // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
+                    State.lastScanData = null;
+                    window.lastScanData = null;
 
-            // 데이터 입자들을 보이게 설정
-            const particles = document.querySelectorAll('.data-particle');
-            particles.forEach(p => {
-                p.style.display = 'block';
-                p.style.opacity = '1';
-            });
+                    this.toggleLaser(true);
 
-            const alertText = document.getElementById('phoneStatusAlert');
-            if (alertText) {
-                alertText.innerHTML = 'SYSTEM<br>SCANNING';
-                alertText.style.color = '#00d2ff';
-            }
+                    // 데이터 입자들을 보이게 설정
+                    const particles = document.querySelectorAll('.data-particle');
+                    particles.forEach(p => {
+                        p.style.display = 'block';
+                        p.style.opacity = '1';
+                    });
 
-            // 폴링 및 UI 리셋
-            this.resetSmartphoneUI();
-            this.startAndroidDashboardPolling()
-
-            try {
-                // 1. 초기 멘트 및 리얼 검사 시작 (백그라운드)
-                ViewManager.updateProgress(0, "디바이스 파일 시스템에 접근 중...");
-
-                // 2. 실제 데이터 수집
-                const scanData = await window.electronAPI.runScan();
-                const apps = scanData.allApps || scanData.apps || scanData.applications || scanData.installedApps || scanData.appList || scanData.targetApps || scanData.mvtResults?.apps || scanData.mvtResults?.applications || [];
-                const totalApps = apps.length;
-
-                // 앱이 하나도 없는 경우(예외)는 바로 종료
-                if (totalApps === 0) {
-                    this.toggleLaser(false);
-                    this.finishScan(scanData);
-                    return;
-                }
-
-                // 시간 계산
-                let targetMinutes;
-
-                if (State.userRole === 'user') {
-                    // 일반 계정: 보안 정책상 20~30분 사이의 랜덤값 강제 부여
-                    targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
-                    console.log(`[Security Policy] 일반 업체 - 랜덤 시간 적용: ${targetMinutes}분`);
-                } else {
-                    // 관리자(admin) 및 총판(distributor): 설정된 히든 메뉴 값 사용 (없으면 0)
-                    targetMinutes = State.androidTargetMinutes || 0;
-                    console.log(`[Security Policy] 특권 계정 - 설정 시간 적용: ${targetMinutes}분`);
-                }
-
-                const totalDurationMs = targetMinutes * 60 * 1000;
-                // 앱 하나당 보여줄 분석 시간
-                const timePerApp = targetMinutes > 0
-                    ? Math.max(35, totalDurationMs / totalApps)
-                    : 35;
-
-                console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분, 개당 ${(timePerApp / 1000).toFixed(2)}초 소요`);
-
-                let currentIndex = 0;
-
-                // 애니메이션 루프 함수
-                // [3단계] 애니메이션 루프 함수
-                const processNextApp = () => {
-                    // 종료 조건: 모든 앱 분석이 끝났을 때
-                    if (currentIndex >= totalApps) {
-                        console.log(`[Theater Mode] 검사 완료: 총 ${totalApps}개 분석됨`);
-                        this.toggleLaser(false); // 레이저 정지
-                        this.finishScan(scanData); // 완료 처리 
-                        return;
+                    const alertText = document.getElementById('phoneStatusAlert');
+                    if (alertText) {
+                        alertText.innerHTML = 'SYSTEM<br>SCANNING';
+                        alertText.style.color = '#00d2ff';
                     }
 
-                    const app = apps[currentIndex];
-                    // UI 가독성을 위해 앱 이름만 포맷팅
-                    const appName = Utils.formatAppName(app.packageName);
+                    // 폴링 및 UI 리셋
+                    this.resetSmartphoneUI();
+                    this.startAndroidDashboardPolling();
 
-                    // 진행률 계산 (최대 99%까지)
-                    const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
+                    // --------------------------------------------
+                    // Phase 1: 메타데이터 수집(0~98) 연출 -> runScan 완료 시 100
+                    // Phase 2: 검사 진행(시간 기반 0~99) -> finishScan에서 100 마무리
+                    // --------------------------------------------
 
-                    // 화면 갱신: 스마트폰 내부와 외부 프로그레스 바 동기화
-                    ViewManager.updateProgress(
-                        Math.min(99, percent),
-                        `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`
-                    );
+                    const startPhase1AdbProgress = () => {
+                        let alive = true;
+                        let p = 0;
 
-                    currentIndex++;
+                        const start = Date.now();
+                        const tickMs = 120;
 
-                    // 계산된 시간만큼 대기 후 다음 앱으로 이동
-                    setTimeout(processNextApp, timePerApp);
-                };
+                        // 연출용 기대시간(평균). 너무 길면 답답해지고, 너무 짧으면 후반이 오래 머뭅니다.
+                        const expectedMs = 8500;
 
-                // 루프 시작
-                processNextApp();
+                        // "ADB..." 반복을 피하고, 포렌식 제품 느낌의 단계명으로 표시
+                        const messages = [
+                            '디바이스 연결 확인',
+                            '시스템 메타데이터 수집',
+                            '앱 목록 인덱싱',
+                            '권한/환경 점검',
+                            '분석 전처리 준비'
+                        ];
 
-            } catch (error) {
-                // 에러 발생 시 레이저를 끄고 에러 핸들링
-                this.toggleLaser(false);
-                this.handleError(error);
-            }
-        },
+                        const timer = setInterval(() => {
+                            if (!alive) return;
+
+                            const elapsed = Date.now() - start;
+                            const t = Math.min(1, elapsed / expectedMs); // 0~1
+
+                            // ease-out(초반 빠르고 후반 느리게)
+                            const eased = 1 - Math.pow(1 - t, 3);
+
+                            // 기본 목표치: 0~98
+                            let target = 98 * eased;
+
+                            // ✅ 90%부터 천천히(남은 구간을 더 완만하게)
+                            if (target > 90) {
+                                // 90~98 구간을 느리게 압축
+                                const slowPart = (target - 90) * 0.35;
+                                target = 90 + slowPart;
+
+                                // 멈춤 느낌 제거용 미세 워블
+                                const wobble = (Math.random() - 0.5) * 0.6; // -0.3 ~ +0.3
+                                target = Math.min(98, Math.max(90, target + wobble));
+                            }
+
+                            // 스무딩: 목표치를 따라가도록(90 이후 더 느리게)
+                            const follow = target < 90 ? 0.24 : 0.12;
+                            p = p + (target - p) * follow;
+
+                            const shown = Math.max(0, Math.min(98, Math.round(p)));
+
+                            // 2.5초마다 메시지 변경
+                            const msg = messages[Math.floor(elapsed / 2500) % messages.length];
+
+                            ViewManager.updateProgress(shown, `${msg}...`);
+                        }, tickMs);
+
+                        return {
+                            finish: () => {
+                                alive = false;
+                                clearInterval(timer);
+                                ViewManager.updateProgress(100, '수집 완료. 분석을 시작합니다...');
+                            },
+                            cancel: () => {
+                                alive = false;
+                                clearInterval(timer);
+                            }
+                        };
+                    };
+
+                    const startPhase2TimedProgress = ({ totalDurationMs, apps, onDone }) => {
+                        const totalApps = apps.length;
+                        const start = Date.now();
+                        const tickInterval = 200;
+
+                        const tick = () => {
+                            const elapsed = Date.now() - start;
+                            const ratio = totalDurationMs > 0 ? Math.min(1, elapsed / totalDurationMs) : 1;
+
+                            // 99%까지만(완료는 finishScan에서 100)
+                            const percent = Math.min(99, Math.floor(ratio * 100));
+
+                            // 시간 비율로 앱 인덱스도 그럴듯하게 표시
+                            const idx = Math.min(totalApps, Math.max(1, Math.floor(ratio * totalApps)));
+                            const app = apps[idx - 1];
+                            const appName = app?.packageName ? Utils.formatAppName(app.packageName) : '...';
+
+                            ViewManager.updateProgress(percent, `[${idx}/${totalApps}] 검사 진행중... ${appName}`);
+
+                            if (ratio >= 1) {
+                                onDone?.();
+                                return;
+                            }
+                            setTimeout(tick, tickInterval);
+                        };
+
+                        tick();
+                    };
+
+                    try {
+                        // Phase 1 시작(runScan 대기 동안 연출)
+                        const phase1 = startPhase1AdbProgress();
+
+                        // 실제 데이터 수집/분석
+                        const scanData = await window.electronAPI.runScan();
+
+                        // Phase 1 종료
+                        phase1.finish();
+
+                        const apps =
+                            scanData.allApps ||
+                            scanData.apps ||
+                            scanData.applications ||
+                            scanData.installedApps ||
+                            scanData.appList ||
+                            scanData.targetApps ||
+                            scanData.mvtResults?.apps ||
+                            scanData.mvtResults?.applications ||
+                            [];
+
+                        const totalApps = apps.length;
+
+                        if (totalApps === 0) {
+                            this.toggleLaser(false);
+                            this.finishScan(scanData);
+                            return;
+                        }
+
+                        // 목표 시간 결정
+                        let targetMinutes;
+                        if (State.userRole === 'user') {
+                            // 일반 계정: 보안 정책상 20~30분 랜덤
+                            targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
+                            console.log(`[Security Policy] 일반 업체 - 랜덤 시간 적용: ${targetMinutes}분`);
+                        } else {
+                            // 특권 계정: 설정 값 사용(없으면 0)
+                            targetMinutes = State.androidTargetMinutes || 0;
+                            console.log(`[Security Policy] 특권 계정 - 설정 시간 적용: ${targetMinutes}분`);
+                        }
+
+                        // Phase 2 시작 전 0%로 리셋 + 문구 전환
+                        setTimeout(() => {
+                            ViewManager.updateProgress(0, '검사 진행중...');
+                        }, 300);
+
+                        if (targetMinutes > 0) {
+                            const totalDurationMs = targetMinutes * 60 * 1000;
+                            console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분(시간 기반)`);
+
+                            startPhase2TimedProgress({
+                                totalDurationMs,
+                                apps,
+                                onDone: () => {
+                                    this.toggleLaser(false);
+                                    this.finishScan(scanData);
+                                }
+                            });
+                        } else {
+                            // 설정 시간이 0이면 기존 빠른 모드 fallback
+                            const timePerApp = 35;
+                            console.log(`[Theater Mode] 빠른 모드, 총 ${totalApps}개 앱`);
+
+                            let currentIndex = 0;
+                            const processNextApp = () => {
+                                if (currentIndex >= totalApps) {
+                                    this.toggleLaser(false);
+                                    this.finishScan(scanData);
+                                    return;
+                                }
+
+                                const app = apps[currentIndex];
+                                const appName = Utils.formatAppName(app.packageName);
+                                const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
+
+                                ViewManager.updateProgress(
+                                    Math.min(99, percent),
+                                    `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`
+                                );
+
+                                currentIndex++;
+                                setTimeout(processNextApp, timePerApp);
+                            };
+
+                            processNextApp();
+                        }
+                    } catch (error) {
+                        // 에러 발생 시 레이저를 끄고 에러 핸들링
+                        this.toggleLaser(false);
+                        this.handleError(error);
+                    }
+                },
 
         async startLogTransaction(deviceMode) {
             const user = authService.getCurrentUser?.();
