@@ -63,14 +63,14 @@
       "target": [
         "nsis"
       ],
+      "icon": "assets/setUpIcon.ico",
       "signtoolOptions": {
         "signingHashAlgorithms": [
           "sha256"
         ],
         "certificateSubjectName": "BigDream Corp",
         "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1"
-      },
-      "icon": "assets/setUpIcon.ico"
+      }
     }
   },
   "nsis": {
