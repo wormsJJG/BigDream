@@ -222,6 +222,16 @@ export function initClientDevice(ctx) {
                 const resetBtn = document.getElementById('reset-client-info-btn');
                 if (resetBtn) resetBtn.click();
 
+                try {
+                    State.lastScanData = null;
+                    State.__bd_lastScanData = null;
+                    State.__bd_scanInProgress = false;
+                    State.__bd_scanPhase = 'idle';
+                } catch (e) { }
+
+                try { window.lastScanData = null; } catch (e) { }
+                try { window.__bd_lastScanData = null; } catch (e) { }
+
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
             }
         });
