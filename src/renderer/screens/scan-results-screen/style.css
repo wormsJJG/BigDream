@@ -1,0 +1,772 @@
+/* --- [화면 5] 결과 대시보드 (전문가 스타일) --- */
+#scan-results-screen .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+#scan-results-screen .header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* 1. 기기 정보 그리드 */
+#scan-results-screen .device-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-top: 15px;
+}
+
+#scan-results-screen .info-item {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+}
+
+#scan-results-screen .info-item .label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+}
+
+#scan-results-screen .info-item .value {
+    display: block;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* 2. 앱 아이콘 그리드 */
+#scan-results-screen .app-grid {
+    display: grid; 
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 15px; 
+    margin-top: 15px; 
+    
+    /* [수정됨] 높이를 1.3배 증가 (300px -> 400px) */
+    max-height: 400px; 
+    
+    overflow-y: auto; 
+    padding: 5px;
+}
+
+#scan-results-screen .app-item {
+    background: white;
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 15px 5px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#scan-results-screen .app-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+}
+
+#scan-results-screen .app-item.suspicious {
+    border-color: var(--danger-color);
+    background-color: #fff5f5;
+}
+
+#scan-results-screen .app-icon-wrapper {
+    width: 50px;
+    height: 50px;
+    background-color: #f0f2f5;
+    border-radius: 12px;
+    margin: 0 auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden; /* 이미지가 튀어나가지 않게 자름 */
+    border: 1px solid #e1e4e8;
+    position: relative;
+}
+
+#scan-results-screen .app-real-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* 비율 유지하며 꽉 채움 */
+}
+
+/* 의심 앱은 배경을 붉게 */
+#scan-results-screen .app-item.suspicious .app-icon-wrapper {
+    background-color: #ffeaea;
+    border-color: #ffcccc;
+}
+
+#scan-results-screen .app-icon-placeholder {
+    width: 45px;
+    height: 45px;
+    background-color: #eee;
+    border-radius: 10px;
+    margin: 0 auto 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: bold;
+    color: #666;
+}
+
+#scan-results-screen .app-item.suspicious .app-icon-placeholder {
+    background-color: #ffe0e0;
+    color: var(--danger-color);
+}
+
+#scan-results-screen .app-display-name {
+    font-size: 13px;
+    font-weight: bold;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#scan-results-screen .app-package-sub {
+    font-size: 10px;
+    color: #999;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 3. 파일 리스트 */
+#scan-results-screen .file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-family: monospace;
+    font-size: 13px;
+    color: #555;
+}
+
+#scan-results-screen .file-list li {
+    padding: 5px 0;
+    border-bottom: 1px dashed #eee;
+}
+
+
+/* iOS list grid */
+#scan-results-screen .ios-app-list-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+  padding: 0;
+  margin: 0;
+}
+
+#scan-results-screen .detail-icon-wrapper {
+    width: 70px;
+    height: 70px;
+    background: #eee;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 20px;
+    transition: all 0.3s ease; 
+    border: 3px solid transparent; 
+}
+
+/* 스파이앱일 때 적용될 스타일 */
+#scan-results-screen .detail-icon-wrapper.suspicious {
+    border-color: #d9534f; 
+    background-color: #fff5f5; 
+    box-shadow: 0 0 10px rgba(217, 83, 79, 0.2); 
+}
+
+#scan-results-screen .detail-app-icon {
+    width: 40px;
+}
+
+#scan-results-screen .detail-title-area h2 {
+    margin: 0 0 5px 0;
+    font-size: 22px;
+}
+
+#scan-results-screen #detail-package-name {
+    color: #888;
+    font-family: monospace;
+    margin: 0;
+}
+
+#scan-results-screen .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+#scan-results-screen .detail-item {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+}
+
+#scan-results-screen .d-label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+#scan-results-screen .d-value {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#scan-results-screen .status-safe {
+    color: var(--success-color);
+}
+
+#scan-results-screen .status-danger {
+    color: var(--danger-color);
+}
+
+#scan-results-screen .divider {
+    border: 0;
+    border-top: 1px solid #eee;
+    margin: 20px 0;
+}
+
+/* 권한 리스트 */
+#scan-results-screen .permission-stats {
+    font-size: 13px;
+    color: #666;
+    text-align: right;
+    margin-bottom: 10px;
+}
+
+#scan-results-screen .permission-list-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 15px;
+    background: #fbfbfb;
+    border-radius: 8px;
+    border: 1px solid #eee;
+}
+
+#scan-results-screen .perm-item {
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 20px;
+    border: 1px solid #ddd;
+    font-family: monospace;
+}
+
+#scan-results-screen .perm-granted {
+    background-color: #e8f5e9;
+    border-color: #c8e6c9;
+    color: #2e7d32;
+}
+
+#scan-results-screen .perm-denied {
+    background-color: #f5f5f5;
+    border-color: #eee;
+    color: #aaa;
+    text-decoration: line-through;
+}
+
+#scan-results-screen .badge {
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-right: 5px;
+}
+
+#scan-results-screen .badge-grant {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+#scan-results-screen .badge-deny {
+    background: #f5f5f5;
+    color: #aaa;
+}
+
+
+#scan-results-screen #uninstall-btn {
+    /* 위치 및 크기 */
+    margin-left: auto; /* 헤더의 가장 오른쪽으로 밀어내기 */
+    padding: 10px 20px;
+    
+    /* 폰트 및 색상 */
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: var(--danger-color); /* #e74c3c (빨간색) */
+    
+    /* 테두리 및 모양 */
+    border: none;
+    border-radius: 6px;
+    
+    /* 인터랙션 */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    /* 입체감 (중요한 버튼임을 강조) */
+    box-shadow: 0 4px 6px rgba(231, 76, 60, 0.25);
+    
+    /* 아이콘 정렬 */
+    display: inline-flex;
+    align-items: center;
+    gap: 6px; /* 아이콘과 텍스트 사이 간격 */
+}
+
+/* 마우스 올렸을 때 (Hover) */
+#scan-results-screen #uninstall-btn:hover {
+    background-color: #c0392b; /* 더 진한 빨간색 */
+    transform: translateY(-2px); /* 살짝 위로 떠오름 */
+    box-shadow: 0 6px 12px rgba(231, 76, 60, 0.35);
+}
+
+/* 클릭했을 때 (Active) */
+#scan-results-screen #uninstall-btn:active {
+    transform: translateY(0); /* 다시 가라앉음 */
+    box-shadow: none;
+}
+
+/* 비활성화 상태 (처리 중일 때) */
+#scan-results-screen #uninstall-btn:disabled {
+    background-color: #95a5a6; /* 회색 */
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+#scan-results-screen .warning-button {
+    background-color: #F0AD4E; /* 주황색 */
+    color: white;
+    border: none;
+    font-weight: 600;
+    box-shadow: 0 4px 6px rgba(240, 173, 78, 0.25);
+    display: inline-flex; align-items: center; gap: 5px;
+}
+
+#scan-results-screen .warning-button:hover {
+    background-color: #ec971f;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(240, 173, 78, 0.35);
+}
+
+#scan-results-screen .warning-button:active { transform: translateY(0); box-shadow: none; }
+
+#scan-results-screen .warning-button:disabled {
+    background-color: #ddd;
+    color: #999;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
+#scan-results-screen .action-buttons {
+    margin-left: auto; /* 오른쪽 끝으로 밀어내기 */
+    display: flex;     /* 가로 배치 */
+    align-items: center;
+    gap: 15px;         /* ★ 버튼 사이 간격 15px (공백 생성) ★ */
+}
+
+/* (참고) 기존 #uninstall-btn 에 있던 margin-left: auto 는 제거해도 됩니다.
+   이제 부모인 .action-buttons가 그 역할을 대신합니다. */
+#scan-results-screen #uninstall-btn {
+    margin-left: 0 !important; /* 개별 마진 초기화 */
+}
+
+/* --- [FIX] App detail header layout + buttons position --- */
+#scan-results-screen .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap; /* 좁은 화면 대응 */
+}
+
+#scan-results-screen .detail-title-area {
+    flex: 1;
+    min-width: 260px;
+}
+
+#scan-results-screen .detail-icon-wrapper {
+    width: 72px;
+    height: 72px;
+    border-radius: 14px;
+    background: #f1f3f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+#scan-results-screen .action-buttons {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-shrink: 0;
+}
+
+/* --- [FIX] 결과 탭(요약/앱/백그라운드/APK/개인정보) 섹션 표시 규칙 --- */
+#scan-results-screen .result-content-section {
+    width: 100%;
+    display: none;
+}
+
+#scan-results-screen .result-content-section.active {
+    display: block !important;
+}
+
+
+
+/* iOS 결과 - 주요 검사 파일 정렬/가독성 */
+.ios-major-files{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:10px;
+}
+.ios-major-label{
+    display:inline-flex;
+    align-items:center;
+    height:22px;
+    padding:0 10px;
+    border-radius:999px;
+    background:#e8f0ff;
+    border:1px solid #cfe0ff;
+    color:#1f4bd6;
+    font-size:12px;
+    font-weight:700;
+    white-space:nowrap;
+}
+.ios-major-files-text{
+    color:#111 !important;
+    font-size:12.5px;
+    font-weight:700;
+    line-height:1.4;
+    word-break:break-word;
+}
+.ios-major-file{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight:700;
+}
+.ios-major-file-empty{
+    color:#666;
+    font-weight:600;
+}
+
+/* iOS 검사 대상 애플리케이션 - 3열 카드 스타일 고정 */
+.ios-app-grid{
+    display:grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap:12px;
+}
+.ios-app-card{
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:10px;
+    padding:12px 12px;
+    text-align:left;
+}
+.ios-app-name{
+    color:#222 !important;
+    font-size:14px !important;
+    font-weight:800 !important;
+    line-height:1.35;
+}
+.ios-app-bundle{
+    margin-top:6px;
+    color:#6b7280 !important;
+    font-size:12px !important;
+    font-weight:600;
+    word-break:break-all;
+}
+
+/* 개인정보 유출 위협 - AI 판단 근거 리스트(우측 초기 디자인 스타일) */
+.privacy-ai-reason-list{
+    list-style:none;
+    padding:0;
+    margin:0;
+}
+.privacy-ai-reason-item{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    margin:6px 0;
+    color:#333;
+    font-size:13px;
+    line-height:1.55;
+}
+.privacy-ai-reason-dot{
+    width:7px;
+    height:7px;
+    border-radius:999px;
+    background:#F0AD4E;
+    margin-top:7px;
+    flex:0 0 7px;
+}
+.privacy-ai-reason-title{
+    font-weight:800;
+    color:#222;
+}
+.privacy-ai-reason-desc{
+    margin-top:2px;
+    color:#555;
+}
+
+/* ===== Android 리스트 검색/정렬 UI ===== */
+.list-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 12px 0 14px 0;
+}
+
+.search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #e6e8ec;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.search-icon {
+    opacity: 0.7;
+    font-size: 14px;
+}
+
+.search-box input {
+    width: 100%;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    background: transparent;
+}
+
+.sort-select {
+    min-width: 160px;
+    border: 1px solid #e6e8ec;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    background: #ffffff;
+}
+
+/* --- [요약 UI 리디자인] --- */
+#scan-results-screen .overview-card .summary-metrics{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+}
+#scan-results-screen .metric-card{
+    background:#fff;
+    border:1px solid #eef1f5;
+    border-radius:12px;
+    padding:14px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+#scan-results-screen .metric-card.metric-danger{
+    border-color:#ffd7d7;
+    background:#fff7f7;
+}
+#scan-results-screen .metric-card.metric-warn{
+    border-color:#ffe9c7;
+    background:#fffaf2;
+}
+#scan-results-screen .metric-label{
+    font-size:12px;
+    color:#6b7280;
+    margin-bottom:6px;
+}
+#scan-results-screen .metric-value{
+    font-size:26px;
+    font-weight:800;
+    color:#111827;
+    display:flex;
+    align-items:baseline;
+    gap:6px;
+}
+#scan-results-screen .metric-value.metric-small{
+    font-size:15px;
+    font-weight:700;
+}
+#scan-results-screen .metric-unit{
+    font-size:13px;
+    font-weight:700;
+    color:#6b7280;
+}
+#scan-results-screen .summary-narration{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e5e7eb;
+}
+#scan-results-screen .scan-steps{
+    margin: 10px 0 0 0;
+    padding-left: 18px;
+}
+#scan-results-screen .scan-steps li{
+    margin-bottom: 8px;
+    line-height: 1.5;
+    color:#374151;
+}
+#scan-results-screen .danger-soft-card{
+    border-left: 4px solid var(--danger-color);
+    background: #fff7f7;
+}
+#scan-results-screen .warn-soft-card{
+    border-left: 4px solid #f59e0b;
+    background: #fffaf2;
+}
+#scan-results-screen .card-header-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+}
+#scan-results-screen .pill{
+    display:inline-flex;
+    align-items:center;
+    padding:4px 10px;
+    border-radius: 999px;
+    font-size:12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+#scan-results-screen .pill-danger{
+    background:#ffe3e3;
+    color:#b42318;
+    border:1px solid #ffd0d0;
+}
+#scan-results-screen .pill-warn{
+    background:#fff1d6;
+    color:#92400e;
+    border:1px solid #ffe4b5;
+}
+
+/* 상세 근거(앱별) */
+#scan-results-screen .evidence-list{
+    display:flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+#scan-results-screen details.evidence-item{
+    background:#ffffff;
+    border:1px solid #eef1f5;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+#scan-results-screen details.evidence-item[open]{
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+#scan-results-screen details.evidence-item > summary{
+    cursor:pointer;
+    list-style:none;
+    display:flex;
+    align-items:baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 800;
+    color:#111827;
+}
+#scan-results-screen details.evidence-item > summary::-webkit-details-marker{
+    display:none;
+}
+#scan-results-screen .evidence-meta{
+    font-size:12px;
+    font-weight:600;
+    color:#6b7280;
+}
+#scan-results-screen .reason-badges{
+    display:flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+#scan-results-screen .reason-badge{
+    font-size:11px;
+    padding:3px 8px;
+    border-radius: 999px;
+    border:1px solid #eef1f5;
+    background:#f9fafb;
+    color:#374151;
+}
+#scan-results-screen .reason-badge.high{
+    background:#ffe3e3;
+    border-color:#ffd0d0;
+    color:#b42318;
+}
+#scan-results-screen .reason-badge.medium{
+    background:#fff1d6;
+    border-color:#ffe4b5;
+    color:#92400e;
+}
+#scan-results-screen .reason-detail{
+    margin-top: 10px;
+    color:#374151;
+    line-height: 1.6;
+}
+#scan-results-screen .empty-soft{
+    padding: 12px 14px;
+    border-radius: 12px;
+    background:#ffffff;
+    border:1px dashed #e5e7eb;
+    color:#6b7280;
+    margin-top: 10px;
+}
+
+/* 반응형 */
+@media (max-width: 1100px){
+    #scan-results-screen .overview-card .summary-metrics{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+#scan-results-screen #neutralize-btn,
+#scan-results-screen #uninstall-btn {
+  min-height: 42px;
+  min-width: 210px;
+  padding: 10px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* [BD-PATCH] Stronger risk borders (installed/bg lists + detail header icon) */
+.app-item.suspicious{
+  border:4px solid #d9534f !important;
+  box-shadow: 0 0 0 2px rgba(217,83,79,.18), 0 10px 25px rgba(217,83,79,.18) !important;
+}
+.app-item.warning{
+  border:4px solid #f0ad4e !important;
+  box-shadow: 0 0 0 2px rgba(240,173,78,.18), 0 10px 25px rgba(240,173,78,.18) !important;
+}
+/* Detail header icon wrapper: keep the same emphasis */
+#appDetailIconWrapper.suspicious,
+.app-detail-icon-wrapper.suspicious,
+.detail-icon-wrapper.suspicious{
+  border:4px solid #d9534f !important;
+  box-shadow: 0 0 0 2px rgba(217,83,79,.18), 0 10px 25px rgba(217,83,79,.18) !important;
+}
+#appDetailIconWrapper.warning,
+.app-detail-icon-wrapper.warning,
+.detail-icon-wrapper.warning{
+  border:4px solid #f0ad4e !important;
+  box-shadow: 0 0 0 2px rgba(240,173,78,.18), 0 10px 25px rgba(240,173,78,.18) !important;
+}

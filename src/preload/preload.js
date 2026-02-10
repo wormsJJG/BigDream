@@ -1,61 +1,24 @@
-// preload.js (root entry)
-//
-// Why this file contains the full implementation:
-// - Some Electron setups (e.g., webpack / electron-webpack) execute preload scripts
-//   from a sandbox bundle where relative `require('./src/...')` cannot resolve.
-// - To keep runtime stable, we avoid requiring project-relative modules here.
-//
+// src/preload/preload.js
 // Security-first preload: expose ONLY whitelisted APIs.
 
 const { contextBridge, ipcRenderer } = require('electron');
+const IPC = require('../shared/ipcChannels');
 
-// IPC channel names (inlined for maximum compatibility)
-const IPC = {
-    ANDROID: {
-        CHECK_DEVICE_CONNECTION: 'check-device-connection',
-        RUN_SCAN: 'run-scan',
-        OPEN_SCAN_FILE: 'open-scan-file',
-        GET_APP_DATA: 'get-app-data',
-        UNINSTALL_APP: 'uninstall-app',
-        NEUTRALIZE_APP: 'neutralize-app',
-        DELETE_APK_FILE: 'delete-apk-file',
-        AUTO_PUSH_REPORT: 'auto-push-report-to-android',
-        START_FULL_SCAN: 'start-full-scan',
-        GET_DASHBOARD_DATA: 'get-android-dashboard-data'
-    },
-    IOS: {
-        CHECK_CONNECTION: 'check-ios-connection',
-        RUN_SCAN: 'run-ios-scan',
-        DELETE_BACKUP: 'delete-ios-backup',
-        PROGRESS: 'ios-scan-progress'
-    },
-    APP: {
-        FORCE_WINDOW_RESET: 'force-window-reset',
-        SAVE_SCAN_RESULT: 'saveScanResult',
-        CHECK_FOR_UPDATE: 'checkForUpdate',
-        SAVE_LOGIN_INFO: 'saveLoginInfo',
-        GET_LOGIN_INFO: 'getLogininfo',
-        READ_TEXT_FILE: 'read-text-file'
-    },
-    FIRESTORE: {
-        CALL: 'firestore-call'
-    },
-    EVENTS: {
-        UPDATE_START: 'update-start',
-        UPDATE_PROGRESS: 'update-progress',
-        UPDATE_ERROR: 'update-error'
-    }
-};
+console.log('--- preload.js: 로드됨 ---');
 
 // ✅ Structured API (recommended)
 const bdScanner = {
+    auth: {
+        login: (email, password) => ipcRenderer.invoke(IPC.AUTH.LOGIN, { email, password }),
+        logout: () => ipcRenderer.invoke(IPC.AUTH.LOGOUT),
+        createUser: (email, password) => ipcRenderer.invoke(IPC.AUTH.CREATE_USER, { email, password })
+    },
     app: {
         forceWindowReset: () => ipcRenderer.invoke(IPC.APP.FORCE_WINDOW_RESET),
         checkForUpdate: (currentVersion) => ipcRenderer.invoke(IPC.APP.CHECK_FOR_UPDATE, currentVersion),
         saveScanResult: (data) => ipcRenderer.invoke(IPC.APP.SAVE_SCAN_RESULT, data),
         saveLoginInfo: (data) => ipcRenderer.invoke(IPC.APP.SAVE_LOGIN_INFO, data),
         getLoginInfo: () => ipcRenderer.invoke(IPC.APP.GET_LOGIN_INFO),
-        // Read bundled HTML partials reliably (avoids fetch(file://) issues)
         readTextFile: (relativePath) => ipcRenderer.invoke(IPC.APP.READ_TEXT_FILE, { relativePath }),
         onUpdateStart: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_START, (event, version) => callback(version)),
         onUpdateProgress: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_PROGRESS, (event, data) => callback(data)),
@@ -71,12 +34,10 @@ const bdScanner = {
         deleteApkFile: (data) => ipcRenderer.invoke(IPC.ANDROID.DELETE_APK_FILE, data),
         autoPushReportToAndroid: () => ipcRenderer.invoke(IPC.ANDROID.AUTO_PUSH_REPORT),
         startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN),
-        getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA)
-    },
-    auth: {
-      login: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
-      logout: () => ipcRenderer.invoke('firebase-auth-logout'),
-      createUser: (email, password) => ipcRenderer.invoke('firebase-auth-create-user', { email, password }),
+        getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA),
+
+        // Live dashboard: battery/mem/temp/top/spec (Android only)
+        getDashboardData: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA, payload)
     },
     firestore: {
         call: (payload) => ipcRenderer.invoke(IPC.FIRESTORE.CALL, payload)
@@ -85,12 +46,12 @@ const bdScanner = {
         checkConnection: () => ipcRenderer.invoke(IPC.IOS.CHECK_CONNECTION),
         runScan: (udid) => ipcRenderer.invoke(IPC.IOS.RUN_SCAN, udid),
         deleteBackup: (udid) => ipcRenderer.invoke(IPC.IOS.DELETE_BACKUP, udid),
-        onScanProgress: (callback) => {
+        onProgress: (callback) => {
             const handler = (_event, payload) => {
                 try { callback(payload); } catch (_e) { }
             };
-            ipcRenderer.on(IPC.IOS.PROGRESS, handler);
-            return () => ipcRenderer.removeListener(IPC.IOS.PROGRESS, handler);
+            ipcRenderer.on('ios-scan-progress', handler);
+            return () => ipcRenderer.removeListener('ios-scan-progress', handler);
         }
     }
 };
@@ -108,7 +69,7 @@ const electronAPI = {
     checkIosConnection: bdScanner.ios.checkConnection,
     runIosScan: bdScanner.ios.runScan,
     deleteIosBackup: bdScanner.ios.deleteBackup,
-    onIosScanProgress: bdScanner.ios.onScanProgress,
+    onIosScanProgress: bdScanner.ios.onProgress,
     deleteApkFile: bdScanner.android.deleteApkFile,
     saveScanResult: bdScanner.app.saveScanResult,
     checkForUpdate: bdScanner.app.checkForUpdate,
@@ -119,14 +80,15 @@ const electronAPI = {
     onUpdateError: bdScanner.app.onUpdateError,
     autoPushReportToAndroid: bdScanner.android.autoPushReportToAndroid,
     startFullScan: bdScanner.android.startFullScan,
-    readTextFile: bdScanner.app.readTextFile,
-    firestoreCall: bdScanner.firestore.call,
     getAndroidDashboardData: bdScanner.android.getDashboardData,
-    // Firebase Auth (backward compatible helpers)
-    firebaseAuthLogin: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
-    firebaseAuthLogout: () => ipcRenderer.invoke('firebase-auth-logout'),
-    firebaseAuthCreateUser: (email, password) => ipcRenderer.invoke('firebase-auth-create-user', { email, password })
+    readTextFile: bdScanner.app.readTextFile,
+    firebaseAuthLogin: (email, password) => bdScanner.auth.login(email, password),
+    firebaseAuthLogout: () => bdScanner.auth.logout(),
+    firebaseAuthCreateUser: (email, password) => bdScanner.auth.createUser(email, password),
+    firestoreCall: bdScanner.firestore.call
 };
 
 contextBridge.exposeInMainWorld('bdScanner', bdScanner);
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+
+console.log('--- preload.js: bdScanner / electronAPI 브릿지 생성 완료 ---');

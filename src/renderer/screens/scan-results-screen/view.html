@@ -1,0 +1,219 @@
+<div class="results-header">
+<h2>정밀 검사 결과 보고서</h2>
+<div class="header-buttons">
+<button class="secondary-button" id="save-results-btn">💾 로컬 저장</button>
+<button class="secondary-button" id="print-results-btn" type="button">PDF 출력</button>
+<button class="secondary-button send-button" id="report-results-btn" type="button">결과
+                            전송</button>
+<button class="secondary-button danger-button" id="disconnect-btn" type="button">연결 끊기</button>
+</div>
+</div>
+<div id="results-dashboard-view">
+<div class="result-content-section active" id="res-summary">
+  <div class="content-card overview-card">
+    <h3>🧾 검사 요약</h3>
+    <div class="summary-metrics">
+      <div class="metric-card metric-danger">
+        <div class="metric-label">스파이앱 탐지</div>
+        <div class="metric-value"><span id="res-spyware-count">0</span><span class="metric-unit">건</span></div>
+      </div>
+      <div class="metric-card metric-warn">
+        <div class="metric-label">개인정보 유출 위협</div>
+        <div class="metric-value"><span id="res-privacy-count">0</span><span class="metric-unit">건</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">분석한 앱</div>
+        <div class="metric-value"><span id="res-total-apps">0</span><span class="metric-unit">개</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">검사 방식</div>
+        <div class="metric-value metric-small" id="res-scan-mode">-</div>
+      </div>
+    </div>
+
+    <div class="summary-narration">
+      <p id="res-summary-narration" class="sub-text">-</p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <h3>🔎 검사 진행 방식</h3>
+    <p class="sub-text">수집 → 분석 → 판정까지의 과정을 요약해 보여줍니다.</p>
+    <ol class="scan-steps" id="res-scan-steps"></ol>
+  </div>
+
+  <div class="content-card danger-soft-card">
+    <div class="card-header-row">
+      <h3>🚨 스파이앱 탐지 근거</h3>
+      <span class="pill pill-danger">최종 필터 확정</span>
+    </div>
+    <p class="sub-text">AI 분석 결과가 의심으로 분류된 앱 중, <b>접근성/기기관리자/민감 권한/지속성</b> 등의 조합 신호가 강한 경우에만 스파이앱으로 확정합니다.</p>
+    <div id="spyware-detail-container"></div>
+  </div>
+
+  <div class="content-card warn-soft-card">
+    <div class="card-header-row">
+      <h3>⚠️ 개인정보 유출 위협</h3>
+      <span class="pill pill-warn">정책 기반</span>
+    </div>
+    <p class="sub-text">민감 정보 접근 권한 및 앱 동작 특성을 바탕으로 개인정보 유출 위험을 평가합니다.</p>
+    <div id="privacy-threat-detail-container"></div>
+  </div>
+</div>
+
+<div class="result-content-section" id="res-ios-web">
+  <div class="content-card">
+    <h3>🌐 브라우저 및 웹 활동</h3>
+    <p class="sub-text">Safari/웹뷰 활동, 방문 기록, 캐시 흔적을 기반으로 이상 징후를 분석합니다.</p>
+    <div id="ios-web-container">분석 데이터 로딩 중...</div>
+  </div>
+</div>
+
+<div class="result-content-section" id="res-ios-messages">
+  <div class="content-card">
+    <h3>💬 메시지 및 통신 기록</h3>
+    <p class="sub-text">메시지/통화/메신저 DB 흔적에서 비정상 패턴 및 IOC 단서를 분석합니다.</p>
+    <div id="ios-messages-container">분석 데이터 로딩 중...</div>
+  </div>
+</div>
+
+<div class="result-content-section" id="res-ios-system">
+  <div class="content-card">
+    <h3>⚙️ 시스템 로그 및 프로세스</h3>
+    <p class="sub-text">시스템 로그, 크래시 리포트, 사용량 DB 등에서 침해 흔적을 분석합니다.</p>
+    <div id="ios-system-container">분석 데이터 로딩 중...</div>
+  </div>
+</div>
+
+<div class="result-content-section" id="res-ios-appsprofiles">
+  <div class="content-card">
+    <h3>🗂️ 설치 앱 및 프로파일</h3>
+    <p class="sub-text">구성 프로파일/인증서/관리 상태(가능 범위) 및 앱 관련 흔적을 점검합니다.</p>
+    <div id="ios-appsprofiles-container">분석 데이터 로딩 중...</div>
+  </div>
+</div>
+
+<div class="result-content-section" id="res-ios-artifacts">
+  <div class="content-card">
+    <h3>📁 기타 시스템 파일</h3>
+    <p class="sub-text">기타 시스템 아티팩트에서 이상 징후 및 IOC 단서를 분석합니다.</p>
+    <div id="ios-artifacts-container">분석 데이터 로딩 중...</div>
+  </div>
+</div>
+
+<div class="result-content-section" id="res-apps">
+<div class="content-card">
+<h3>📲 설치된 애플리케이션</h3>
+<p class="sub-text" id="ios-app-list-description" style="display: none; margin-bottom: 15px; color: #666;"></p>
+<div class="list-controls">
+  <div class="search-box">
+    <span class="search-icon">🔎</span>
+    <input id="apps-search" type="text" placeholder="앱 이름 검색..." autocomplete="off" />
+  </div>
+  <select id="apps-sort" class="sort-select">
+    <option value="permDesc">권한 많은 순</option>
+    <option value="permAsc">권한 적은 순</option>
+    <option value="nameAsc">앱 이름 순</option>
+    <option value="pkgAsc">패키지 이름 순</option>
+  </select>
+</div>
+<div class="app-grid" id="app-grid-container"></div>
+</div>
+</div>
+<div class="result-content-section" id="res-background">
+<div class="content-card">
+<h3>🚀 백그라운드 실행 중인 앱</h3>
+<div class="list-controls">
+  <div class="search-box">
+    <span class="search-icon">🔎</span>
+    <input id="bg-search" type="text" placeholder="앱 이름 검색..." autocomplete="off" />
+  </div>
+  <select id="bg-sort" class="sort-select">
+    <option value="permDesc">권한 많은 순</option>
+    <option value="permAsc">권한 적은 순</option>
+    <option value="nameAsc">앱 이름 순</option>
+    <option value="pkgAsc">패키지 이름 순</option>
+  </select>
+</div>
+<div class="app-grid" id="bg-app-grid-container"></div>
+</div>
+</div>
+<div class="result-content-section" id="res-privacy">
+<div class="content-card">
+<h3>🔒 개인정보 유출 위협</h3>
+<p class="sub-text">BD-SFA 인공지능이 분석한 개인정보 유출 위협이 있는 어플입니다.</p>
+<div id="privacy-threat-list-container">분석 데이터 로딩 중...</div>
+</div>
+</div>
+<div class="result-content-section" id="res-network">
+<div class="content-card">
+<h3>🌐 네트워크 패킷 분석</h3>
+<p class="sub-text">외부 서버와의 비정상적인 통신 로그입니다.</p>
+<div id="network-analysis-container">네트워크 트래픽 분석 중...</div>
+</div>
+</div>
+<div class="result-content-section" id="res-threats">
+<div class="content-card">
+<h3 id="res-threats-title">⚠️ 기기 보안 위협</h3>
+<p class="sub-text" id="res-threats-desc">시스템 설정 취약점 및 MVT 포렌식 분석 결과입니다.</p>
+<div id="mvt-analysis-container">분석 준비 중...</div>
+</div>
+</div>
+<div class="result-content-section" id="res-apk">
+<div class="content-card">
+<h3>📂 발견된 APK 파일 (APK)</h3>
+<p class="sub-text">기기 내부 저장소에서 발견된 설치 대기 중인 파일들입니다.</p>
+<div class="list-controls">
+  <div class="search-box">
+    <span class="search-icon">🔎</span>
+    <input id="apk-search" type="text" placeholder="APK 파일명 검색..." autocomplete="off" />
+  </div>
+  <select id="apk-sort" class="sort-select">
+    <option value="nameAsc">파일 이름 순</option>
+    <option value="pkgAsc">패키지 이름 순</option>
+  </select>
+</div>
+<div class="app-grid" id="apk-grid-container"></div>
+</div>
+</div>
+</div>
+<div class="hidden" id="app-detail-view" style="display:none; padding: 20px;">
+<button class="secondary-button" id="back-to-dashboard-btn" style="margin-bottom: 20px;">← 뒤로
+                        가기</button>
+<div class="detail-header">
+<div class="detail-icon-wrapper">
+</div>
+<div class="detail-title-area">
+<h2 id="detail-app-name">App Name</h2>
+<p id="detail-package-name">com.package.name</p>
+</div>
+<div class="action-buttons">
+<button class="primary-button warning-button" id="neutralize-btn">🛡️ 무력화 (권한 박탈)</button>
+<button class="primary-button danger-button" id="uninstall-btn">🗑️ 앱 강제 삭제</button>
+</div>
+</div>
+<div class="divider"></div>
+<div class="detail-grid">
+<div class="detail-item">
+<span class="d-label">설치 출처</span>
+<span class="d-value" id="detail-sideload">-</span>
+</div>
+<div class="detail-item">
+<span class="d-label">실행 상태</span>
+<span class="d-value" id="detail-bg">-</span>
+</div>
+<div class="detail-item">
+<span class="d-label">데이터 사용량</span>
+<span class="d-value" id="detail-network">-</span>
+</div>
+</div>
+<div class="permission-section" style="margin-top: 30px;">
+<h3>🔒 권한 분석 상세</h3>
+<p class="permission-stats">
+                            요청 권한: <span id="detail-req-count">0</span>개 /
+                            허용된 권한: <span id="detail-grant-count">0</span>개
+                        </p>
+<div class="permission-list-container" id="detail-permission-list">
+</div>
+</div>
+</div>
