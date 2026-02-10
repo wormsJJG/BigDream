@@ -273,7 +273,10 @@ export function createViewManager(State) {
                     statusBar.style.backgroundColor = statusBar.style.backgroundColor || '#5CB85C';
                 }
                 if (statusText) statusText.textContent = text;
-                if (percentText) percentText.textContent = `${Math.round(percent)}%`;
+                if (percentText) {
+                const p = Math.max(0, Math.min(100, Math.round(percent)));
+                percentText.textContent = `${p}%`;
+            }
             } else {
                 if (androidStatusBar) {
                     androidStatusBar.style.width = `${percent}%`;

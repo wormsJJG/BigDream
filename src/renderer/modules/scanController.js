@@ -451,6 +451,7 @@ export function initScanController(ctx) {
                 }
 
             } catch (error) {
+                progress.fail(error);
                 console.error("Critical Error:", error);
                 await CustomUI.alert(`시스템 오류: ${error.message}`);
             } finally {
@@ -461,6 +462,127 @@ export function initScanController(ctx) {
     }
 
     const ScanController = {
+        /**
+         * iOS scan progress controller
+         * - Visual-only progress that moves even if main process doesn't stream progress.
+         * - Two phases: (1/2) Backup, (2/2) MVT analysis
+         * - Each phase goes 0% -> 100%
+         */
+        createIosProgressController({ ViewManager }) {
+            let intervalId = null;
+            let phase = 1;
+            let percent = 0;
+            let running = false;
+
+            const clear = () => {
+                if (intervalId) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
+            };
+
+            const render = () => {
+                const label = (phase === 1)
+                    ? "(1/2) 아이폰 백업 진행 중"
+                    : "(2/2) MVT 정밀 분석 진행 중";
+                ViewManager.updateProgress(percent, `${label} (${percent}%)`, true);
+            };
+
+            const tick = (maxPercent, speed) => {
+                percent = Math.min(maxPercent, percent + speed);
+                percent = Math.round(percent);
+                render();
+            };
+
+            const startPhase = ({ targetMs, hasCache }) => {
+                clear();
+                percent = 0;
+                render();
+
+                const startAt = Date.now();
+                running = true;
+
+                intervalId = setInterval(() => {
+                    const elapsed = Date.now() - startAt;
+                    const ratio = Math.min(1, elapsed / Math.max(1, targetMs));
+                    // Smooth easing
+                    const eased = 1 - Math.pow(1 - ratio, 2);
+
+                    // Let it reach 95% by itself, and reserve the last 5% for completion.
+                    const cap = 95;
+                    percent = Math.round(Math.min(cap, eased * cap));
+                    // If cache exists, visibly move a bit faster at the beginning.
+                    if (hasCache && percent < 40) {
+                        percent = Math.min(cap, percent + 2);
+                    }
+
+                    render();
+                }, 120);
+            };
+
+            const api = {
+                start({ hasBackupCache }) {
+                    // Phase 1 (Backup)
+                    phase = 1;
+                    startPhase({
+                        targetMs: hasBackupCache ? 1200 : 30000,
+                        hasCache: hasBackupCache
+                    });
+
+                    // When phase 1 reaches 95%, switch to phase 2 after a short pause.
+                    const watcher = setInterval(() => {
+                        if (!running) {
+                            clearInterval(watcher);
+                            return;
+                        }
+                        if (phase === 1 && percent >= 95) {
+                            clearInterval(watcher);
+                            // Show 100% for phase1 briefly
+                            percent = 100;
+                            render();
+                            setTimeout(() => {
+                                if (!running) return;
+                                phase = 2;
+                                startPhase({
+                                    targetMs: 25000,
+                                    hasCache: false
+                                });
+                            }, 600);
+                        }
+                    }, 200);
+                },
+
+                // Call when scan promise resolves.
+                complete() {
+                    if (!running) return;
+                    phase = 2;
+                    clear();
+                    percent = 100;
+                    render();
+                    running = false;
+                },
+
+                // Call when scan promise rejects.
+                fail() {
+                    if (!running) return;
+                    clear();
+                    // Keep current percent, but update text to show paused state.
+                    const label = (phase === 1)
+                        ? "(1/2) 아이폰 백업 실패"
+                        : "(2/2) MVT 분석 실패";
+                    ViewManager.updateProgress(percent, `${label} (${percent}%)`, true);
+                    running = false;
+                },
+
+                stop() {
+                    running = false;
+                    clear();
+                }
+            };
+
+            return api;
+        },
+
         currentLogId: null,
 
         toggleLaser(isVisible) {
@@ -796,10 +918,29 @@ export function initScanController(ctx) {
             window.lastScanData = null;
             this.toggleLaser(true)
 
-            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
+            ViewManager.updateProgress(0, "(1/2) 아이폰 백업 준비 중...", true);
+            const progress = this.createIosProgressController({
+                ViewManager,
+                CustomUI
+            });
+
+            // 0) Check if backup cache exists (to skip waiting on re-run)
+            let backupCache = { exists: false };
+            try {
+                backupCache = await window.electronAPI.checkIosBackupStatus(State.currentUdid);
+            } catch (e) {
+                // Non-blocking: if check fails, proceed as if no cache.
+                backupCache = { exists: false };
+            }
+
+            progress.start({
+                hasBackupCache: Boolean(backupCache && backupCache.exists)
+            });
+
             try {
                 // 1. 실제 검사 수행
                 const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
+                progress.complete();
                 if (rawData.error) throw new Error(rawData.error);
 
                 // 2. 데이터 변환 및 결과 화면 렌더링
@@ -1023,7 +1164,7 @@ export function initScanController(ctx) {
 
             this.endLogTransaction('completed');
             // 진행바를 100%로 만들고 완료 문구 출력
-            ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.");
+            ViewManager.updateProgress(100, "분석 완료! 결과 리포트를 생성합니다.", normalizeDeviceMode(State.currentDeviceMode) === "ios");
 
             // 휴대폰 내부 비주얼 변경 (애니메이션 종료)
 

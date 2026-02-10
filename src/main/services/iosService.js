@@ -39,6 +39,19 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
             }
         },
 
+
+        /**
+         * Check whether a completed iOS backup cache exists for this UDID.
+         * A backup is considered complete if Status.plist exists.
+         */
+        async checkBackupStatus(udid) {
+            const { TEMP_BACKUP } = CONFIG.PATHS;
+            const specificBackupPath = path.join(TEMP_BACKUP, udid);
+            const statusPlist = path.join(specificBackupPath, 'Status.plist');
+            const exists = fs.existsSync(statusPlist);
+            return { exists };
+        },
+
         /**
          * Full iOS scan pipeline (backup -> mvt -> parse).
          */

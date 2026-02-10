@@ -1,1 +1,16 @@
 @import "../device-connection-screen/style.css";
+
+/* iOS scan progress percent */
+#scan-progress-screen .progress-percent {
+    margin-top: 14px;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--text-color);
+    letter-spacing: 1px;
+    text-align: center;
+}
+
+/* Make the gauge slightly more visible on this screen */
+#scan-progress-screen .progress-bar-container {
+    height: 10px;
+}
