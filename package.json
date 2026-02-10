@@ -63,53 +63,55 @@
       "target": [
         "nsis"
       ],
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "certificateSubjectName": "BigDream Corp",
-      "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1",
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "certificateSubjectName": "BigDream Corp",
+        "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1"
+      },
       "icon": "assets/setUpIcon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "perMachine": true,
-      "language": 1042,
-      "installerIcon": "assets/setUpIcon.ico",
-      "shortcutName": "BD-Scanner",
-      "artifactName": "BD-Scanner-${version}.${ext}",
-      "uninstallDisplayName": "BD-Scanner"
-    },
-    "extraResources": [
-      {
-        "from": "platform-tools/",
-        "to": "platform-tools/",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "ios-tools/",
-        "to": "ios-tools/",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "pcap_receiver.py",
-        "to": "pcap_receiver.py"
-      },
-      {
-        "from": "assets/models",
-        "to": "assets/models"
-      }
-    ],
-    "publish": {
-      "provider": "github",
-      "token": "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",
-      "private": true
     }
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": false,
+    "createDesktopShortcut": true,
+    "perMachine": true,
+    "language": 1042,
+    "installerIcon": "assets/setUpIcon.ico",
+    "shortcutName": "BD-Scanner",
+    "artifactName": "BD-Scanner-${version}.${ext}",
+    "uninstallDisplayName": "BD-Scanner"
+  },
+  "extraResources": [
+    {
+      "from": "platform-tools/",
+      "to": "platform-tools/",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "ios-tools/",
+      "to": "ios-tools/",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "pcap_receiver.py",
+      "to": "pcap_receiver.py"
+    },
+    {
+      "from": "assets/models",
+      "to": "assets/models"
+    }
+  ],
+  "publish": {
+    "provider": "github",
+    "token": "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",
+    "private": true
   },
   "repository": {
     "type": "git",
