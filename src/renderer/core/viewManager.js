@@ -57,6 +57,13 @@ export function createViewManager(State) {
             const _mode = String(State.currentDeviceMode || '').toLowerCase();
             const isIos = _mode.includes('ios');
 
+            // iOS scan progress must fit in a single screen without right-side scrollbar.
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                const shouldFit = isIos && screenId === 'scan-progress-screen';
+                mainContent.classList.toggle('ios-progress-fit', shouldFit);
+            }
+
             // 결과 메뉴는 "결과 화면"(scan-results) 및 결과 상세(app-detail)에서만 노출
             // 스캔 진행 중 대시보드(scan-dashboard)에서는 결과 메뉴가 보이면 UX가 혼동되어 숨김 처리
             const shouldShowResultMenu = (
@@ -273,10 +280,7 @@ export function createViewManager(State) {
                     statusBar.style.backgroundColor = statusBar.style.backgroundColor || '#5CB85C';
                 }
                 if (statusText) statusText.textContent = text;
-                if (percentText) {
-                const p = Math.max(0, Math.min(100, Math.round(percent)));
-                percentText.textContent = `${p}%`;
-            }
+                if (percentText) percentText.textContent = `${Math.round(percent)}%`;
             } else {
                 if (androidStatusBar) {
                     androidStatusBar.style.width = `${percent}%`;

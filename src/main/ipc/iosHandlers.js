@@ -14,18 +14,16 @@ function registerIosHandlers({ ipcMain, CONFIG, MockData, iosService }) {
     return await iosService.checkConnection();
   });
 
-  
-
-  ipcMain.handle('check-ios-backup-status', async (_event, udid) => {
-    if (CONFIG.IS_DEV_MODE) {
-      // In dev mode assume no cache unless mock says otherwise.
-      return { exists: false };
-    }
-    return await iosService.checkBackupStatus(udid);
-  });
-ipcMain.handle('run-ios-scan', async (_event, udid) => {
+  ipcMain.handle('run-ios-scan', async (event, udid) => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosScanResult();
-    return await iosService.runScan(udid);
+
+    const onProgress = (payload) => {
+      try {
+        event.sender.send('ios-scan-progress', payload);
+      } catch (_e) { }
+    };
+
+    return await iosService.runScan(udid, { onProgress });
   });
 
   ipcMain.handle('delete-ios-backup', async (_event, udid) => {

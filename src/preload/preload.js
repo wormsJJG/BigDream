@@ -44,9 +44,15 @@ const bdScanner = {
     },
     ios: {
         checkConnection: () => ipcRenderer.invoke(IPC.IOS.CHECK_CONNECTION),
-        checkBackupStatus: (udid) => ipcRenderer.invoke(IPC.IOS.CHECK_BACKUP_STATUS, udid),
         runScan: (udid) => ipcRenderer.invoke(IPC.IOS.RUN_SCAN, udid),
-        deleteBackup: (udid) => ipcRenderer.invoke(IPC.IOS.DELETE_BACKUP, udid)
+        deleteBackup: (udid) => ipcRenderer.invoke(IPC.IOS.DELETE_BACKUP, udid),
+        onProgress: (callback) => {
+            const handler = (_event, payload) => {
+                try { callback(payload); } catch (_e) { }
+            };
+            ipcRenderer.on('ios-scan-progress', handler);
+            return () => ipcRenderer.removeListener('ios-scan-progress', handler);
+        }
     }
 };
 
@@ -62,8 +68,8 @@ const electronAPI = {
     neutralizeApp: bdScanner.android.neutralizeApp,
     checkIosConnection: bdScanner.ios.checkConnection,
     runIosScan: bdScanner.ios.runScan,
-    checkIosBackupStatus: bdScanner.ios.checkBackupStatus,
     deleteIosBackup: bdScanner.ios.deleteBackup,
+    onIosScanProgress: bdScanner.ios.onProgress,
     deleteApkFile: bdScanner.android.deleteApkFile,
     saveScanResult: bdScanner.app.saveScanResult,
     checkForUpdate: bdScanner.app.checkForUpdate,
