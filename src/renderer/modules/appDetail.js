@@ -125,16 +125,36 @@ export function initAppDetail(ctx) {
                     }
                 });
     
-                // 5. 아이콘 처리
+                // 5. 아이콘 처리 (스파이앱=빨간, 개인정보 유출 위협=노란)
                 if (iconWrapper) {
-                    const iconSrc = app.reason
+                    // 기존 클래스 초기화
+                    iconWrapper.classList.remove('suspicious', 'warning');
+
+                    const reasonStr = String(app?.reason || '');
+                    const verdictStr = String(app?.finalVerdict || app?.verdict || '').toUpperCase();
+                    const riskLevelStr = String(app?.riskLevel || '').toUpperCase();
+
+                    const isPrivacyRisk = (
+                        riskLevelStr.includes('PRIVACY') ||
+                        reasonStr.includes('[개인정보 유출 위협]') ||
+                        reasonStr.includes('개인정보 유출')
+                    );
+
+                    const isSpyware = (
+                        verdictStr.includes('SPY') ||
+                        app?.isSpyware === true ||
+                        reasonStr.includes('[최종 필터 확진]') ||
+                        (reasonStr.includes('스파이') && !isPrivacyRisk)
+                    );
+
+                    // 스파이앱이면 전용 로고 + 빨간 강조, 개인정보 위험이면 노란 강조
+                    const iconSrc = isSpyware
                         ? './assets/SpyAppLogo.png'
-                        : (app.cachedIconUrl || './assets/systemAppLogo.png');
-    
-                    if (app.reason) {
-                        iconWrapper.classList.add('suspicious');
-                    }
-    
+                        : (app?.cachedIconUrl || './assets/systemAppLogo.png');
+
+                    if (isSpyware) iconWrapper.classList.add('suspicious');
+                    else if (isPrivacyRisk) iconWrapper.classList.add('warning');
+
                     // 데이터 세팅 완료 후 이미지 삽입
                     iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
                 }

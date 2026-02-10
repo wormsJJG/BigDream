@@ -23,8 +23,166 @@ export function initScanController(ctx) {
         mgr.show(appData, displayName);
     }
     const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
+    // [Patch] reset Android dashboard UI so previous scan residue doesn't remain
+    function bdResetAndroidDashboardUI() {
+        // log lines
+        const log = document.getElementById('log-container');
+        if (log) log.innerHTML = '';
+
+        // connection badge
+        const badge = document.getElementById('dash-connection');
+        if (badge) {
+            badge.textContent = '● CONNECTION';
+            badge.classList.remove('is-disconnected');
+        }
+
+        // metrics text
+        const safeSet = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+        safeSet('live-bat-text', '--%');
+        safeSet('live-ram-text', '--%');
+        safeSet('live-temp-text', '--.- °C');
+        safeSet('live-bat-val', '0');
+        safeSet('live-ram-val', '0');
+        safeSet('live-temp-val', '0');
+
+        // spec
+        safeSet('live-model-name', '-');
+        safeSet('live-os-version', 'ANDROID');
+        safeSet('live-serial-number', '-');
+
+        const rootedEl = document.getElementById('live-rooted-status');
+        if (rootedEl) {
+            rootedEl.textContent = 'UNKNOWN';
+            rootedEl.classList.remove('status-safe', 'status-danger');
+        }
+
+        // top processes
+        const tbody = document.getElementById('dash-top-tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="4" class="empty">데이터 대기 중...</td></tr>`;
+        }
+
+        // progress bar text (optional)
+        const status = document.getElementById('android-scan-running-text');
+        if (status) {
+            status.textContent = '검사 준비 중';
+            status.style.color = '';
+        }
+
+        const percentEl = document.getElementById('android-progress-percent-text');
+        if (percentEl) percentEl.textContent = '0%';
+
+        const procEl = document.getElementById('android-scan-status-text');
+        if (procEl) procEl.textContent = '0/0';
+
+        const bar = document.getElementById('android-progress-bar');
+        if (bar) bar.style.width = '0%';
+    }
+
+    // [Patch] dashboard scroll lock
+    function bdSetDashboardScrollLock(on) {
+        const root = document.documentElement;
+        const body = document.body;
+        const main = document.querySelector('.main-content');
+        const v = !!on;
+        if (root) root.classList.toggle('bd-no-scroll', v);
+        if (body) body.classList.toggle('bd-no-scroll', v);
+        if (main) main.classList.toggle('bd-no-scroll', v);
+    }
+
     const { loggedInView, loggedOutView } = dom;
     const { ID_DOMAIN } = constants;
+
+    /* [BD-PATCH] MENU_LIFECYCLE_HELPER */
+    // Menu lifecycle: preScan -> scanning(dashboard/progress) -> results
+    const bdMenu = {
+        navCreate: () => document.getElementById('nav-create'),
+        navOpen: () => document.getElementById('nav-open'),
+        navResult: () => document.getElementById('nav-result'),
+        dashNav: () => document.getElementById('nav-android-dashboard'),
+        resultSub: () => document.getElementById('result-sub-menu'),
+        iosSub: () => document.getElementById('ios-sub-menu'),
+    };
+
+    function bdSetMenuState(state) {
+        const createBtn = bdMenu.navCreate();
+        const openBtn = bdMenu.navOpen();
+        const navResult = bdMenu.navResult();
+        const dashNav = bdMenu.dashNav();
+        const subMenu = bdMenu.resultSub();
+        const iosSub = bdMenu.iosSub();
+
+        const hide = (el) => {
+            if (!el) return;
+            el.classList.add('hidden');
+            el.style.display = 'none';
+        };
+        const show = (el) => {
+            if (!el) return;
+            el.classList.remove('hidden');
+            el.style.display = '';
+        };
+
+        if (state === 'preScan') {
+            show(createBtn);
+            show(openBtn);
+            hide(navResult);
+            hide(subMenu);
+            hide(iosSub);
+            hide(dashNav);
+            return;
+        }
+
+        if (state === 'scanning') {
+            hide(createBtn);
+            hide(openBtn);
+            hide(navResult);
+            hide(subMenu);
+            hide(iosSub);
+            show(dashNav);
+            return;
+        }
+
+        if (state === 'results') {
+            hide(createBtn);
+            hide(openBtn);
+            show(navResult);
+
+            if (State.currentDeviceMode === 'ios') {
+                show(iosSub);
+                hide(subMenu);
+                hide(dashNav);
+            } else {
+                show(subMenu);
+                hide(iosSub);
+                show(dashNav);
+            }
+        }
+    }
+
+    // Hook ViewManager.showScreen so programmatic navigations (disconnect/reconnect) keep menu state consistent
+    if (!ViewManager.__bd_wrapped_showScreen) {
+        ViewManager.__bd_wrapped_showScreen = true;
+        const __origShowScreen = ViewManager.showScreen.bind(ViewManager);
+        ViewManager.showScreen = function (root, screenId) {
+            const ret = __origShowScreen(root, screenId);
+            try {
+                if (screenId === 'device-connection-screen' || screenId === 'scan-create-screen') bdSetMenuState('preScan');
+                else if (screenId === 'scan-dashboard-screen' || screenId === 'scan-progress-screen') {
+                    // If a scan already finished (results exist), keep result menus visible even on dashboard/progress.
+                    if (State.lastScanData) bdSetMenuState('results');
+                    else bdSetMenuState('scanning');
+                }
+                else if (screenId === 'scan-results-screen') bdSetMenuState('results');
+            } catch (e) {
+                console.warn('[BD-Scanner] menu lifecycle hook failed:', e);
+            }
+            return ret;
+        };
+    }
+
+    // Initial menu state on controller init
+    try { bdSetMenuState('preScan'); } catch (_e) {}
 
     // Services (auth + firestore)
     const authService = services.auth;
@@ -80,6 +238,8 @@ export function initScanController(ctx) {
                 return;
             }
 
+            State.__bd_scanInProgress = true; // [Patch] mark scan session active
+
             const isLogged = await ScanController.startLogTransaction(State.currentDeviceMode);
 
             if (!isLogged) {
@@ -93,17 +253,11 @@ export function initScanController(ctx) {
 
             ((ctx.services && ctx.services.deviceManager) ? ctx.services.deviceManager.stopPolling() : undefined);
 
-            const createBtn = document.getElementById('nav-create');
-            const openBtn = document.getElementById('nav-open');
-            const subMenu = document.getElementById('result-sub-menu');
+            // [BD-PATCH] Clear previous results so dashboard menu state doesn't mis-detect an old scan.
+            State.lastScanData = null;
+            window.lastScanData = null;
+            window.__bd_lastScanData = null;
 
-            if (createBtn) createBtn.classList.add('hidden');
-            if (openBtn) openBtn.classList.add('hidden');
-
-            if (subMenu) {
-                subMenu.classList.add('hidden');
-                subMenu.classList.remove('active');
-            }
 
             // Android: use dedicated dashboard screen, iOS: keep legacy progress screen
             if (State.currentDeviceMode === 'android') {
@@ -113,24 +267,34 @@ export function initScanController(ctx) {
                     dashNav.classList.remove('hidden');
                     dashNav.style.display = '';
                 }
-                ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
-            } else {
-                ViewManager.showScreen(loggedInView, 'scan-progress-screen');
-            }
 
-            if (State.currentDeviceMode === 'android') {
-                // 1. 좌측 네비게이션 메뉴 중 '대시보드' 탭 하이라이트 활성화
                 ViewManager.activateMenu('nav-android-dashboard');
-
-                // 2. 안드로이드 대시보드 화면 표시
+                bdSetDashboardScrollLock(true);
+                bdResetAndroidDashboardUI(); // [Patch] clear previous dashboard residue
+                
                 ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
-
-                // 3. 실제 검사 로직 시작
                 await ScanController.startAndroidScan();
             } else {
+
+                bdSetDashboardScrollLock(false);
+                
                 ViewManager.showScreen(loggedInView, 'scan-progress-screen');
                 await ScanController.startIosScan();
             }
+
+            // if (State.currentDeviceMode === 'android') {
+            //     // 1. 좌측 네비게이션 메뉴 중 '대시보드' 탭 하이라이트 활성화
+            //     ViewManager.activateMenu('nav-android-dashboard');
+
+            //     // 2. 안드로이드 대시보드 화면 표시
+            //     ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
+
+            //     // 3. 실제 검사 로직 시작
+            //     await ScanController.startAndroidScan();
+            // } else {
+            //     ViewManager.showScreen(loggedInView, 'scan-progress-screen');
+            //     await ScanController.startIosScan();
+            // }
         });
     }
 
@@ -157,6 +321,7 @@ export function initScanController(ctx) {
                     // 만약 에러가 여기서 난다면 아래 줄을 주석 처리해보세요.
                     try { ViewManager.activateMenu('nav-result'); } catch (e) { }
 
+                    bdSetDashboardScrollLock(false);
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
 
                     requestAnimationFrame(() => {
@@ -235,6 +400,11 @@ export function initScanController(ctx) {
         },
 
         async startAndroidScan() {
+
+            bdResetAndroidDashboardUI();
+            // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
+            State.lastScanData = null;
+            window.lastScanData = null;
             this.toggleLaser(true);
 
             // 데이터 입자들을 보이게 설정
@@ -423,6 +593,9 @@ export function initScanController(ctx) {
         },
 
         async startIosScan() {
+            // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
+            State.lastScanData = null;
+            window.lastScanData = null;
             this.toggleLaser(true)
 
             ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
@@ -646,6 +819,8 @@ export function initScanController(ctx) {
 
 
         finishScan(data) {
+            State.__bd_scanInProgress = false; // [Patch] scan finished
+
             console.log("--- 검사 종료: 결과 대시보드 준비 ---");
 
             this.endLogTransaction('completed');
@@ -724,6 +899,8 @@ export function initScanController(ctx) {
         },
 
         handleError(error) {
+            State.__bd_scanInProgress = false; // [Patch] scan aborted
+
             console.error(error);
             this.endLogTransaction('error', error.message);
             const statusText = document.getElementById('scan-status-text');
@@ -801,6 +978,20 @@ export function initScanController(ctx) {
             if (data?.deviceInfo && !data.deviceInfo.os) data.deviceInfo.os = detectedMode;
 
             const isIos = detectedMode === 'ios';
+
+            /* [BD-PATCH] IOS_CLEANUP_ANDROID_LISTENERS */
+            // If previously bound Android search/sort listeners exist, remove them when rendering iOS to prevent UI corruption.
+            if (isIos && Array.isArray(State.__bd_androidListCleanup)) {
+                State.__bd_androidListCleanup.forEach(fn => { try { fn && fn(); } catch (_e) {} });
+                State.__bd_androidListCleanup = [];
+            }
+
+            // [Patch] iOS mode cleanup for Android list listeners
+            if (isIos && Array.isArray(State.__bd_androidListCleanup)) {
+                State.__bd_androidListCleanup.forEach(fn => { try { fn && fn(); } catch (_) { } });
+                State.__bd_androidListCleanup = [];
+            }
+
 
 
 
@@ -920,6 +1111,8 @@ export function initScanController(ctx) {
                         appGrid.innerHTML = '';
                         appGrid.className = ""; // iOS는 리스트 형태이므로 클래스 초기화
                         this.renderIosInstalledApps(data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || [], appGrid);
+                        // [Patch] bind iOS search safely
+                        this.initIosAppListControls(data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || [], appGrid);
                     }
 
                     // 초기 화면 설정: 요약 섹션만 보이고 나머지는 숨김
@@ -1491,13 +1684,31 @@ export function initScanController(ctx) {
             const imgTag = div.querySelector('.app-real-icon');
             const spanTag = div.querySelector('.app-fallback-icon');
 
-            // 1. 위협 수준 판별
-            const isSpyApp = app.reason && app.reason.includes('[VT 확진]');
-            const isPrivacyRisk = app.reason && !app.reason.includes('[VT 확진]');
+            // 1. 위협 수준 판별 (VT 미사용 버전 포함)
+            // - 스파이앱(빨간색): 최종필터 확정/스파이 관련 키워드/플래그
+            // - 개인정보 유출 위협(노란색): PRIVACY_RISK/riskLevel/키워드
+            const reasonStr = String(app?.reason || '');
+            const verdictStr = String(app?.finalVerdict || app?.verdict || '').toUpperCase();
+            const riskLevelStr = String(app?.riskLevel || '').toUpperCase();
 
-            // 2. 테두리 클래스 결정 
+            const isSpyApp = (
+                app?.isSpyware === true ||
+                verdictStr.includes('SPY') ||
+                verdictStr.includes('MAL') ||
+                reasonStr.includes('[최종 필터 확진]') ||
+                (reasonStr.includes('스파이') && !reasonStr.includes('개인정보'))
+            );
+
+            const isPrivacyRisk = (
+                app?.isPrivacyRisk === true ||
+                riskLevelStr.includes('PRIVACY') ||
+                reasonStr.includes('[개인정보') ||
+                reasonStr.includes('개인정보 유출')
+            );
+
+            // 2. 테두리 클래스 결정
             let riskClass = '';
-            if (isSpyApp) riskClass = 'suspicious';      // 빨간 테두리
+            if (isSpyApp) riskClass = 'suspicious';        // 빨간 테두리
             else if (isPrivacyRisk) riskClass = 'warning'; // 노란 테두리
 
             div.className = `app-item ${riskClass}`;
@@ -1581,6 +1792,47 @@ export function initScanController(ctx) {
         // -------------------------------------------------
         // ✅ Android 앱 리스트 검색/정렬 (DOM 재생성 없이 재배치만)
         // -------------------------------------------------
+
+        // -------------------------------------------------
+        // [Patch] iOS installed apps search (prevents Android grid takeover)
+        // -------------------------------------------------
+        initIosAppListControls(apps, container) {
+            // remove any Android list listeners that might still be attached
+            if (Array.isArray(State.__bd_androidListCleanup)) {
+                State.__bd_androidListCleanup.forEach(fn => { try { fn && fn(); } catch (_) { } });
+            }
+            State.__bd_androidListCleanup = [];
+
+            const input = document.getElementById('apps-search');
+            if (!input || !container) return;
+
+            const getName = (app) => {
+                const name = app?.cachedTitle || app?.name || app?.displayName || Utils.formatAppName(app?.packageName || app?.bundleId || '');
+                return String(name || '');
+            };
+
+            const list = Array.isArray(apps) ? apps : [];
+
+            const apply = () => {
+                const q = String(input.value || '').trim().toLowerCase();
+                // Keep iOS layout: do NOT change container className here
+                const cards = container.querySelectorAll('.ios-app-card');
+                if (!cards.length) return;
+
+                cards.forEach(card => {
+                    const titleEl = card.querySelector('.ios-app-name');
+                    const title = titleEl ? titleEl.textContent.toLowerCase() : '';
+                    card.style.display = (!q || title.includes(q)) ? '' : 'none';
+                });
+            };
+
+            const onInput = () => apply();
+            input.addEventListener('input', onInput);
+            State.__bd_androidListCleanup.push(() => input.removeEventListener('input', onInput));
+
+            apply();
+        },
+
         initAndroidAppListControls(allAndroidApps) {
             // 이전 바인딩 정리 (스캔을 여러 번 실행해도 이벤트 중복 방지)
             if (Array.isArray(State.__bd_androidListCleanup)) {
@@ -1975,4 +2227,10 @@ export function initScanController(ctx) {
     window.__bd_forceRenderIosCoreAreas = () => {
         try { ResultsRenderer.forceRenderIosCoreAreas(); } catch (e) { }
     };
+
+    window.__bd_resetAndroidDashboardUI = bdResetAndroidDashboardUI;
+    window.__bd_stopAndroidDashboardPolling = () => {
+        try { ScanController.stopAndroidDashboardPolling && ScanController.stopAndroidDashboardPolling(); } catch (_) { }
+    };
+
 }

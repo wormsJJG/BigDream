@@ -731,13 +731,12 @@
 }
 
 /* 반응형 */
-@media (max-width: 1100px) {
+@media (max-width: 1100px){
     #scan-results-screen .overview-card .summary-metrics{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
-/* --- [UI FIX] Equalize action button sizes (무력화/강제삭제) --- */
 #scan-results-screen #neutralize-btn,
 #scan-results-screen #uninstall-btn {
   min-height: 42px;
@@ -747,4 +746,27 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+}
+
+/* [BD-PATCH] Stronger risk borders (installed/bg lists + detail header icon) */
+.app-item.suspicious{
+  border:4px solid #d9534f !important;
+  box-shadow: 0 0 0 2px rgba(217,83,79,.18), 0 10px 25px rgba(217,83,79,.18) !important;
+}
+.app-item.warning{
+  border:4px solid #f0ad4e !important;
+  box-shadow: 0 0 0 2px rgba(240,173,78,.18), 0 10px 25px rgba(240,173,78,.18) !important;
+}
+/* Detail header icon wrapper: keep the same emphasis */
+#appDetailIconWrapper.suspicious,
+.app-detail-icon-wrapper.suspicious,
+.detail-icon-wrapper.suspicious{
+  border:4px solid #d9534f !important;
+  box-shadow: 0 0 0 2px rgba(217,83,79,.18), 0 10px 25px rgba(217,83,79,.18) !important;
+}
+#appDetailIconWrapper.warning,
+.app-detail-icon-wrapper.warning,
+.detail-icon-wrapper.warning{
+  border:4px solid #f0ad4e !important;
+  box-shadow: 0 0 0 2px rgba(240,173,78,.18), 0 10px 25px rgba(240,173,78,.18) !important;
 }
