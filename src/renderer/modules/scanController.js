@@ -1011,7 +1011,7 @@ export function initScanController(ctx) {
                 setText('res-total-apps', totalApps);
 
                 const modeEl = document.getElementById('res-scan-mode');
-                if (modeEl) modeEl.textContent = isIos ? 'iOS (MVT 기반 분석)' : 'Android (ADB + BD_SFA 행동 분석)';
+                if (modeEl) modeEl.textContent = isIos ? 'MVT기반 분석 + BD_SFA 행동 분석' : 'ADB + BD_SFA 행동 분석';
 
                 const narrationEl = document.getElementById('res-summary-narration');
                 if (narrationEl) {
@@ -1041,8 +1041,9 @@ export function initScanController(ctx) {
 
                     const steps = [];
                     if (isIos) {
-                        steps.push('기기 백업/로그(또는 MVT 결과)에서 웹 활동·메시지·시스템 로그·설치 앱/프로파일 등 핵심 아티팩트를 수집합니다.');
+                        steps.push('기기 백업과 로그(또는 MVT 결과)에서 웹 활동·메시지·시스템 로그·설치 앱/프로파일 등 핵심 아티팩트를 수집합니다.');
                         steps.push('IOC(의심 도메인/키워드/패턴) 매칭 및 정책 기반 규칙으로 위험 신호를 추출합니다.');
+                        steps.push('수집된 메타데이터를 통해 BD-SFA가 정밀 분석합니다.');
                         steps.push('탐지된 단서를 근거로 요약/상세 영역에 설명을 생성해 제공합니다.');
                     } else {
                         steps.push(`ADB로 설치된 앱 ${totalApps}개, 백그라운드 실행 ${runningCount}개 정보를 수집합니다.`);
