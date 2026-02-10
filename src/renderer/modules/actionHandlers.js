@@ -7,7 +7,7 @@ export function initActionHandlers(ctx) {
     const { ID_DOMAIN } = constants;
 
     // Firebase deps (pass-through from renderer bootstrap)
-    const { auth, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } = services.auth;
+    const authService = services.auth;
     const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit } = services.firestore;
 
     // --- Timestamp/Date normalization (IPC returns plain objects, not Firestore Timestamp prototypes) ---
@@ -521,7 +521,7 @@ export function initActionHandlers(ctx) {
         console.log('[AdminHidden] saving androidTargetMinutes =', value);
 
         try {
-            const user = authService.getCurrentUser?.();
+            const user = authService.getCurrentUser?.() || auth?.currentUser;
             if (!user) throw new Error('로그인이 필요합니다.');
 
             // Firestore에 저장
@@ -537,7 +537,7 @@ export function initActionHandlers(ctx) {
             await CustomUI.alert('✅ 검사 시간 설정이 저장되었습니다.');
 
             // 모달 닫기
-            hiddenModal.style.display = 'none';
+            closeAdminModal();
         } catch (err) {
             console.error('[AdminHidden] save failed:', err);
             await CustomUI.alert('설정 저장 중 오류가 발생했습니다: ' + (err?.message || err));
