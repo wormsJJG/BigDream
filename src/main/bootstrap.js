@@ -67,7 +67,7 @@ function start({ rootDir }) {
 
   const CONFIG = {
       IS_DEV_MODE: false,
-      KEEP_BACKUP: true,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
+      KEEP_BACKUP: false,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
       VIRUSTOTAL_API_KEY: '2aa1cd78a23bd4ae58db52c773d7070fd7f961acb6debcca94ba9b5746c2ec96',
       PATHS: {
           ADB: path.join(RESOURCE_DIR, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
@@ -132,15 +132,74 @@ const updateService = createUpdateService({ firestoreService });
       },
 
       // 명령어 실행 (Promise 래퍼)
-      runCommand(command) {
+      runCommand(command, options = {}) {
+          const opts = options || {};
+          const hasStreamHandlers = !!opts.stream
+              || typeof opts.onStdout === 'function'
+              || typeof opts.onStderr === 'function'
+              || typeof opts.onProgress === 'function';
+
+          // ✅ Backward compatible behavior (buffered exec)
+          if (!hasStreamHandlers) {
+              return new Promise((resolve, reject) => {
+                  exec(command, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+                      if (error) {
+                          console.error(`명령어 실패: ${command}\n${stderr}`);
+                          reject(error);
+                      } else {
+                          resolve(stdout);
+                      }
+                  });
+              });
+          }
+
+          // ✅ Streaming behavior (spawn) for real-time progress parsing
           return new Promise((resolve, reject) => {
-              exec(command, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
-                  if (error) {
-                      console.error(`명령어 실패: ${command}\n${stderr}`);
-                      reject(error);
-                  } else {
-                      resolve(stdout);
+              const { spawn } = require('child_process');
+
+              let stdoutAll = '';
+              let stderrAll = '';
+
+              const child = spawn(command, { shell: true, windowsHide: true });
+
+              child.stdout.on('data', (buf) => {
+                  const text = buf.toString();
+                  stdoutAll += text;
+                  if (typeof opts.onStdout === 'function') {
+                      opts.onStdout(text);
                   }
+                  if (typeof opts.onProgress === 'function') {
+                      opts.onProgress({ stream: 'stdout', text });
+                  }
+              });
+
+              child.stderr.on('data', (buf) => {
+                  const text = buf.toString();
+                  stderrAll += text;
+                  if (typeof opts.onStderr === 'function') {
+                      opts.onStderr(text);
+                  }
+                  if (typeof opts.onProgress === 'function') {
+                      opts.onProgress({ stream: 'stderr', text });
+                  }
+              });
+
+              child.on('error', (err) => {
+                  console.error(`명령어 실패: ${command}\n${String(err && err.message || err)}`);
+                  reject(err);
+              });
+
+              child.on('close', (code) => {
+                  if (code === 0) {
+                      resolve(stdoutAll);
+                      return;
+                  }
+
+                  const err = new Error(`Command failed (code ${code}): ${command}`);
+                  err.code = code;
+                  err.stderr = stderrAll;
+                  console.error(`명령어 실패: ${command}\n${stderrAll}`);
+                  reject(err);
               });
           });
       },

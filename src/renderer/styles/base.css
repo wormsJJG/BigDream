@@ -210,3 +210,9 @@ html.bd-no-scroll, body.bd-no-scroll { overflow: hidden !important; }
 
 /* Reduce layout shift when scrollbars appear/disappear */
 html { scrollbar-gutter: stable; }
+
+
+/* iOS/Scan progress: Android dashboard tab must stay hidden */
+#logged-in-view:has(#scan-progress-screen.active) #nav-android-dashboard {
+    display: none !important;
+}

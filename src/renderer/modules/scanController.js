@@ -790,13 +790,38 @@ export function initScanController(ctx) {
             }
         },
 
+        
         async startIosScan() {
             // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
             State.lastScanData = null;
             window.lastScanData = null;
-            this.toggleLaser(true)
+            this.toggleLaser(true);
 
-            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
+            // iOS 진행률 이벤트 구독 (있을 때만)
+            let unsubscribeProgress = null;
+            if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
+                unsubscribeProgress = window.electronAPI.onIosScanProgress((payload) => {
+                    if (!payload) return;
+
+                    const percent = Number(payload.percent);
+                    const message = payload.message || payload.text || '';
+
+                    if (Number.isFinite(percent)) {
+                        ViewManager.updateProgress(percent, message, true);
+                        return;
+                    }
+
+                    // percent가 없더라도 문구는 업데이트
+                    if (message) {
+                        const currentWidth = Number(String(document.getElementById('progress-bar')?.style?.width || '0').replace('%', '')) || 0;
+                        ViewManager.updateProgress(currentWidth, message, true);
+                    }
+                });
+            }
+
+            // 초기 상태
+            ViewManager.updateProgress(0, '(1/2) 아이폰 백업 준비 중...', true);
+
             try {
                 // 1. 실제 검사 수행
                 const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
@@ -821,6 +846,10 @@ export function initScanController(ctx) {
 
             } catch (error) {
                 this.handleError(error);
+            } finally {
+                if (typeof unsubscribeProgress === 'function') {
+                    unsubscribeProgress();
+                }
             }
         },
 

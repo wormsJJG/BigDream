@@ -29,7 +29,9 @@ module.exports = {
   IOS: {
     CHECK_CONNECTION: 'check-ios-connection',
     RUN_SCAN: 'run-ios-scan',
-    DELETE_BACKUP: 'delete-ios-backup'
+    CHECK_BACKUP_STATUS: 'check-ios-backup-status',
+    DELETE_BACKUP: 'delete-ios-backup',
+    PROGRESS: 'ios-scan-progress'
   },
 
   APP: {
