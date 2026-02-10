@@ -197,3 +197,16 @@ p {
     color: #666;
     line-height: 1.5;
 }
+
+
+/* Prevent scrollbar flash during full-screen dashboards */
+html.no-scroll, body.no-scroll {
+  overflow: hidden !important;
+}
+
+/* [Patch] Prevent dashboard scroll flash (apply to root/body/main container) */
+html.bd-no-scroll, body.bd-no-scroll { overflow: hidden !important; }
+.main-content.bd-no-scroll { overflow: hidden !important; }
+
+/* Reduce layout shift when scrollbars appear/disappear */
+html { scrollbar-gutter: stable; }

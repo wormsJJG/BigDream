@@ -221,7 +221,20 @@ export function initAuthSettings(ctx) {
                 }
             });
 
-            // 3. 화면 전환 로직 분기
+            
+            // ✅ 상세보기(app-detail)에서 바로 탭 이동 시:
+            // AppDetailManager.show()가 results-dashboard-view/results-header를 display:none으로 숨기므로,
+            // 탭 전환 시 결과 컨테이너를 반드시 복구해야 "오른쪽 화면 공백"이 발생하지 않습니다.
+            const resultsDash = document.getElementById('results-dashboard-view');
+            if (resultsDash) {
+                resultsDash.classList.remove('hidden');
+                resultsDash.style.display = 'block';
+            }
+            const resultsHeader2 = document.querySelector('.results-header');
+            if (resultsHeader2) resultsHeader2.style.display = 'flex';
+            const privacyNotice2 = document.getElementById('privacy-footer-notice');
+            if (privacyNotice2) privacyNotice2.style.display = 'block';
+// 3. 화면 전환 로직 분기
             if (targetId === 'scan-dashboard-screen') {
                 // [Case A] 대시보드 탭 클릭
                 const resultsScreen = document.getElementById('scan-results-screen');
@@ -328,6 +341,18 @@ export function initAuthSettings(ctx) {
             if (window.lastScanData) {
                 ViewManager.activateMenu('nav-result');
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
+                
+                // ✅ 상세보기에서 바로 '검사 결과'로 돌아올 때도 결과 컨테이너 복구
+                const resultsDash = document.getElementById('results-dashboard-view');
+                if (resultsDash) {
+                    resultsDash.classList.remove('hidden');
+                    resultsDash.style.display = 'block';
+                }
+                const resultsHeader2 = document.querySelector('.results-header');
+                if (resultsHeader2) resultsHeader2.style.display = 'flex';
+                const privacyNotice2 = document.getElementById('privacy-footer-notice');
+                if (privacyNotice2) privacyNotice2.style.display = 'block';
+
                 ResultsRenderer.render(window.lastScanData);
             } else {
                 CustomUI.alert("표시할 검사 결과 데이터가 없습니다.");

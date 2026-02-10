@@ -195,18 +195,14 @@ export function initActionHandlers(ctx) {
             saveResultsBtn.textContent = "저장 중...";
 
             try {
-                const pureData = JSON.parse(JSON.stringify(State.lastScanData));
-
-                const result = await window.electronAPI.saveScanResult(pureData);
-
+                const result = await window.electronAPI.saveScanResult(State.lastScanData);
                 if (result.success) {
                     await CustomUI.alert(result.message);
                 } else {
                     await CustomUI.alert(`저장 실패: ${result.error || result.message}`);
                 }
             } catch (error) {
-                console.error("Serialization Error:", error);
-                await CustomUI.alert(`로컬 저장 오류: 데이터 형식이 올바르지 않습니다.`);
+                await CustomUI.alert(`로컬 저장 오류: ${error.message}`);
             } finally {
                 saveResultsBtn.disabled = false;
                 saveResultsBtn.textContent = "💾 로컬 저장";
@@ -262,10 +258,10 @@ export function initActionHandlers(ctx) {
             document.getElementById('print-date').textContent = dateStr;
             document.getElementById('print-doc-id').textContent = `BD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-            // 검사 업체명 바인딩 (State에서 가져옴)
+            // 💡 [수정] 검사 업체명 바인딩 (State에서 가져옴)
             document.getElementById('print-agency-name').textContent = State.agencyName;
 
-            // 검사자 정보 테이블 바인딩
+            // 💡 [추가] 검사자 정보 테이블 바인딩
             const examinerTable = document.getElementById('print-examiner-info');
             if (examinerTable) {
                 examinerTable.innerHTML = `
@@ -336,41 +332,32 @@ export function initActionHandlers(ctx) {
             const fileBody = document.getElementById('print-file-body');
 
             if (isIos) {
+                // 💡 [수정] iOS일 경우 파일 시스템 분석 섹션 전체 숨김
                 if (fileSection) fileSection.style.display = 'none';
             } else {
+                // Android일 경우 섹션 표시
                 if (fileSection) fileSection.style.display = 'block';
 
-                if (data.apkFiles && data.apkFiles.length > 0) {
-                    fileBody.innerHTML = data.apkFiles.map((f, i) => {
-                        // f가 객체인 경우와 문자열인 경우를 모두 대응합니다.
-                        // 보통 f.apkPath 또는 f.packageName에 실제 경로가 들어있습니다.
-                        const filePath = (typeof f === 'object') ? (f.apkPath || f.path || f.packageName || '경로 정보 없음') : f;
-
-                        return `
-                <tr>
-                    <td style="text-align:center;">${i + 1}</td>
-                    <td style="word-break:break-all; font-family:monospace; font-size:11px;">
-                        ${filePath}
-                    </td>
-                </tr>`;
-                    }).join('');
+                // APK 목록 바인딩
+                if (data.apkFiles.length > 0) {
+                    fileBody.innerHTML = data.apkFiles.map((f, i) => `<tr><td style="text-align:center;">${i + 1}</td><td>${f}</td></tr>`).join('');
                 } else {
                     fileBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">발견된 파일 없음</td></tr>`;
                 }
             }
 
 
-            // 7. 전체 앱 목록 
+            // 7. [부록] 전체 앱 목록 (Android 전용 앱 목록 표시 로직 유지)
             const printArea = document.getElementById('printable-report');
-            // 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
+            // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
             const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
 
             if (isIos) {
-                // iOS일 경우 5번 섹션 숨김 
+                // 💡 [수정] iOS일 경우 5번 섹션 숨김 (기존 로직)
                 const fileSection = document.getElementById('print-file-system-section');
                 if (fileSection) fileSection.style.display = 'none';
 
-                // iOS일 경우 부록 
+                // 💡 [수정] iOS일 경우 부록 섹션 번호를 6번에서 5번으로 변경
                 if (appendixHeader) {
                     appendixHeader.textContent = appendixHeader.textContent.replace(/^6\./, '5.');
                 }
@@ -379,10 +366,11 @@ export function initActionHandlers(ctx) {
                 const fileSection = document.getElementById('print-file-system-section');
                 if (fileSection) fileSection.style.display = 'block';
 
-                // Android일 경우 부록 
+                // Android일 경우 부록 섹션 번호를 6번으로 유지
                 if (appendixHeader) {
                     appendixHeader.textContent = appendixHeader.textContent.replace(/^5\./, '6.');
                 }
+                // ... (기존 APK 목록 바인딩 로직 유지) ...
             }
 
             const appGrid = document.getElementById('print-all-apps-grid');
@@ -392,38 +380,23 @@ export function initActionHandlers(ctx) {
             const sortedApps = [...data.allApps].sort((a, b) => a.packageName.localeCompare(b.packageName));
 
             sortedApps.forEach(app => {
+
                 const div = document.createElement('div');
-                div.className = 'compact-item'; // 기본 스타일
 
-                // 1. [빨간색] 진짜 스파이앱인 경우 (3, 4번 섹션에 등장하는 앱)
-                const isSpy = data.suspiciousApps.some(s => s.packageName === app.packageName);
+                if (app.reason) {
+                    // 1순위: 위협 앱 (빨간색)
+                    div.className = 'compact-item compact-threat';
+                } else if (app.isSideloaded) {
+                    // 2순위: 사이드로딩 앱 (회색)
+                    div.className = 'compact-item compact-sideload';
+                } else {
+                    // 3순위: 일반 앱 (흰색)
+                    div.className = 'compact-item';
+                }
 
-                // 2. [노란색] 개인정보 유출 위협인 경우 (부록에서만 강조할 앱)
-                const isPrivacyRisk = data.privacyThreatApps && data.privacyThreatApps.some(p => p.packageName === app.packageName);
-
-                if (isSpy) {
-                    // 스파이앱: 빨간색 강조
-                    div.classList.add('compact-threat');
-                    div.style.backgroundColor = '#ffcccc';
-                    div.style.color = '#cc0000';
-                    div.style.fontWeight = 'bold';
-                    div.textContent = `[위협] ${formatAppName(app.packageName)} (${app.packageName})`;
-                }
-                else if (isPrivacyRisk) {
-                    div.style.backgroundColor = '#fff3cd';
-                    div.style.border = '1px solid #ffeeba';
-                    div.style.color = '#856404';
-                    div.textContent = `[주의] ${formatAppName(app.packageName)} (${app.packageName})`;
-                }
-                else if (app.isSideloaded) {
-                    // 사이드로딩(외부설치): 회색 강조
-                    div.classList.add('compact-sideload');
-                    div.textContent = `[외부] ${formatAppName(app.packageName)} (${app.packageName})`;
-                }
-                else {
-                    // 일반 앱: 흰색
-                    div.textContent = `${formatAppName(app.packageName)} (${app.packageName})`;
-                }
+                // 앱 이름 표시 (위협이면 앞에 [위협] 표시)
+                const prefix = app.reason ? '[위협] ' : (app.isSideloaded ? '[외부] ' : '');
+                div.textContent = `${prefix}${formatAppName(app.packageName)} (${app.packageName})`;
 
                 appGrid.appendChild(div);
             });
@@ -476,57 +449,48 @@ export function initActionHandlers(ctx) {
     };
 
     // 저장 로직 (함수로 분리)
-    const handleAdminSave = async () => {
-        const val = adminInput.value;
-        if (!val && val !== '0') {
-            await CustomUI.alert("값을 입력하세요.");
+    const handleAdminSave = async (ev) => {
+        const saveBtn = (ev && ev.currentTarget) ? ev.currentTarget : document.getElementById('admin-save-btn');
+        const value = parseInt(adminInput.value, 10);
+
+        if (isNaN(value) || value < 0) {
+            await CustomUI.alert('시간은 0 이상의 숫자로 입력해주세요.');
             return;
         }
 
-        const min = parseInt(val, 10);
-        let message = "";
-
-        if (min === 0) {
-            message = "설정 해제: 즉시 완료 모드";
-        } else if (min < 10 || min > 60) {
-            await CustomUI.alert("시간은 10분 ~ 60분 사이로 설정해주세요.");
-            return;
-        } else {
-            message = `✅ 설정됨: 안드로이드 검사 시간 [${min}분]`;
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = '저장 중...';
         }
 
-        // 1. 현재 로그인한 유저 확인
-        const user = auth.currentUser;
-        if (!user) {
-            await CustomUI.alert("오류: 로그인 정보를 찾을 수 없습니다.");
-            return;
-        }
-
-        // 2. UI 즉시 반영
-        State.androidTargetMinutes = min;
-
-        adminSaveBtn.textContent = "저장 중...";
-        adminSaveBtn.disabled = true;
+        console.log('[AdminHidden] saving androidTargetMinutes =', value);
 
         try {
-            // ★★★ [수정됨] 공용 설정(settings/config)이 아니라 내 계정(users/uid)을 수정 ★★★
-            const docRef = doc(null, "users", user.uid);
+            const user = authService.getCurrentUser?.();
+            if (!user) throw new Error('로그인이 필요합니다.');
 
-            await updateDoc(docRef, {
-                android_scan_duration: min // 필드명 통일
+            // Firestore에 저장
+            await updateDoc(doc(null, 'users', user.uid), {
+                androidTargetMinutes: value,
+                updatedAt: serverTimestamp()
             });
 
-            await CustomUI.alert(`${message}\n(서버 계정 정보에도 저장되었습니다)`);
-            closeAdminModal();
+            // 로컬 상태 즉시 반영
+            State.androidTargetMinutes = value;
 
-        } catch (error) {
-            console.error("저장 실패:", error);
-            // 만약 문서가 없어서 에러가 나면 setDoc으로 시도하거나 알림
-            await CustomUI.alert(`⚠️ 저장 실패: ${error.message}`);
-            closeAdminModal();
+            console.log('[AdminHidden] saved ok');
+            await CustomUI.alert('✅ 검사 시간 설정이 저장되었습니다.');
+
+            // 모달 닫기
+            hiddenModal.style.display = 'none';
+        } catch (err) {
+            console.error('[AdminHidden] save failed:', err);
+            await CustomUI.alert('설정 저장 중 오류가 발생했습니다: ' + (err?.message || err));
         } finally {
-            adminSaveBtn.textContent = "저장";
-            adminSaveBtn.disabled = false;
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '저장';
+            }
         }
     };
 

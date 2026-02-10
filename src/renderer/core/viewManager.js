@@ -57,9 +57,10 @@ export function createViewManager(State) {
             const _mode = String(State.currentDeviceMode || '').toLowerCase();
             const isIos = _mode.includes('ios');
 
+            // 결과 메뉴는 "결과 화면"(scan-results) 및 결과 상세(app-detail)에서만 노출
+            // 스캔 진행 중 대시보드(scan-dashboard)에서는 결과 메뉴가 보이면 UX가 혼동되어 숨김 처리
             const shouldShowResultMenu = (
                 screenId === 'scan-results-screen' ||
-                screenId === 'scan-dashboard-screen' ||   
                 screenId === 'app-detail-view' ||
                 screenId === 'res-privacy' ||
                 (window.lastScanData && screenId === 'admin-screen')
