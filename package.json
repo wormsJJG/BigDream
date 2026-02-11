@@ -1,6 +1,6 @@
 {
   "name": "BD-SCANNER",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Mobile Scanner",
   "main": "main.js",
   "scripts": {
@@ -18,26 +18,6 @@
     "@electron-forge/maker-squirrel": "^7.10.2",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12"
-  },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "icon": "assets/app_icon",
-        "extraResource": [
-          "ios-tools",
-          "platform-tools"
-        ]
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "BD_Scanner",
-            "setupIcon": "assets/setUpIcon.ico"
-          }
-        }
-      ]
-    }
   },
   "dependencies": {
     "@electron-forge/cli": "^7.10.2",
@@ -59,58 +39,40 @@
     "productName": "BD-Scanner",
     "appId": "com.bigdream.bdscanner",
     "asar": true,
+
     "win": {
-      "target": [
-        "nsis"
-      ],
+      "target": ["nsis"],
       "icon": "assets/setUpIcon.ico",
       "signtoolOptions": {
-        "signingHashAlgorithms": [
-          "sha256"
-        ],
+        "signingHashAlgorithms": ["sha256"],
         "certificateSubjectName": "BigDream Corp",
         "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1"
       }
+    },
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "perMachine": true,
+      "language": 1042,
+      "installerIcon": "assets/setUpIcon.ico",
+      "shortcutName": "BD-Scanner",
+      "artifactName": "BD-Scanner-${version}.${ext}",
+      "uninstallDisplayName": "BD-Scanner"
+    },
+
+    "extraResources": [
+      { "from": "platform-tools/", "to": "platform-tools/", "filter": ["**/*"] },
+      { "from": "ios-tools/", "to": "ios-tools/", "filter": ["**/*"] },
+      { "from": "pcap_receiver.py", "to": "pcap_receiver.py" },
+      { "from": "assets/models", "to": "assets/models" }
+    ],
+
+    "publish": {
+      "provider": "github",
+      "private": true
     }
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": false,
-    "createDesktopShortcut": true,
-    "perMachine": true,
-    "language": 1042,
-    "installerIcon": "assets/setUpIcon.ico",
-    "shortcutName": "BD-Scanner",
-    "artifactName": "BD-Scanner-${version}.${ext}",
-    "uninstallDisplayName": "BD-Scanner"
-  },
-  "extraResources": [
-    {
-      "from": "platform-tools/",
-      "to": "platform-tools/",
-      "filter": [
-        "**/*"
-      ]
-    },
-    {
-      "from": "ios-tools/",
-      "to": "ios-tools/",
-      "filter": [
-        "**/*"
-      ]
-    },
-    {
-      "from": "pcap_receiver.py",
-      "to": "pcap_receiver.py"
-    },
-    {
-      "from": "assets/models",
-      "to": "assets/models"
-    }
-  ],
-  "publish": {
-    "provider": "github",
-    "private": true
   },
   "repository": {
     "type": "git",
