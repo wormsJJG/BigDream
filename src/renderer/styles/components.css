@@ -85,3 +85,60 @@
     font-weight: 700;
     color: #4ECDC4;
 }
+
+
+/* ==========================================================================
+   Report header (shared for scan results + scan info)
+   ========================================================================== */
+.report-header-root {
+    margin-bottom: 14px;
+}
+
+
+/* Shared report header (정밀 검사 결과 보고서) */
+.results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+}
+
+.results-header h2 {
+    margin: 0;
+    line-height: 1.2;
+}
+
+.header-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+
+.report-info-card {
+    padding: 18px;
+}
+
+.report-info-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.report-saved-at {
+    font-size: 14px;
+    color: #666;
+    white-space: nowrap;
+}
+
+.report-info-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}

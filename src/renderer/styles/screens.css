@@ -6,6 +6,7 @@
 @import "../screens/create-scan-screen/style.css";
 @import "../screens/device-connection-screen/style.css";
 @import "../screens/scan-progress-screen/style.css";
+@import "../screens/scan-info-screen/style.css";
 
 /* Results / Admin */
 @import "../screens/scan-results-screen/style.css";

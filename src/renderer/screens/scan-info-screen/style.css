@@ -1,0 +1,50 @@
+/* scan-info-screen: shown only for Android "검사 열기" mode */
+
+#scan-info-screen h2 {
+    margin-bottom: 6px;
+}
+
+#scan-info-screen .muted {
+    margin-top: 0;
+    margin-bottom: 18px;
+    color: var(--text-muted, #666);
+}
+
+#scan-info-screen .scan-info-card {
+    width: 100%;
+    max-width: 760px;
+    margin: 0;
+}
+
+#scan-info-screen .section-title {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* Title of the whole "검사 정보" box */
+#scan-info-screen .report-info-header .section-title {
+    font-size: 22px;
+}
+
+#scan-info-screen .info-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#scan-info-screen .info-table th {
+    width: 180px;
+    text-align: left;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 6px;
+}
+
+#scan-info-screen .info-table td {
+    padding: 10px 12px;
+}
+
+
+#scan-info-screen .report-info-body {
+    align-items: center;
+}

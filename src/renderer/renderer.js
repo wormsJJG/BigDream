@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentDeviceMode: null, // 'android' or 'ios'
         currentUdid: null,       // iOS UDID
         lastScanData: null,      // 인쇄용 데이터 백업
+        isLoadedScan: false,     // true when a scan result is loaded via "검사 열기"
         androidTargetMinutes: 0, // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
         agencyName: 'BD SCANNER', // 회사 정보 상태
         quota: -1, // -1은 로딩 중 또는 알 수 없음
