@@ -1,14 +1,3 @@
-
-    // Simple message box renderer (no innerHTML, no inline styles)
-    const renderBoxMessage = (container, message, variant = 'success') => {
-        if (!container) return;
-        container.replaceChildren();
-        const box = document.createElement('div');
-        box.className = `bd-box-msg bd-box-msg--${variant}`;
-        box.textContent = String(message ?? '');
-        container.appendChild(box);
-    };
-
 // Auto-split module: actionHandlers
 
 import { Utils } from '../core/utils.js';
@@ -1355,6 +1344,28 @@ export function initActionHandlers(ctx) {
     //        detail-screen이 logged-in-view 바깥에 있는 현재 레이아웃에서는 화면이 하얗게 비는 문제가 발생.
     //        -> ViewManager.showScreen으로 스크린 전환을 통일하고, 템플릿/DOM 준비 후 바인딩.
     window.viewReportDetail = async (reportId) => {
+        // Local DOM helpers (avoid dependency on initActionHandlers scope)
+        const clearEl = (node) => { if (node) node.replaceChildren(); };
+        const el = (tag, props = {}, ...children) => {
+            const node = document.createElement(tag);
+            for (const [k, v] of Object.entries(props || {})) {
+                if (v === undefined || v === null) continue;
+                if (k === 'class') node.className = v;
+                else if (k === 'dataset') Object.assign(node.dataset, v);
+                else if (k === 'text') node.textContent = String(v);
+                else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
+                else if (k in node) node[k] = v;
+                else node.setAttribute(k, String(v));
+            }
+            for (const ch of children.flat()) {
+                if (ch === undefined || ch === null) continue;
+                if (typeof ch === 'string' || typeof ch === 'number') node.appendChild(document.createTextNode(String(ch)));
+                else node.appendChild(ch);
+            }
+            return node;
+        };
+        const append = (parent, ...children) => { children.flat().forEach(c => parent && parent.appendChild(c)); };
+
         const loggedInView = document.getElementById('logged-in-view');
         const detailScreen = document.getElementById('admin-report-detail-screen');
         if (!loggedInView || !detailScreen) return;
@@ -1458,7 +1469,7 @@ export function initActionHandlers(ctx) {
                 // 템플릿이 없거나 로드 실패한 경우 화면만 전환된 상태가 될 수 있음
                 console.warn('[viewReportDetail] threat list element missing - template may not be loaded');
             } else if (apps.length === 0) {
-                renderBoxMessage(threatListEl, '✅ 탐지된 위협이 없습니다. (Clean Device)', 'success');
+                threatListEl.innerHTML = `<div style="text-align:center; padding:30px; color:#28a745; background:white; border-radius:8px;">✅ 탐지된 위협이 없습니다. (Clean Device)</div>`;
             } else {
                 apps.forEach((app, index) => {
                     // 앱 이름 포맷팅 (패키지명에서 추출)
