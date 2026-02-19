@@ -2,7 +2,22 @@
 
 import { Utils } from '../core/utils.js';
 export function initAppDetail(ctx) {
-    const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
+    
+    // --- Renderer helpers (avoid innerHTML for dynamic text) ---
+    const setMainSubText = (el, mainText, subText = '', subClass = 'bd-detail-sub') => {
+        if (!el) return;
+        el.replaceChildren();
+        const main = document.createTextNode(String(mainText ?? ''));
+        el.appendChild(main);
+        if (subText) {
+            el.appendChild(document.createElement('br'));
+            const span = document.createElement('span');
+            span.className = subClass;
+            span.textContent = String(subText ?? '');
+            el.appendChild(span);
+        }
+    };
+const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
     const { loggedInView, loggedOutView } = dom;
     const { ID_DOMAIN } = constants;
 
@@ -23,7 +38,7 @@ export function initAppDetail(ctx) {
     
                 if (iconWrapper) {
                     iconWrapper.classList.remove('suspicious');
-                    iconWrapper.innerHTML = '';
+                    iconWrapper.replaceChildren();
                 }
     
                 // 1. 화면 전환 로직
@@ -72,13 +87,13 @@ export function initAppDetail(ctx) {
                     if (netLabel) netLabel.textContent = "파일 크기";
     
                     if (sideloadEl) {
-                        sideloadEl.innerHTML = `외부 설치 (미설치 파일)<br><span style="font-size:11px; color:#888; font-family:monospace; word-break:break-all;">${app.apkPath || '-'}</span>`;
+                        setMainSubText(sideloadEl, '외부 설치 (미설치 파일)', app.apkPath || '-', 'bd-detail-sub bd-detail-sub--mono bd-break-all');
                     }
                     if (bgStatusEl) {
-                        bgStatusEl.innerHTML = `${app.installDate || '-'}<br><span style="font-size:11px; color:#d9534f;">(기기 내 파일 저장 시점)</span>`;
+                        setMainSubText(bgStatusEl, app.installDate || '-', '(기기 내 파일 저장 시점)', 'bd-detail-sub bd-detail-sub--danger');
                     }
                     if (networkEl) {
-                        networkEl.innerHTML = `${app.fileSize || '분석 중'}<br><span style="font-size:11px; color:#888;">(APK 패키지 용량)</span>`;
+                        setMainSubText(networkEl, app.fileSize || '분석 중', '(APK 패키지 용량)', 'bd-detail-sub');
                     }
     
                     if (neutralizeBtnEl) neutralizeBtnEl.style.setProperty('display', 'none', 'important');
@@ -97,7 +112,7 @@ export function initAppDetail(ctx) {
     
                     if (sideloadEl) {
                         const originValue = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
-                        sideloadEl.innerHTML = `<span style="font-weight: bold; color: #333;">${originValue}</span>`;
+                        if (sideloadEl) { sideloadEl.textContent = originValue; sideloadEl.classList.add('bd-fw-bold'); }
                     }
                     if (bgStatusEl) {
                         bgStatusEl.textContent = app.isRunningBg ? '실행 중' : '중지됨';
@@ -105,7 +120,7 @@ export function initAppDetail(ctx) {
                     if (networkEl) {
                         const usage = app.dataUsage || { rx: 0, tx: 0 };
                         const total = usage.rx + usage.tx;
-                        networkEl.innerHTML = `총 ${Utils.formatBytes(total)}<br><span style="font-size:12px; color:#888;">(수신: ${Utils.formatBytes(usage.rx)} / 송신: ${Utils.formatBytes(usage.tx)})</span>`;
+                        setMainSubText(networkEl, `총 ${Utils.formatBytes(total)}`, `(수신: ${Utils.formatBytes(usage.rx)} / 송신: ${Utils.formatBytes(usage.tx)})`, 'bd-detail-sub bd-detail-sub--sm');
                     }
     
                     if (neutralizeBtnEl) {
@@ -162,7 +177,7 @@ export function initAppDetail(ctx) {
                     else if (isPrivacyRisk) iconWrapper.classList.add('warning');
 
                     // 데이터 세팅 완료 후 이미지 삽입
-                    iconWrapper.innerHTML = `<img src="${iconSrc}" style="width:100%; height:100%; object-fit:cover; border-radius: 12px;">`;
+                    iconWrapper.replaceChildren(); const img=document.createElement('img'); img.src=iconSrc; img.className='bd-icon-img'; iconWrapper.appendChild(img);
                 }
     
                 const totalPermsArr = app.requestedList || app.permissions || [];
@@ -180,15 +195,14 @@ export function initAppDetail(ctx) {
                 // 6. 권한 리스트 렌더링
                 const list = document.getElementById('detail-permission-list');
                 if (list) {
-                    list.innerHTML = '';
+                    list.replaceChildren();
                     const perms = app.requestedList || app.permissions || [];
                     if (perms.length > 0) {
                         perms.forEach(perm => {
                             const spanElem = document.createElement('span');
                             if (app.isApkFile) {
                                 // APK용 분석 모드 스타일
-                                spanElem.className = 'perm-item';
-                                spanElem.style.cssText = "background:#fff3e0; border:1px solid #ffe0b2; color:#e65100; padding:4px 8px; border-radius:4px; margin:2px; display:inline-block;";
+                                spanElem.className = 'perm-item perm-apk';
                                 spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
                             } else {
                                 // 일반 앱용 설치 모드 스타일
@@ -199,7 +213,7 @@ export function initAppDetail(ctx) {
                             list.appendChild(spanElem);
                         });
                     } else {
-                        list.innerHTML = '<p style="color:#999; padding:5px;">분석된 권한 정보가 없습니다.</p>';
+                        const p=document.createElement('p'); p.className='bd-muted bd-pad-5'; p.textContent='분석된 권한 정보가 없습니다.'; list.appendChild(p);
                     }
                 }
     

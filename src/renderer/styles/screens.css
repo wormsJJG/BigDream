@@ -13,5 +13,7 @@
 @import "../screens/admin-screen/style.css";
 @import "../screens/admin-report-detail-screen/style.css";
 
+@import "./refactor.css";
 /* Global overlays */
+@import "./messages.css";
 @import "./modals.css";

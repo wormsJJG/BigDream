@@ -1,0 +1,49 @@
+/* refactor.css - shared classes to replace inline styles across renderer modules */
+
+.bd-fw-bold{font-weight:bold;}
+.bd-fw-500{font-weight:500;}
+.bd-muted{color:#888;}
+.bd-subtext{font-size:11px;color:#888;}
+.bd-subtext--sm{font-size:12px;color:#888;}
+.bd-subtext--mono{font-family:monospace;}
+.bd-subtext--danger{color:#d9534f;}
+.bd-break-all{word-break:break-all;}
+.bd-pad-5{padding:5px;}
+
+.bd-tag{font-size:9px; font-weight:700;}
+.bd-tag--mvt{color:#0275d8;}
+.bd-tag--vt{color:#d9534f;}
+
+.bd-status{font-weight:800;}
+.bd-status--ok{color:#5CB85C;}
+.bd-status--bad{color:#d9534f;}
+.bd-evidence{font-size:11px;color:#444;}
+
+.bd-td-center{text-align:center;}
+.bd-mono-small{font-family:monospace; font-size:11px;}
+
+.bd-btn-back{background:#666; margin-bottom:15px;}
+.bd-mt-30{margin-top:30px;}
+.bd-row-controls{display:flex; gap:10px; margin-bottom:20px; align-items:center;}
+.bd-input-date{padding:5px; border:1px solid #ddd; border-radius:4px; width:150px;}
+.bd-helptext{margin-bottom:10px; color:#666; font-size:13px;}
+
+.bd-user-link{cursor:pointer; color:#337ab7; font-weight:bold;}
+
+/* App detail */
+.bd-detail-sub{font-size:11px; color:#888;}
+.bd-detail-sub--sm{font-size:12px; color:#888;}
+.bd-detail-sub--danger{font-size:11px; color:#d9534f;}
+.bd-detail-sub--mono{font-size:11px; color:#888; font-family:monospace;}
+
+.bd-icon-img{width:100%; height:100%; object-fit:cover; border-radius:12px;}
+
+.perm-item.perm-apk{
+  background:#fff3e0;
+  border:1px solid #ffe0b2;
+  color:#e65100;
+  padding:4px 8px;
+  border-radius:4px;
+  margin:2px;
+  display:inline-block;
+}

@@ -1,0 +1,72 @@
+/* messages.css - renderer message / status helpers (no inline styles) */
+
+.bd-preline { white-space: pre-line; }
+
+/* Status labels (e.g., phoneStatusAlert, hackAlert) */
+.bd-status-info {
+    color: #00d2ff;
+}
+
+.bd-status-success {
+    color: var(--success-color);
+    text-shadow: 0 0 15px var(--success-color);
+}
+
+.bd-status-muted {
+    color: #888;
+}
+
+.bd-status-error {
+    color: var(--danger-color, #ff3b30);
+}
+
+/* Table message cells */
+.bd-table-msg {
+    text-align: center;
+    padding: 20px;
+    color: #333;
+}
+
+.bd-table-msg--loading {
+    color: #333;
+}
+
+.bd-table-msg--muted {
+    color: #888;
+}
+
+.bd-table-msg--success {
+    color: var(--success-color);
+}
+
+.bd-table-msg--error {
+    color: var(--danger-color, #ff3b30);
+}
+
+/* Box message (non-table) */
+.bd-box-msg {
+    padding: 10px;
+    border: 1px solid #ccc;
+    text-align: center;
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+}
+
+.bd-box-msg--success {
+    border-color: var(--success-color);
+    color: var(--success-color);
+}
+
+.bd-box-msg--muted {
+    color: #888;
+}
+
+.bd-box-msg--error {
+    border-color: var(--danger-color, #ff3b30);
+    color: var(--danger-color, #ff3b30);
+}
+
+.bd-text-error {
+    color: var(--danger-color, #ff3b30);
+}
