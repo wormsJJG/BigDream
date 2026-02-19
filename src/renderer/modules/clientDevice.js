@@ -135,6 +135,14 @@ export function initClientDevice(ctx) {
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
 
+                const navScanInfo = document.getElementById('nav-scan-info');
+                if (navScanInfo) {
+                    navScanInfo.classList.add('hidden');
+                    navScanInfo.classList.remove('active');
+                    navScanInfo.style.display = 'none';
+                }
+
+
                 const navResult = document.getElementById('nav-result');
                 if (navResult) {
                     navResult.classList.add('hidden');
@@ -190,6 +198,21 @@ export function initClientDevice(ctx) {
                 });
 
                 // 2. 상태값 및 화면 전환
+
+
+                // Loaded scan cleanup (file open)
+                try {
+                    State.isLoadedScan = false;
+                    State.lastScanData = null;
+                    State.lastScanFileMeta = null;
+                    window.lastScanData = null;
+                } catch (_e) { }
+
+                try {
+                    if (typeof window.__bd_renderScanInfo === 'function') {
+                        window.__bd_renderScanInfo(null, null);
+                    }
+                } catch (_e) { }
 
                 // Android dashboard cleanup (nav/scroll/polling/ui)
                 // [Patch] only show dashboard nav when scan is active

@@ -55,9 +55,15 @@ export function initAppDetail(ctx) {
                 const uninstallBtnEl = document.getElementById('uninstall-btn');
     
                 // 라벨 제어 핵심
-                const allLabels = Array.from(document.querySelectorAll('#app-detail-view .d-label'));
-                const bgLabel = allLabels.find(el => el.textContent.includes("실행 상태") || el.textContent.includes("설치 일시"));
-                const netLabel = allLabels.find(el => el.textContent.includes("데이터 사용량") || el.textContent.includes("파일 크기"));
+                // NOTE:
+                //  - APK 상세에서 '저장 일시'로 라벨 텍스트가 바뀐 뒤,
+                //    다시 설치된 앱/백그라운드 앱 상세로 들어오면 기존 구현(텍스트 includes 기반)은
+                //    라벨을 못 찾아 '저장 일시'가 그대로 남는 버그가 발생했음.
+                //  - 라벨은 DOM 구조상 항상 동일한 위치(2번째/3번째 detail-item)이므로,
+                //    텍스트 기반 탐색을 제거하고 구조 기반으로 안정적으로 참조한다.
+                const detailItems = Array.from(document.querySelectorAll('#app-detail-view .detail-item'));
+                const bgLabel = detailItems?.[1]?.querySelector('.d-label') || null;
+                const netLabel = detailItems?.[2]?.querySelector('.d-label') || null;
     
                 // 3. [분기 로직]발견된 설치 파일(APK) vs 일반 앱
                 if (app.isApkFile) {

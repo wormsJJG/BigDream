@@ -24,6 +24,75 @@ export function initScanController(ctx) {
     }
     const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
 
+
+    function formatDateTime(value) {
+        if (!value) return '-';
+        const d = (value instanceof Date) ? value : new Date(value);
+        if (isNaN(d.getTime())) return '-';
+
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const mm = pad2(d.getMonth() + 1);
+        const dd = pad2(d.getDate());
+        const hh = pad2(d.getHours());
+        const mi = pad2(d.getMinutes());
+
+        return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+    }
+
+    function formatRootStatus(deviceInfo) {
+        if (!deviceInfo) return '-';
+        if (deviceInfo.isRooted === true) return '위험';
+        if (deviceInfo.isRooted === false) return '안전함';
+        return '-';
+    }
+
+    function setText(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = (text === undefined || text === null || text === '') ? '-' : String(text);
+    }
+
+    function toggleHidden(id, shouldHide) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('hidden', shouldHide);
+    }
+
+    function renderScanInfo(payload, fileMeta) {
+        const hasPayload = !!payload;
+        toggleHidden('scan-info-empty', hasPayload);
+        toggleHidden('scan-info-wrapper', !hasPayload);
+
+        if (!hasPayload) {
+            setText('scan-info-examiner-name', '-');
+            setText('scan-info-examiner-phone', '-');
+            setText('scan-info-model', '-');
+            setText('scan-info-os', '-');
+            setText('scan-info-serial', '-');
+            setText('scan-info-root', '-');
+            setText('scan-info-saved-at', '-');
+            return;
+        }
+
+        const meta = payload.meta || {};
+        const deviceInfo = payload.deviceInfo || {};
+
+        setText('scan-info-examiner-name', meta.clientName || '-');
+        setText('scan-info-examiner-phone', meta.clientPhone || deviceInfo.phoneNumber || '-');
+
+        setText('scan-info-model', deviceInfo.model || '-');
+        setText('scan-info-os', deviceInfo.os || '-');
+        setText('scan-info-serial', deviceInfo.serial || '-');
+        setText('scan-info-root', formatRootStatus(deviceInfo));
+
+        const savedAt = meta.savedAt || fileMeta?.savedAt || fileMeta?.mtimeMs;
+        setText('scan-info-saved-at', formatDateTime(savedAt));
+    }
+
+    // Expose for other modules (e.g., nav click)
+    window.__bd_renderScanInfo = renderScanInfo;
+
+
     // [Patch] Normalize loaded scan JSON so "검사 열기"에서도 목록(앱/백그라운드/APK)이 안정적으로 렌더링되도록 보정
     function normalizeLoadedScanData(payload, osMode) {
         const mode = normalizeDeviceMode(osMode || payload?.deviceInfo?.os || payload?.osMode || payload?.deviceMode);
@@ -179,6 +248,7 @@ export function initScanController(ctx) {
         navOpen: () => document.getElementById('nav-open'),
         navResult: () => document.getElementById('nav-result'),
         dashNav: () => document.getElementById('nav-android-dashboard'),
+        scanInfoNav: () => document.getElementById('nav-scan-info'),
         resultSub: () => document.getElementById('result-sub-menu'),
         iosSub: () => document.getElementById('ios-sub-menu'),
     };
@@ -188,6 +258,7 @@ export function initScanController(ctx) {
         const openBtn = bdMenu.navOpen();
         const navResult = bdMenu.navResult();
         const dashNav = bdMenu.dashNav();
+        const scanInfoNav = bdMenu.scanInfoNav();
         const subMenu = bdMenu.resultSub();
         const iosSub = bdMenu.iosSub();
 
@@ -209,6 +280,7 @@ export function initScanController(ctx) {
             hide(subMenu);
             hide(iosSub);
             hide(dashNav);
+            hide(scanInfoNav);
             return;
         }
 
@@ -218,7 +290,14 @@ export function initScanController(ctx) {
             hide(navResult);
             hide(subMenu);
             hide(iosSub);
-            show(dashNav);
+            hide(scanInfoNav);
+
+            // Android 실시간 검사에서만 대시보드(실시간)를 노출
+            if (State.currentDeviceMode === 'android' && !State.isLoadedScan) {
+                show(dashNav);
+            } else {
+                hide(dashNav);
+            }
             return;
         }
 
@@ -231,10 +310,21 @@ export function initScanController(ctx) {
                 show(iosSub);
                 hide(subMenu);
                 hide(dashNav);
+                hide(scanInfoNav);
             } else {
                 show(subMenu);
                 hide(iosSub);
-                show(dashNav);
+
+                // Android 결과 화면:
+                // - 실시간 검사 결과: 대시보드 유지
+                // - '검사 열기' 결과: 대시보드 숨기고 '검사 정보' 노출
+                if (State.isLoadedScan) {
+                    hide(dashNav);
+                    show(scanInfoNav);
+                } else {
+                    show(dashNav);
+                    hide(scanInfoNav);
+                }
             }
         }
     }
@@ -317,6 +407,23 @@ export function initScanController(ctx) {
                 return;
             }
 
+            // [Patch] Capture 대상자 정보(검사 정보) for local save/open-scan
+            try {
+                const nameEl = document.getElementById('client-name');
+                const phoneEl = document.getElementById('client-phone');
+
+                const rawName = nameEl ? String(nameEl.value || '').trim() : '';
+                const rawPhone = phoneEl ? String(phoneEl.value || '').trim() : '';
+
+                const isAnonName = (!rawName) || rawName.includes('익명');
+                const isAnonPhone = (!rawPhone) || rawPhone.includes('000-0000-0000') || rawPhone.includes('익명');
+
+                State.clientInfo = {
+                    name: isAnonName ? null : rawName,
+                    phone: isAnonPhone ? null : rawPhone
+                };
+            } catch (_e) { }
+
             State.__bd_scanInProgress = true; // [Patch] mark scan session active
 
             const isLogged = await ScanController.startLogTransaction(State.currentDeviceMode);
@@ -336,7 +443,14 @@ export function initScanController(ctx) {
             State.lastScanData = null;
             window.lastScanData = null;
             window.__bd_lastScanData = null;
+            State.isLoadedScan = false;
 
+            // Hide "검사 정보" nav if it was enabled by a previously loaded report
+            const navScanInfo = document.getElementById('nav-scan-info');
+            if (navScanInfo) {
+                navScanInfo.classList.add('hidden');
+                navScanInfo.style.display = 'none';
+            }
 
             // Android: use dedicated dashboard screen, iOS: keep legacy progress screen
             if (State.currentDeviceMode === 'android') {
@@ -396,8 +510,19 @@ export function initScanController(ctx) {
                     normalizeLoadedScanData(data, osMode);
                     // 1) 상태 업데이트
                     State.currentDeviceMode = osMode;
+                    State.isLoadedScan = true;
                     State.lastScanData = data;
                     window.lastScanData = data;
+
+                    State.lastScanFileMeta = result.fileMeta || null;
+
+                    try {
+                        if (typeof window.__bd_renderScanInfo === 'function') {
+                            window.__bd_renderScanInfo(data, State.lastScanFileMeta);
+                        }
+                    } catch (e) {
+                        console.warn('[BD-Scanner] scan-info render failed:', e);
+                    }
 
                     // 2) UI 전환
                     // 만약 에러가 여기서 난다면 아래 줄을 주석 처리해보세요.
@@ -439,10 +564,29 @@ export function initScanController(ctx) {
                     const navCreate = document.getElementById('nav-create');
                     const navOpen = document.getElementById('nav-open');
                     const navResult = document.getElementById('nav-result');
+                    const navAndroidDash = document.getElementById('nav-android-dashboard');
+                    const navScanInfo = document.getElementById('nav-scan-info');
 
                     if (navCreate) navCreate.classList.add('hidden');
                     if (navOpen) navOpen.classList.add('hidden');
                     if (navResult) navResult.classList.remove('hidden');
+
+                    // Android "검사 열기"에서는 실시간 대시보드 대신 "검사 정보"를 노출
+                    if (String(osMode).toLowerCase() === 'android') {
+                        if (navAndroidDash) {
+                            navAndroidDash.classList.add('hidden');
+                            navAndroidDash.style.display = 'none';
+                        }
+                        if (navScanInfo) {
+                            navScanInfo.classList.remove('hidden');
+                            navScanInfo.style.display = 'block';
+                        }
+                    } else {
+                        if (navScanInfo) {
+                            navScanInfo.classList.add('hidden');
+                            navScanInfo.style.display = 'none';
+                        }
+                    }
 
                     await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
 
@@ -790,38 +934,13 @@ export function initScanController(ctx) {
             }
         },
 
-        
         async startIosScan() {
             // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
             State.lastScanData = null;
             window.lastScanData = null;
-            this.toggleLaser(true);
+            this.toggleLaser(true)
 
-            // iOS 진행률 이벤트 구독 (있을 때만)
-            let unsubscribeProgress = null;
-            if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
-                unsubscribeProgress = window.electronAPI.onIosScanProgress((payload) => {
-                    if (!payload) return;
-
-                    const percent = Number(payload.percent);
-                    const message = payload.message || payload.text || '';
-
-                    if (Number.isFinite(percent)) {
-                        ViewManager.updateProgress(percent, message, true);
-                        return;
-                    }
-
-                    // percent가 없더라도 문구는 업데이트
-                    if (message) {
-                        const currentWidth = Number(String(document.getElementById('progress-bar')?.style?.width || '0').replace('%', '')) || 0;
-                        ViewManager.updateProgress(currentWidth, message, true);
-                    }
-                });
-            }
-
-            // 초기 상태
-            ViewManager.updateProgress(0, '(1/2) 아이폰 백업 준비 중...', true);
-
+            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
                 // 1. 실제 검사 수행
                 const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
@@ -846,10 +965,6 @@ export function initScanController(ctx) {
 
             } catch (error) {
                 this.handleError(error);
-            } finally {
-                if (typeof unsubscribeProgress === 'function') {
-                    unsubscribeProgress();
-                }
             }
         },
 
@@ -1099,6 +1214,14 @@ export function initScanController(ctx) {
             }
 
             // 3. 데이터 저장
+            // [Patch] Persist 대상자 정보 into scan result for '검사 열기' / '검사 정보'
+            try {
+                data.meta = data.meta || {};
+                const ci = State.clientInfo || {};
+                // 익명(null)인 경우 저장하지 않고 '-'로 표시되게 함
+                if (ci.name) data.meta.clientName = ci.name;
+                if (ci.phone) data.meta.clientPhone = ci.phone;
+            } catch (_e) { }
             State.lastScanData = data;
             window.lastScanData = data;
 

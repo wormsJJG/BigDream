@@ -325,10 +325,115 @@ export function initAuthSettings(ctx) {
         });
     }
 
+    // 사이드바: 검사 정보 (Android "검사 열기" 전용)
+    const navScanInfo = document.getElementById('nav-scan-info');
+    if (navScanInfo) {
+        navScanInfo.addEventListener('click', () => {
+            ViewManager.activateMenu('nav-scan-info');
+            ViewManager.showScreen(loggedInView, 'scan-info-screen');
+
+            try {
+                if (typeof window.__bd_renderScanInfo === 'function') {
+                    window.__bd_renderScanInfo(State.lastScanData, State.lastScanFileMeta);
+                }
+            } catch (e) {
+                console.warn('[BD-Scanner] scan-info render failed:', e);
+            }
+
+            // [Patch] '검사 열기'(Android)에서 결과 탭은 유지하고, 실시간 대시보드는 숨김
+            try {
+                const subMenu = document.getElementById('result-sub-menu');
+                const iosSub = document.getElementById('ios-sub-menu');
+                const dash = document.getElementById('nav-android-dashboard');
+                const navResult = document.getElementById('nav-result');
+                const navCreate = document.getElementById('nav-create');
+                const navOpen = document.getElementById('nav-open');
+
+                if (navCreate) { navCreate.classList.add('hidden'); navCreate.style.display = 'none'; }
+                if (navOpen) { navOpen.classList.add('hidden'); navOpen.style.display = 'none'; }
+                if (navResult) { navResult.classList.remove('hidden'); navResult.style.display = 'block'; }
+
+                if (subMenu) { subMenu.classList.remove('hidden'); subMenu.style.display = 'block'; }
+                if (iosSub) { iosSub.classList.add('hidden'); iosSub.style.display = 'none'; }
+
+                if (dash) { dash.classList.add('hidden'); dash.style.display = 'none'; }
+            } catch (_e) { }
+
+            // Fill info from loaded scan data
+            try {
+                const data = window.lastScanData || State.lastScanData || {};
+                const deviceInfo = data.deviceInfo || {};
+
+                const pick = (...candidates) => {
+                    for (const v of candidates) {
+                        if (v === null || v === undefined) continue;
+                        const s = String(v).trim();
+                        if (!s) continue;
+
+                        // 익명/placeholder 값은 표시에서 '-'로 처리
+                        if (s.includes('익명')) return '-';
+                        if (s === '000-0000-0000' || s === '0000-00-00' || s === '0001-01-01') return '-';
+
+                        return s;
+                    }
+                    return '-';
+                };
+
+                // Examiner/client info (best-effort, supports multiple legacy schemas)
+                const examinerName = pick(
+                    data.meta?.clientName,
+                    data.clientInfo?.name,
+                    data.client?.name,
+                    data.clientName,
+                    data.examinerName,
+                    data.examiner?.name,
+                    data.meta?.examinerName
+                );
+                const examinerPhone = pick(
+                    data.meta?.clientPhone,
+                    data.clientInfo?.phone,
+                    data.client?.phone,
+                    data.clientPhone,
+                    data.examinerPhone,
+                    data.examiner?.phone,
+                    data.meta?.examinerPhone
+                );
+
+                const model = pick(deviceInfo.model);
+                const os = pick(deviceInfo.os, deviceInfo.osVersion, deviceInfo.version);
+                const serial = pick(deviceInfo.serial);
+                const root = (typeof deviceInfo.isRooted === 'boolean')
+                    ? (deviceInfo.isRooted ? '발견됨 (위험)' : '안전함')
+                    : pick(deviceInfo.root, deviceInfo.rootStatus, deviceInfo.isRooted);
+
+                const setText = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                };
+
+                setText('scan-info-examiner-name', examinerName);
+                setText('scan-info-examiner-phone', examinerPhone);
+                setText('scan-info-model', model);
+                setText('scan-info-os', os);
+                setText('scan-info-serial', serial);
+                setText('scan-info-root', root);
+            } catch (e) {
+                console.warn('scan-info render failed:', e);
+            }
+        });
+    }
+
     // 다른 모듈에서 대시보드 메뉴를 켜고 끌 수 있도록 helper 제공
     ctx.helpers = ctx.helpers || {};
     ctx.helpers.setAndroidDashboardNavVisible = (visible) => {
         const el = document.getElementById('nav-android-dashboard');
+        if (!el) return;
+        el.style.display = visible ? 'block' : 'none';
+        el.classList.toggle('hidden', !visible);
+    };
+
+    ctx.helpers.setScanInfoNavVisible = (visible) => {
+        const el = document.getElementById('nav-scan-info');
         if (!el) return;
         el.style.display = visible ? 'block' : 'none';
         el.classList.toggle('hidden', !visible);

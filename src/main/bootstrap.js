@@ -430,6 +430,12 @@ const updateService = createUpdateService({ firestoreService });
           }
 
           const filePath = result.filePath;
+
+          try {
+              data.meta = data.meta || {};
+              data.meta.savedAt = new Date().toISOString();
+          } catch (_e) { }
+
           const jsonContent = JSON.stringify(data, null, 2);
           fs.writeFileSync(filePath, jsonContent);
 
@@ -469,7 +475,14 @@ const updateService = createUpdateService({ firestoreService });
           const rawOs = String(scanData.deviceInfo.os).toLowerCase();
           const normalizedOsMode = rawOs.includes('ios') ? 'ios' : 'android';
 
-          return { success: true, data: scanData, osMode: normalizedOsMode };
+          const stat = fs.statSync(filePath);
+          const fileMeta = {
+              filePath,
+              mtimeMs: stat.mtimeMs,
+              savedAt: stat.mtimeMs
+          };
+
+          return { success: true, data: scanData, osMode: normalizedOsMode, fileMeta };
 
       } catch (e) {
           console.error("로컬 파일 열기 오류:", e);
