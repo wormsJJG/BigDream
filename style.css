@@ -2,7 +2,7 @@
 @import "./src/renderer/styles/base.css";
 @import "./src/renderer/styles/components.css";
 @import "./src/renderer/styles/screens.css";
-@import "./src/renderer/styles/scanController.css";
 
+@import "./src/renderer/styles/messages.css";
 /* Screen: Android dashboard */
 @import "./src/renderer/screens/scan-dashboard-screen/scanDashboard.css";

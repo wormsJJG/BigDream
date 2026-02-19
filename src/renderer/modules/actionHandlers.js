@@ -1,3 +1,14 @@
+
+    // Simple message box renderer (no innerHTML, no inline styles)
+    const renderBoxMessage = (container, message, variant = 'success') => {
+        if (!container) return;
+        container.replaceChildren();
+        const box = document.createElement('div');
+        box.className = `bd-box-msg bd-box-msg--${variant}`;
+        box.textContent = String(message ?? '');
+        container.appendChild(box);
+    };
+
 // Auto-split module: actionHandlers
 
 import { Utils } from '../core/utils.js';
@@ -64,29 +75,6 @@ export function initActionHandlers(ctx) {
 
         return null;
     };
-
-    // --- Renderer message helpers (no inline style / safer than innerHTML) ---
-    const renderTbodyMessage = (tbody, colspan, message, variant = 'info') => {
-        if (!tbody) return;
-        tbody.replaceChildren();
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = colspan;
-        td.className = `bd-table-msg bd-table-msg--${variant}`;
-        td.textContent = String(message ?? '');
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-    };
-
-    const renderBoxMessage = (container, message, variant = 'info') => {
-        if (!container) return;
-        container.replaceChildren();
-        const div = document.createElement('div');
-        div.className = `bd-box-msg bd-box-msg--${variant}`;
-        div.textContent = String(message ?? '');
-        container.appendChild(div);
-    };
-
 
     const formatDateKR = (value) => {
         const d = toDateSafe(value);
@@ -346,12 +334,12 @@ export function initActionHandlers(ctx) {
                     let vtInfo = '';
                     // iOS MVT 결과도 suspiciousApps에 포함되어 있으므로, isMvt 플래그나 hash 존재 여부로 MVT 결과임을 명시할 수 있습니다.
                     if (app.hash && app.hash !== 'N/A') {
-                        vtInfo = `<br><span class="bd-tag bd-tag--mvt">[MVT Artifact]</span>`;
+                        vtInfo = `<br><span style="color:#0275d8; font-size:9px;">[MVT Artifact]</span>`;
                     } else if (app.vtResult && app.vtResult.malicious > 0) {
-                        vtInfo = `<br><span class="bd-tag bd-tag--vt">[VT 탐지: ${app.vtResult.malicious}/${app.vtResult.total}]</span>`;
+                        vtInfo = `<br><span style="color:red; font-size:9px;">[VT 탐지: ${app.vtResult.malicious}/${app.vtResult.total}]</span>`;
                     }
                     html += `<tr>
-                        <td class="text-danger bd-fw-bold">${formatAppName(app.packageName || app.bundleId || app.id || '')}</td>
+                        <td class="text-danger" style="font-weight:bold;">${formatAppName(app.packageName || app.bundleId || app.id || '')}</td>
                         <td>${app.packageName || app.bundleId || '-'}</td>
                         <td>${app.reason || '불명확'}${vtInfo}</td>
                     </tr>`;
@@ -359,7 +347,7 @@ export function initActionHandlers(ctx) {
                 html += `</tbody></table>`;
                 threatContainer.innerHTML = html;
             } else {
-                renderBoxMessage(threatContainer, '탐지된 스파이앱 없음', 'success');
+                threatContainer.innerHTML = `<div style="padding:10px; border:1px solid #ccc; text-align:center; color:#5CB85C;">탐지된 스파이앱 없음</div>`;
             }
 
 
@@ -410,8 +398,8 @@ export function initActionHandlers(ctx) {
                             return `
                                 <tr>
                                     <td><b>${area.title}</b></td>
-                                    <td class="bd-status ${count > 0 ? "bd-status--bad" : "bd-status--ok"}">${status}</td>
-                                    <td class="bd-evidence">${evidence}${count > 3 ? '<br><span class="bd-muted">외 ' + (count - 3) + '건</span>' : ''}</td>
+                                    <td style="font-weight:800; color:${count > 0 ? '#d9534f' : '#5CB85C'};">${status}</td>
+                                    <td style="font-size:11px; color:#444;">${evidence}${count > 3 ? '<br><span style="color:#999;">외 ' + (count - 3) + '건</span>' : ''}</td>
                                 </tr>
                             `;
                         }).join('');
@@ -429,8 +417,8 @@ export function initActionHandlers(ctx) {
 
                         return `
                 <tr>
-                    <td class="bd-td-center">${i + 1}</td>
-                    <td class="bd-mono-small bd-break-all">
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td style="word-break:break-all; font-family:monospace; font-size:11px;">
                         ${filePath}
                     </td>
                 </tr>`;
@@ -708,16 +696,16 @@ export function initActionHandlers(ctx) {
             detailDiv.style.overflowY = 'auto';
 
             detailDiv.innerHTML = `
-                <button id="detail-back-btn" class="admin-btn bd-btn-back">⬅️ 목록으로 돌아가기</button>
+                <button id="detail-back-btn" class="admin-btn" style="background:#666; margin-bottom:15px;">⬅️ 목록으로 돌아가기</button>
                 <div id="user-detail-content"></div>
                 
-                <h3 class="bd-mt-30">📅 검사 기록 조회</h3>
-                <div class="bd-row-controls">
+                <h3 style="margin-top: 30px;">📅 검사 기록 조회</h3>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
                     
-                    <label for="log-date-start" class="bd-fw-500">기간 선택:</label>
-                    <input type="date" id="log-date-start" class="bd-input-date">
+                    <label for="log-date-start" style="font-weight: 500;">기간 선택:</label>
+                    <input type="date" id="log-date-start" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
                     <span>~</span>
-                    <input type="date" id="log-date-end" class="bd-input-date">
+                    <input type="date" id="log-date-end" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
                     <button id="filter-logs-btn" class="admin-btn btn-quota">조회</button>
                     <button id="reset-logs-btn" class="admin-btn secondary-button">전체 보기</button>
                 </div>
@@ -796,7 +784,7 @@ export function initActionHandlers(ctx) {
                     abContent.className = 'admin-tab-content active';
                     abContent.innerHTML = `
                         <h3>⚠️ 비정상/에러 로그 감지</h3>
-                        <div class="bd-helptext">
+                        <div style="margin-bottom:10px; color:#666; font-size:13px;">
                             * <b>Error:</b> 검사 중 오류 발생 <br>
                             * <b>Incomplete:</b> 시작은 했으나 종료 기록 없음 (강제종료/튕김)
                         </div>
@@ -897,7 +885,7 @@ export function initActionHandlers(ctx) {
                 `;
             }
 
-            renderTbodyMessage(tbody, 4, '로딩 중...', 'loading');
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">로딩 중...</td></tr>';
 
             try {
                 const q = query(collection(null, "users"), orderBy("createdAt", "desc"));
@@ -905,7 +893,7 @@ export function initActionHandlers(ctx) {
 
                 tbody.innerHTML = '';
                 if (snapshot.empty) {
-                    renderTbodyMessage(tbody, 4, '등록된 업체가 없습니다.', 'muted');
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">등록된 업체가 없습니다.</td></tr>';
                     return;
                 }
 
@@ -919,9 +907,9 @@ export function initActionHandlers(ctx) {
 
                     // 1. 업체명 (클릭 시 상세페이지 이동)
                     const nameCell = `
-                        <div class="user-link bd-user-link" 
+                        <div class="user-link" style="cursor:pointer; color:#337ab7; font-weight:bold;" 
                              onclick="AdminManager.viewUserDetail('${docSnap.id}')">
-                            ${companyName} <span class="bd-muted bd-subtext--sm">(${userId})</span>
+                            ${companyName} <span style="font-weight:normal; color:#888; font-size:12px;">(${userId})</span>
                         </div>
                     `;
 
@@ -954,7 +942,7 @@ export function initActionHandlers(ctx) {
 
             } catch (e) {
                 console.error(e);
-                renderTbodyMessage(tbody, 4, `로드 에러: ${e?.message ?? ''}`, 'error');
+                tbody.innerHTML = `<tr><td colspan="4" style="color:red;">로드 에러: ${e.message}</td></tr>`;
             }
         },
 
@@ -1097,8 +1085,7 @@ export function initActionHandlers(ctx) {
 
             } catch (e) {
                 console.error(e);
-                contentDiv.textContent = `정보 로드 실패: ${e?.message ?? ''}`;
-                contentDiv.classList.add('bd-text-error');
+                contentDiv.innerHTML = `<p style="color:red;">정보 로드 실패: ${e.message}</p>`;
             }
         },
 
@@ -1135,7 +1122,7 @@ export function initActionHandlers(ctx) {
             const tbody = document.getElementById('user-scan-logs-body');
             if (!tbody) return;
 
-            renderTbodyMessage(tbody, 5, '로그를 불러오는 중...', 'loading');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">로그를 불러오는 중...</td></tr>';
 
             try {
                 let logsQ = query(
@@ -1175,7 +1162,7 @@ export function initActionHandlers(ctx) {
                 console.log(`[Admin Log] ${uid} 업체의 로그 ${logsSnap.size}건 발견됨.`);
 
                 if (logsSnap.empty) {
-                    renderTbodyMessage(tbody, 5, '검사 기록이 없습니다.', 'muted');
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">검사 기록이 없습니다.</td></tr>';
                     return;
                 }
 
@@ -1224,7 +1211,7 @@ export function initActionHandlers(ctx) {
 
         renderDetailReports(snapshot) {
             // 테이블 컬럼이 4개이므로 colspan도 4로 설정
-            if (snapshot.empty) return '<tr><td colspan="4" class="bd-td-center">제출된 리포트가 없습니다.</td></tr>';
+            if (snapshot.empty) return '<tr><td colspan="4" style="text-align:center;">제출된 리포트가 없습니다.</td></tr>';
 
             let html = '';
             snapshot.forEach(doc => {
@@ -1256,7 +1243,7 @@ export function initActionHandlers(ctx) {
         async loadAbnormalLogs() {
             const tbody = document.getElementById('abnormal-log-body');
             if (!tbody) return;
-            renderTbodyMessage(tbody, 5, '로그 검색 중...', 'loading');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">로그 검색 중...</td></tr>';
 
             try {
                 // 모든 로그를 긁어서 JS로 필터링 (Firestore 복합 쿼리 제한 때문)
@@ -1300,19 +1287,19 @@ export function initActionHandlers(ctx) {
                 });
 
                 if (count === 0) {
-                    renderTbodyMessage(tbody, 5, '🎉 최근 발견된 비정상 로그가 없습니다.', 'success');
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:green;">🎉 최근 발견된 비정상 로그가 없습니다.</td></tr>';
                 } else {
                     tbody.innerHTML = html;
                 }
 
             } catch (e) {
-                renderTbodyMessage(tbody, 5, `로그 로드 실패: ${e?.message ?? ''}`, 'error');
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로그 로드 실패: ${e.message}</td></tr>`;
             }
         },
         // [탭 3] 전송된 리포트 로딩 (신규 기능)
         async loadReports() {
             const tbody = document.getElementById('admin-reports-body');
-            renderTbodyMessage(tbody, 5, '데이터 조회 중...', 'loading');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">데이터 조회 중...</td></tr>';
 
             try {
                 // 1. 리포트 데이터 가져오기
@@ -1321,7 +1308,7 @@ export function initActionHandlers(ctx) {
 
                 tbody.innerHTML = '';
                 if (querySnapshot.empty) {
-                    renderTbodyMessage(tbody, 5, '전송된 기록이 없습니다.', 'muted');
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#999;">전송된 기록이 없습니다.</td></tr>';
                     return;
                 }
 
@@ -1339,7 +1326,7 @@ export function initActionHandlers(ctx) {
                             <td>${date}</td>
                             <td>
                                 <b>${displayName}</b><br>
-                                ${report.agencyName ? `<span class="bd-subtext">(${report.agencyId})</span>` : ''}
+                                ${report.agencyName ? `<span style="font-size:11px; color:#888;">(${report.agencyId})</span>` : ''}
                             </td>
                             <td>${report.message || '내용 없음'}</td>
                             <td>
@@ -1355,7 +1342,7 @@ export function initActionHandlers(ctx) {
 
             } catch (error) {
                 console.error(error);
-                renderTbodyMessage(tbody, 5, `로드 실패: ${error?.message ?? ''}`, 'error');
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 실패: ${error.message}</td></tr>`;
             }
         }
     };
@@ -1695,8 +1682,7 @@ export function initActionHandlers(ctx) {
             content.innerHTML = html;
 
         } catch (e) {
-            content.textContent = `기록 조회 실패: ${e?.message ?? ''}`;
-            content.classList.add('bd-text-error');
+            content.innerHTML = `<p style="color:red;">기록 조회 실패: ${e.message}</p>`;
         }
     };
 

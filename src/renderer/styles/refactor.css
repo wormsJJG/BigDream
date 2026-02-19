@@ -47,3 +47,63 @@
   margin:2px;
   display:inline-block;
 }
+
+
+/* ------------------------------------------------------------------
+   Phase3 additions: actionHandlers DOM refactor helpers
+------------------------------------------------------------------ */
+.bd-preline { white-space: pre-line; }
+.bd-mono, .bd-mono * { font-family: monospace; }
+
+.bd-nav-admin { color: #F0AD4E; font-weight: 700; }
+
+.bd-admin-detail-view {
+  background: #fff;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.bd-admin-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.bd-quota-strong { font-size: 15px; }
+
+.bd-admin-manage-box {
+  background: #eee;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.bd-admin-delete-right { margin-left: auto; }
+
+.bd-user-detail-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+.bd-h2 { margin: 0; }
+.bd-user-meta { color:#666; margin-top:5px; }
+.bd-user-quota { text-align:right; }
+.bd-user-quota-num { font-size:24px; font-weight:700; color:#3A539B; }
+.bd-user-quota-label { font-size:12px; color:#888; }
+
+.bd-status-text--ok { color: green; }
+.bd-status-text--bad { color: red; }
+.bd-status-text--warn { color: orange; }
+
+.bd-error-msg { font-size: 12px; color: #d9534f; }
+.bd-threat-count { color: red; }
+
+.bd-threat-title-line { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.bd-threat-index { font-weight:700; color:#555; }
+.bd-threat-tags { text-align:right; display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+
+.bd-tag--sideload { background:#fff3e0; color:#e65100; font-size:11px; padding:3px 6px; border-radius:4px; font-weight:700; }
+.bd-tag--running { background:#e3f2fd; color:#1565c0; font-size:11px; padding:3px 6px; border-radius:4px; font-weight:700; }
+
+.bd-file-list { max-height: 400px; overflow-y: auto; }
+.bd-file-item { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+.bd-file-threat { font-weight:700; }
+.bd-threat-text--bad { color: red; }
+.bd-threat-text--ok { color: green; }
