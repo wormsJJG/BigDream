@@ -1344,6 +1344,28 @@ export function initActionHandlers(ctx) {
     //        detail-screen이 logged-in-view 바깥에 있는 현재 레이아웃에서는 화면이 하얗게 비는 문제가 발생.
     //        -> ViewManager.showScreen으로 스크린 전환을 통일하고, 템플릿/DOM 준비 후 바인딩.
     window.viewReportDetail = async (reportId) => {
+        // Local DOM helpers (avoid dependency on initActionHandlers scope)
+        const clearEl = (node) => { if (node) node.replaceChildren(); };
+        const el = (tag, props = {}, ...children) => {
+            const node = document.createElement(tag);
+            for (const [k, v] of Object.entries(props || {})) {
+                if (v === undefined || v === null) continue;
+                if (k === 'class') node.className = v;
+                else if (k === 'dataset') Object.assign(node.dataset, v);
+                else if (k === 'text') node.textContent = String(v);
+                else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
+                else if (k in node) node[k] = v;
+                else node.setAttribute(k, String(v));
+            }
+            for (const ch of children.flat()) {
+                if (ch === undefined || ch === null) continue;
+                if (typeof ch === 'string' || typeof ch === 'number') node.appendChild(document.createTextNode(String(ch)));
+                else node.appendChild(ch);
+            }
+            return node;
+        };
+        const append = (parent, ...children) => { children.flat().forEach(c => parent && parent.appendChild(c)); };
+
         const loggedInView = document.getElementById('logged-in-view');
         const detailScreen = document.getElementById('admin-report-detail-screen');
         if (!loggedInView || !detailScreen) return;

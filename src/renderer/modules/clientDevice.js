@@ -342,7 +342,7 @@ export function initClientDevice(ctx) {
             title.textContent = titleText;
             title.style.color = color;
             // 모델명이 있을 때만 굵게 표시하는 로직 유지
-            desc.innerHTML = descText.includes('모델') ? descText : `<span>${descText}</span>`;
+            desc.textContent = descText;
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
             // 3. 스마트폰 프레임 상태 클래스 초기화 
@@ -353,7 +353,8 @@ export function initClientDevice(ctx) {
 
                 wrapper.classList.add('state-connected');
 
-                alertTitle.innerHTML = 'DEVICE<br>READY';
+                alertTitle.textContent = 'DEVICE\nREADY';
+                alertTitle.classList.add('bd-preline');
 
                 // Android dashboard menu visibility
                 if (State.currentDeviceMode === 'android') {
@@ -369,13 +370,15 @@ export function initClientDevice(ctx) {
 
                 wrapper.classList.add('state-unauthorized');
 
-                alertTitle.innerHTML = 'WAITING<br>AUTH';
+                alertTitle.textContent = 'WAITING\nAUTH';
+                alertTitle.classList.add('bd-preline');
             }
             else {
 
                 wrapper.classList.add('state-disconnected');
 
-                alertTitle.innerHTML = 'CONNECT<br>DEVICE';
+                alertTitle.textContent = 'CONNECT\nDEVICE';
+                alertTitle.classList.add('bd-preline');
             }
         }
     };
