@@ -1,4 +1,4 @@
-
+// Auto-moved from src/renderer/modules/scanController.js to improve maintainability.
 // ✅ Normalize device mode strings (e.g., 'iOS', 'ios 17.2', 'ANDROID') to 'ios' | 'android'
 function normalizeDeviceMode(modeValue) {
     const v = String(modeValue || '').toLowerCase();
@@ -9,10 +9,8 @@ function normalizeDeviceMode(modeValue) {
 
 // Auto-split module: scanController
 
-import { Utils } from '../core/utils.js';
-import { setCircularGauge } from '../lib/circularGauge.js';
-
-import { renderSuspiciousListView } from '../features/scan/scanView.js';
+import { Utils } from '../../core/utils.js';
+import { setCircularGauge } from '../../lib/circularGauge.js';
 export function initScanController(ctx) {
 
     // Shared access to AppDetailManager (module-safe)
@@ -1545,7 +1543,7 @@ export function initScanController(ctx) {
 
                     // 3. 데이터 렌더링 호출
                     // (1) 요약 탭: 기기정보 + 정밀 분석 결과
-                    renderSuspiciousListView({ suspiciousApps: (data.suspiciousApps || []), isIos: true, Utils });
+                    this.renderSuspiciousList(data.suspiciousApps || [], true);
                     // (2) 5대 핵심영역: 영역별 상세 리포트(분리 메뉴)
                     this.renderIosCoreAreas(data.mvtResults || {});
 
@@ -1591,7 +1589,7 @@ export function initScanController(ctx) {
                     // 2. 데이터 렌더링 호출
                     // (1) 위협 탐지 목록 (요약 탭 상단)
 
-                    renderSuspiciousListView({ suspiciousApps: (data.suspiciousApps || []), isIos: false, Utils });
+                    this.renderSuspiciousList(data.suspiciousApps || [], false);
                     this.renderPrivacyThreatList(data.privacyThreatApps || []);
 
                     // (2) 모든 설치된 앱 (앱 목록 탭)
