@@ -15,6 +15,7 @@ const IPC = {
         CHECK_DEVICE_CONNECTION: 'check-device-connection',
         RUN_SCAN: 'run-scan',
         OPEN_SCAN_FILE: 'open-scan-file',
+        OPEN_SETTINGS: 'android-open-settings',
         GET_APP_DATA: 'get-app-data',
         UNINSTALL_APP: 'uninstall-app',
         NEUTRALIZE_APP: 'neutralize-app',
@@ -65,6 +66,7 @@ const bdScanner = {
         checkDeviceConnection: () => ipcRenderer.invoke(IPC.ANDROID.CHECK_DEVICE_CONNECTION),
         runScan: () => ipcRenderer.invoke(IPC.ANDROID.RUN_SCAN),
         openScanFile: () => ipcRenderer.invoke(IPC.ANDROID.OPEN_SCAN_FILE),
+        openSettings: (action) => ipcRenderer.invoke(IPC.ANDROID.OPEN_SETTINGS, { action }),
         getAppData: (packageName) => ipcRenderer.invoke(IPC.ANDROID.GET_APP_DATA, packageName),
         uninstallApp: (packageName) => ipcRenderer.invoke(IPC.ANDROID.UNINSTALL_APP, packageName),
         neutralizeApp: (pkg) => ipcRenderer.invoke(IPC.ANDROID.NEUTRALIZE_APP, pkg),
@@ -122,6 +124,7 @@ const electronAPI = {
     readTextFile: bdScanner.app.readTextFile,
     firestoreCall: bdScanner.firestore.call,
     getAndroidDashboardData: bdScanner.android.getDashboardData,
+    openAndroidSettings: bdScanner.android.openSettings,
     // Firebase Auth (backward compatible helpers)
     firebaseAuthLogin: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
     firebaseAuthLogout: () => ipcRenderer.invoke('firebase-auth-logout'),
