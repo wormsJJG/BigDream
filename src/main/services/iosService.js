@@ -7,6 +7,18 @@ const { spawn } = require('child_process');
 
 const noop = () => { };
 
+function isBoolTrue(v) {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v === 1) return true;
+    if (v === 0) return false;
+    if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        return (s === 'true' || s === '1' || s === 'yes' || s === 'y');
+    }
+    return false;
+}
+
 function safeEmit(onProgress, payload) {
     try {
         (onProgress || noop)(payload);
@@ -508,7 +520,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
         async deleteBackup(udid) {
             console.log(`--- [Security] 삭제 요청 수신 (전달된 UDID: ${udid}) ---`);
             if (!udid) return { success: false, error: 'No UDID provided' };
-            if (CONFIG.KEEP_BACKUP) {
+            if (isBoolTrue(CONFIG.KEEP_BACKUP)) {
                 console.log('[Maintenance] KEEP_BACKUP 활성화 상태: 파일을 유지합니다.');
                 return { success: true };
             }

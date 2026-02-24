@@ -1001,6 +1001,32 @@ export function initScanController(ctx) {
             window.lastScanData = null;
             this.toggleLaser(true)
 
+            // iOS 실시간 진행률 이벤트 연결 (main -> preload -> renderer)
+            // NOTE: startIosScan 종료 시 반드시 해제해야 중복 리스너로 인한 UI 오동작을 방지할 수 있습니다.
+            let offIosProgress = null;
+            try {
+                if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
+                    offIosProgress = window.electronAPI.onIosScanProgress((payload) => {
+                        try {
+                            const pctRaw = payload && payload.percent;
+                            const pct = Number(pctRaw);
+                            const msg = (payload && payload.message) ? String(payload.message) : '';
+
+                            if (Number.isFinite(pct)) {
+                                const clamped = Math.max(0, Math.min(100, Math.floor(pct)));
+                                ViewManager.updateProgress(clamped, msg || '아이폰 백업 및 분석 진행 중...', true);
+                            } else if (msg) {
+                                // percent가 없더라도 메시지는 갱신
+                                const currentPctText = document.getElementById('progress-percent-text')?.textContent || '0%';
+                                const currentPct = Number(String(currentPctText).replace('%', ''));
+                                const safePct = Number.isFinite(currentPct) ? currentPct : 0;
+                                ViewManager.updateProgress(safePct, msg, true);
+                            }
+                        } catch (_e) { }
+                    });
+                }
+            } catch (_e) { }
+
             ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
                 // 1. 실제 검사 수행
@@ -1026,6 +1052,13 @@ export function initScanController(ctx) {
 
             } catch (error) {
                 this.handleError(error);
+            } finally {
+                // iOS 진행률 리스너 정리
+                try {
+                    if (typeof offIosProgress === 'function') {
+                        offIosProgress();
+                    }
+                } catch (_e) { }
             }
         },
 
