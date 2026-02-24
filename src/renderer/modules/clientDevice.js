@@ -131,6 +131,105 @@ export function initClientDevice(ctx) {
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
             if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+
+                // -------------------------------------------------
+                // [UX] Help user quickly disable USB debugging / re-enable security
+                // - We cannot toggle these settings programmatically on normal devices,
+                //   but we CAN open the relevant Settings screens.
+                // -------------------------------------------------
+                const tryOpenAndroidSettings = async (action) => {
+                    try {
+                        const api = (window.bdScanner && window.bdScanner.android && window.bdScanner.android.openSettings)
+                            || (window.electronAPI && window.electronAPI.openAndroidSettings);
+                        if (!api) return false;
+                        const res = await api(action);
+                        return !!(res && res.success);
+                    } catch (_e) {
+                        return false;
+                    }
+                };
+
+                const showDisconnectSettingsModal = () => {
+                    // Lightweight modal created dynamically to avoid editing HTML templates.
+                    const overlay = document.createElement('div');
+                    overlay.style.cssText = `
+                        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                        background-color: rgba(0,0,0,0.55);
+                        display: flex; justify-content: center; align-items: center;
+                        z-index: 10000;
+                    `;
+
+                    const box = document.createElement('div');
+                    box.style.cssText = `
+                        background: #fff; padding: 18px 18px 14px 18px; border-radius: 10px;
+                        width: 420px; max-width: calc(100vw - 24px);
+                        box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+                        font-family: sans-serif;
+                    `;
+
+                    box.innerHTML = `
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap: 10px;">
+                            <div style="font-size:16px; font-weight:700; color:#222;">보안 설정 확인</div>
+                            <button id="bd-disconnect-modal-close-x" style="border:none; background:transparent; cursor:pointer; font-size:18px; line-height:1; color:#666;">×</button>
+                        </div>
+                        <div style="margin-top:10px; font-size:13px; color:#333; line-height:1.45;">
+                            검사가 종료되었습니다. 보안을 위해 아래 설정을 확인해주세요.<br>
+                            <ul style="margin:8px 0 0 18px; padding:0;">
+                                <li>USB 디버깅: <b>OFF</b></li>
+                                <li>보안 위험 자동 차단(지원 기기): <b>ON</b></li>
+                            </ul>
+                        </div>
+                        <div style="display:flex; gap:10px; margin-top:14px; justify-content:flex-end; flex-wrap:wrap;">
+                            <button id="bd-open-dev-options" style="padding:9px 12px; border:none; background:#337ab7; color:#fff; border-radius:6px; cursor:pointer; font-size:13px;">개발자 옵션 열기</button>
+                            <button id="bd-open-security" style="padding:9px 12px; border:none; background:#f0f0f0; color:#222; border-radius:6px; cursor:pointer; font-size:13px;">보안 설정 열기</button>
+                            <button id="bd-disconnect-modal-close" style="padding:9px 12px; border:none; background:#f5f5f5; color:#222; border-radius:6px; cursor:pointer; font-size:13px;">닫기</button>
+                        </div>
+                        <div style="margin-top:10px; font-size:12px; color:#666; line-height:1.35;">
+                            ※ 일부 기기에서는 특정 설정 화면 바로가기가 제한될 수 있습니다.
+                        </div>
+                    `;
+
+                    overlay.appendChild(box);
+                    document.body.appendChild(overlay);
+
+                    const cleanup = () => {
+                        try { document.body.removeChild(overlay); } catch (_e) { }
+                    };
+
+                    const closeBtn = box.querySelector('#bd-disconnect-modal-close');
+                    const closeXBtn = box.querySelector('#bd-disconnect-modal-close-x');
+                    const devBtn = box.querySelector('#bd-open-dev-options');
+                    const secBtn = box.querySelector('#bd-open-security');
+
+                    const openDev = async () => {
+                        const ok = await tryOpenAndroidSettings('android.settings.APPLICATION_DEVELOPMENT_SETTINGS');
+                        if (!ok) {
+                            try { await CustomUI.alert('개발자 옵션 화면을 열 수 없습니다.\n기기에서 직접 설정 > 개발자 옵션으로 이동해주세요.'); } catch (_e) {}
+                        }
+                    };
+
+                    const openSec = async () => {
+                        // Auto Blocker(보안 위험 자동 차단)는 제조사/버전에 따라 위치가 달라
+                        // 표준 Intent로는 보안 설정 화면으로 이동시킵니다.
+                        const ok = await tryOpenAndroidSettings('android.settings.SECURITY_SETTINGS');
+                        if (!ok) {
+                            const ok2 = await tryOpenAndroidSettings('android.settings.SETTINGS');
+                            if (!ok2) {
+                                try { await CustomUI.alert('보안 설정 화면을 열 수 없습니다.\n기기에서 직접 설정 > 보안 및 개인정보(또는 보안)로 이동해주세요.'); } catch (_e) {}
+                            }
+                        }
+                    };
+
+                    devBtn.addEventListener('click', openDev);
+                    secBtn.addEventListener('click', openSec);
+                    closeBtn.addEventListener('click', cleanup);
+                    closeXBtn.addEventListener('click', cleanup);
+                    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+
+                    // Try to open developer options immediately for convenience.
+                    openDev();
+                };
+
                 // 1. 네비게이션 메뉴 상태 복구
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
@@ -256,6 +355,9 @@ export function initClientDevice(ctx) {
                 try { window.__bd_lastScanData = null; } catch (e) { }
 
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
+
+                // Show settings guidance modal after returning to the initial screen.
+                try { showDisconnectSettingsModal(); } catch (_e) { }
             }
         });
     }
@@ -342,7 +444,7 @@ export function initClientDevice(ctx) {
             title.textContent = titleText;
             title.style.color = color;
             // 모델명이 있을 때만 굵게 표시하는 로직 유지
-            desc.textContent = descText;
+            desc.innerHTML = descText.includes('모델') ? descText : `<span>${descText}</span>`;
             btnContainer.style.display = showBtn ? 'block' : 'none';
 
             // 3. 스마트폰 프레임 상태 클래스 초기화 
@@ -353,8 +455,7 @@ export function initClientDevice(ctx) {
 
                 wrapper.classList.add('state-connected');
 
-                alertTitle.textContent = 'DEVICE\nREADY';
-                alertTitle.classList.add('bd-preline');
+                alertTitle.innerHTML = 'DEVICE<br>READY';
 
                 // Android dashboard menu visibility
                 if (State.currentDeviceMode === 'android') {
@@ -370,15 +471,13 @@ export function initClientDevice(ctx) {
 
                 wrapper.classList.add('state-unauthorized');
 
-                alertTitle.textContent = 'WAITING\nAUTH';
-                alertTitle.classList.add('bd-preline');
+                alertTitle.innerHTML = 'WAITING<br>AUTH';
             }
             else {
 
                 wrapper.classList.add('state-disconnected');
 
-                alertTitle.textContent = 'CONNECT\nDEVICE';
-                alertTitle.classList.add('bd-preline');
+                alertTitle.innerHTML = 'CONNECT<br>DEVICE';
             }
         }
     };

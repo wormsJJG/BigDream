@@ -50,6 +50,37 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
       },
 
       /**
+       * Open an Android system Settings screen on the connected device.
+       *
+       * NOTE:
+       * - This does NOT change any setting automatically. It only navigates the user to the relevant screen.
+       * - Some OEM/OS builds may block certain Settings intents; in that case we return success=false.
+       */
+      async openSettings(action) {
+          if (!action) throw new Error('action is required');
+
+          const devices = await client.listDevices();
+          if (!devices || devices.length === 0) throw new Error('기기 없음');
+          const serial = devices[0].id;
+
+          try {
+              // Use ActivityManager to open a Settings screen.
+              const outStream = await client.shell(serial, `am start -a ${action}`);
+              const out = (await adb.util.readAll(outStream)).toString();
+
+              // Common failure patterns: "Error: Activity not started" / "SecurityException" etc.
+              const lowered = out.toLowerCase();
+              if (lowered.includes('error') || lowered.includes('exception')) {
+                  return { success: false, output: out };
+              }
+
+              return { success: true, output: out };
+          } catch (err) {
+              return { success: false, error: err.message };
+          }
+      },
+
+      /**
        * Main Android scan pipeline (moved from IPC layer).
        */
       async runScan() {

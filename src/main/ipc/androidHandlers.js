@@ -163,6 +163,18 @@ function registerAndroidHandlers({
       return { success: false, error: err.message };
     }
   });
+
+  // --------------------------------------------------
+  // Open Android Settings screen (Developer options / Security etc.)
+  // --------------------------------------------------
+  ipcMain.handle('android-open-settings', async (_event, { action } = {}) => {
+    if (CONFIG.IS_DEV_MODE) return { success: true };
+    try {
+      return await androidService.openSettings(action);
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 module.exports = { registerAndroidHandlers };
