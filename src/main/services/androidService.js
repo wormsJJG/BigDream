@@ -348,7 +348,7 @@ processedApps.forEach((app) => {
       },
 
       // 앱 무력화 (권한 박탈 + 강제 종료)
-      async neutralizeApp(packageName) {
+      async neutralizeApp(packageName, perms) {
           try {
               const devices = await client.listDevices();
               if (devices.length === 0) throw new Error('기기 연결 끊김');
@@ -366,8 +366,10 @@ processedApps.forEach((app) => {
               }
 
               // 권한 박탈
+              const targetPerms = Array.isArray(perms) && perms.length > 0 ? perms : grantedPerms;
+
               let revokedCount = 0;
-              for (const perm of grantedPerms) {
+              for (const perm of targetPerms) {
                   try {
                       await client.shell(serial, `pm revoke ${packageName} ${perm}`);
                       revokedCount++;
@@ -380,6 +382,24 @@ processedApps.forEach((app) => {
               return { success: false, error: err.message };
           }
       },
+
+        async getGrantedPermissions(packageName) {
+
+            const devices = await client.listDevices();
+            if (devices.length === 0) throw new Error('기기 연결 끊김');
+            const serial = devices[0].id;
+
+            const dumpOutput = await client.shell(serial, `dumpsys package ${packageName}`);
+            const dumpStr = (await adb.util.readAll(dumpOutput)).toString();
+
+            const grantedPerms = [];
+            const regex = /android\.permission\.([A-Z0-9_]+): granted=true/g;
+            let match;
+            while ((match = regex.exec(dumpStr)) !== null) {
+                grantedPerms.push(`android.permission.${match[1]}`);
+            }
+            return grantedPerms;
+        },
 
       // 설치된 앱 목록 (시스템 앱 필터링 강화 버전)
       async getInstalledApps(serial) {
@@ -837,6 +857,7 @@ processedApps.forEach((app) => {
           };
       }
   };
+
   return service;
 }
 

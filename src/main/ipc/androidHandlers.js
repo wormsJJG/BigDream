@@ -101,12 +101,24 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Neutralize app
   // --------------------------------------------------
-  ipcMain.handle('neutralize-app', async (_event, packageName) => {
+  ipcMain.handle('neutralize-app', async (_event, packageName, perms) => {
     if (CONFIG.IS_DEV_MODE) {
       await Utils.sleep(1500);
-      return { success: true, count: 5 };
+      return { success: true, count: (perms?.length ?? 0)};
     }
-    return await androidService.neutralizeApp(packageName);
+    console.log('[neutralize-app] perms:', perms);
+    return await androidService.neutralizeApp(packageName, perms);
+  });
+
+  ipcMain.handle('get-granted-permissions', async (_event, packageName) => {
+  if (CONFIG.IS_DEV_MODE) {
+    return [
+      'android.permission.CAMERA',
+      'android.permission.RECORD_AUDIO',
+      'android.permission.ACCESS_FINE_LOCATION'
+    ];
+  }
+  return await androidService.getGrantedPermissions(packageName);
   });
 
   // --------------------------------------------------

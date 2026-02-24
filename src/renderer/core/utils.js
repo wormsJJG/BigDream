@@ -414,3 +414,6 @@
                 return MAP[shortName] || shortName;
             }
         };
+        if (typeof window !== 'undefined') {
+            window.Utils = Utils;
+        }

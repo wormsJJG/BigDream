@@ -144,6 +144,56 @@ export function initActionHandlers(ctx) {
         });
     }
 
+    // 무력화 버튼
+    function ensurePermissionModal() {
+        let overlay = document.getElementById('perm-modal-overlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div id="perm-modal-overlay" style="
+            position:fixed; inset:0; background:rgba(0,0,0,.45);
+            display:flex; align-items:center; justify-content:center; z-index:999999;">
+            <div style="
+                background:#fff; border-radius:12px; width:min(980px,92vw); max-height:86vh;
+                overflow:hidden; display:flex; flex-direction:column;">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 18px; border-bottom:1px solid #eee;">
+                <div>
+                    <div style="font-weight:700; font-size:16px;">무력화할 권한 선택</div>
+                    <div id="perm-modal-subtitle" style="font-size:12px; opacity:.7; margin-top:4px;"></div>
+                </div>
+                <label style="display:flex; gap:8px; align-items:center; font-weight:600; user-select:none;">
+                    <input type="checkbox" id="perm-select-all-checkbox" />
+                    <span>전체 선택</span>
+                </label>
+                </div>
+
+                <div style="padding:12px 18px; border-bottom:1px solid #eee;">
+                <input id="perm-search-input" type="text" placeholder="권한 검색" style="
+                    width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; outline:none;" />
+                </div>
+
+                <div id="perm-chip-container" style="padding:14px 18px; overflow:auto; display:flex; flex-wrap:wrap; gap:10px;"></div>
+
+                <div style="padding:14px 18px; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #eee;">
+                <button id="perm-cancel-btn" class="primary-button">취소</button>
+                <button id="perm-confirm-btn" class="primary-button warning-button">선택 권한 무력화</button>
+                </div>
+            </div>
+            </div>
+        `;
+
+        (document.body || document.documentElement).appendChild(wrapper.firstElementChild);
+
+        document.getElementById('perm-cancel-btn').addEventListener('click', () => {
+            const el = document.getElementById('perm-modal-overlay');
+            if (el) el.style.display = 'none';
+        });
+    }
+
     // 2. 무력화
     const neutralizeBtn = document.getElementById('neutralize-btn');
     if (neutralizeBtn) {
@@ -151,25 +201,86 @@ export function initActionHandlers(ctx) {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
-            if (!await CustomUI.confirm(`[주의] '${appName}' 앱의 모든 권한을 회수하고 강제 종료하시겠습니까?`)) return;
+            // 1) 권한 목록 가져오기
+            const perms = await window.electronAPI.getGrantedPermissions(packageName);
+            console.log('권한 목록:', perms);
 
-            neutralizeBtn.disabled = true;
-            neutralizeBtn.textContent = "무력화 중...";
+            // 2) 권한 선택 모달 띄우기 (ensurePermissionModal()은 네가 이미 actionHandlers.js에 추가해둔 상태라고 가정)
+            ensurePermissionModal();
 
-            try {
-                const result = await window.electronAPI.neutralizeApp(packageName);
-                if (result.success) {
-                    await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
-                    document.getElementById('back-to-dashboard-btn').click();
-                } else {
-                    throw new Error(result.error);
-                }
-            } catch (err) {
-                await CustomUI.alert(`무력화 실패: ${err.message}`);
-            } finally {
-                neutralizeBtn.disabled = false;
-                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+            const confirmBtnForData = document.getElementById('perm-confirm-btn');
+            if (confirmBtnForData) {
+                confirmBtnForData.dataset.package = packageName;
+                confirmBtnForData.dataset.appname = appName;
             }
+
+            document.getElementById('perm-modal-subtitle').textContent =
+            `'${appName}' 권한 ${perms.length}개`;
+
+            const container = document.getElementById('perm-chip-container');
+            container.innerHTML = '';
+
+            // 3) 전체 선택
+            const updateSelectAll = () => {
+                const selectAll = document.getElementById('perm-select-all-checkbox');
+                if (!selectAll) return;
+                const chips = [...container.querySelectorAll('button')];
+                selectAll.checked = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+            };
+
+            perms.forEach((p) => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.dataset.perm = p;
+                chip.dataset.selected = '0';
+                chip.textContent = window.Utils.getKoreanPermission(p); // 화면 표시용 한글
+                chip.style.padding = '6px 12px';
+                chip.style.borderRadius = '20px';
+                chip.style.border = '1px solid #ddd';
+                chip.style.background = '#f5f5f5';
+                chip.style.cursor = 'pointer';
+
+                chip.addEventListener('click', () => {
+                    const next = chip.dataset.selected !== '1';
+                    chip.dataset.selected = next ? '1' : '0';
+                    chip.style.background = next ? '#4caf50' : '#f5f5f5';
+                    chip.style.color = next ? '#fff' : '#000';
+                    updateSelectAll();
+                });
+            container.appendChild(chip);
+            });
+
+            // ✅ (3) 여기부터 추가: 전체선택 연결 (forEach 끝난 직후!)
+            const selectAll = document.getElementById('perm-select-all-checkbox');
+            if (selectAll) {
+                selectAll.checked = false;
+
+                selectAll.onchange = () => {
+                    const chips = container.querySelectorAll('button');
+                    chips.forEach(chip => {
+                        const on = selectAll.checked;
+                        chip.dataset.selected = on ? '1' : '0';
+                        chip.style.background = on ? '#4caf50' : '#f5f5f5';
+                        chip.style.color = on ? '#fff' : '#000';
+                    });
+                    updateSelectAll();
+                };
+            }
+
+            // ✅ (4) 여기부터 추가: 검색 연결 (전체선택 코드 아래!)
+            const searchInput = document.getElementById('perm-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                searchInput.oninput = () => {
+                    const q = searchInput.value.trim().toLowerCase();
+                    const chips = container.querySelectorAll('button');
+                    chips.forEach(chip => {
+                        const text = (chip.textContent || '').toLowerCase();
+                        chip.style.display = text.includes(q) ? '' : 'none';
+                    });
+                };
+            }
+            return;
         });
     }
 
@@ -827,4 +938,76 @@ export function initActionHandlers(ctx) {
 
         return 0; // 두 버전이 같음
     }
+
+    if (window.__permModalDelegationBound) return;
+    window.__permModalDelegationBound = true;
+    // ✅ Permission modal confirm/cancel: event delegation (딱 1번만 등록)
+    document.addEventListener('click', async (e) => {
+        const confirmBtn = e.target.closest('#perm-confirm-btn');
+        const cancelBtn  = e.target.closest('#perm-cancel-btn');
+        const modalEl    = document.getElementById('permission-modal');
+
+        // 취소
+        if (cancelBtn) {
+            if (modalEl) modalEl.style.display = 'none';
+            return;
+        }
+
+        // 확인
+        if (confirmBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const container = document.getElementById('perm-chip-container');
+            const packageName = confirmBtn.dataset.package;
+            const appName = confirmBtn.dataset.appname;
+
+            if (!container || !packageName) return;
+
+            const selectedPerms = Array.from(container.querySelectorAll('button'))
+                .filter(btn => btn.dataset.selected === '1')
+                .map(btn => btn.dataset.perm)
+                .filter(Boolean);
+
+            if (selectedPerms.length === 0) {
+                document.getElementById('perm-cancel-btn')?.click();
+                await CustomUI.alert('선택된 권한이 없습니다.');
+                return;
+            }
+
+            document.getElementById('perm-cancel-btn')?.click();
+
+            // 기존 멘트 그대로
+            const ok = await CustomUI.confirm(
+                `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
+            );
+
+            // 취소면 모달 다시 보여주기(원하면 유지)
+            if (!ok) { return; }
+            if (modalEl) modalEl.style.display = 'block';
+
+            const neutralizeBtn = document.getElementById('neutralize-btn');
+            if (neutralizeBtn) {
+                neutralizeBtn.disabled = true;
+                neutralizeBtn.textContent = "무력화 중...";
+            }
+
+            try {
+                const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
+            if (result.success) {
+                await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
+                document.getElementById('back-to-dashboard-btn')?.click();
+            } else {
+                throw new Error(result.error);
+            }
+            } catch (err) {
+                await CustomUI.alert(`무력화 실패: ${err.message}`);
+            } finally {
+                if (neutralizeBtn) {
+                    neutralizeBtn.disabled = false;
+                    neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+                }
+            }
+        }
+    });
 }
