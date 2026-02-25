@@ -87,58 +87,22 @@
 }
 
 
-/* ==========================================================================
-   Report header (shared for scan results + scan info)
-   ========================================================================== */
-.report-header-root {
-    margin-bottom: 14px;
-}
+/* Print report: app list risk coloring */
+.compact-item.compact-threat { color: var(--danger-color); font-weight: 800; }
+.compact-item.compact-warning { color: var(--warning-color); font-weight: 800; }
 
-
-/* Shared report header (정밀 검사 결과 보고서) */
-.results-header {
+/* Report header (공용 상단 프레임) */
+.report-header-root .results-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    width: 100%;
-}
-
-.results-header h2 {
-    margin: 0;
-    line-height: 1.2;
-}
-
-.header-buttons {
-    display: flex;
     align-items: center;
-    justify-content: flex-end;
+    margin-bottom: 20px;
+}
+
+.report-header-root .header-buttons {
+    display: flex;
     gap: 10px;
     margin-left: auto;
-    flex-wrap: wrap;
-}
-
-
-.report-info-card {
-    padding: 18px;
-}
-
-.report-info-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
-}
-
-.report-saved-at {
-    font-size: 14px;
-    color: #666;
-    white-space: nowrap;
-}
-
-.report-info-body {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+    justify-content: flex-end;
+    align-items: center;
 }
