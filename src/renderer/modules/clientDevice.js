@@ -130,7 +130,13 @@ export function initClientDevice(ctx) {
     const disconnectBtn = document.getElementById('disconnect-btn');
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
-            if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+            {
+            const isLoadedScan = !!(State && State.isLoadedScan);
+            const confirmMsg = isLoadedScan
+                ? '보고서를 닫고 초기 화면으로 돌아가시겠습니까?'
+                : '기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?';
+
+            if (await CustomUI.confirm(confirmMsg)) {
 
                 // -------------------------------------------------
                 // [UX] Help user quickly disable USB debugging / re-enable security
@@ -357,8 +363,10 @@ export function initClientDevice(ctx) {
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
 
                 // Show settings guidance modal after returning to the initial screen.
-                try { showDisconnectSettingsModal(); } catch (_e) { }
+                if (!isLoadedScan && State.currentDeviceMode === 'android') { try { showDisconnectSettingsModal(); } catch (_e) { } }
             }
+        }
+
         });
     }
 

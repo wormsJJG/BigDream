@@ -118,6 +118,13 @@
     flex-wrap: wrap;
 }
 
+/* Keep the '닫기' button the same size as the original '연결 끊기' button
+   (both use the danger-button style in the report header). */
+.report-header-root .header-buttons .secondary-button.danger-button {
+    min-width: 112px;
+    text-align: center;
+}
+
 
 .report-info-card {
     padding: 18px;
