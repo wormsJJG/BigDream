@@ -363,7 +363,7 @@ export function initClientDevice(ctx) {
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
 
                 // Show settings guidance modal after returning to the initial screen.
-                if (!isLoadedScan) { try { showDisconnectSettingsModal(); } catch (_e) { } }
+                if (!isLoadedScan && State.currentDeviceMode === 'android') { try { showDisconnectSettingsModal(); } catch (_e) { } }
             }
         }
 

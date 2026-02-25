@@ -481,7 +481,8 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 totalSteps: 2,
                                 stage: 'mvt',
                                 percent: mvtLastPct,
-                                message: `MVT 정밀 분석 진행 중...  산출물 ${stat.files.toLocaleString('en-US')}개)`
+                                // UI 문구: '산출물' 표현 제거 (개수만 표시)
+                                message: `MVT 정밀 분석 진행 중... (${stat.files.toLocaleString('en-US')}개)`
                             });
                         } catch (_e) { }
                     }, 1000);

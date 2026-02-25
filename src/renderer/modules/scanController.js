@@ -370,7 +370,15 @@ export function initScanController(ctx) {
                 show(iosSub);
                 hide(subMenu);
                 hide(dashNav);
-                hide(scanInfoNav);
+
+                // iOS 결과 화면:
+                // - 실시간 검사 결과: 기존 iOS 서브메뉴만 노출
+                // - '검사 열기'로 불러온 결과: Android와 동일하게 '검사 정보' 탭도 노출
+                if (State.isLoadedScan) {
+                    show(scanInfoNav);
+                } else {
+                    hide(scanInfoNav);
+                }
             } else {
                 show(subMenu);
                 hide(iosSub);
@@ -631,21 +639,20 @@ export function initScanController(ctx) {
                     if (navOpen) navOpen.classList.add('hidden');
                     if (navResult) navResult.classList.remove('hidden');
 
-                    // Android "검사 열기"에서는 실시간 대시보드 대신 "검사 정보"를 노출
-                    if (String(osMode).toLowerCase() === 'android') {
-                        if (navAndroidDash) {
-                            navAndroidDash.classList.add('hidden');
-                            navAndroidDash.style.display = 'none';
+                    // '검사 열기'로 결과 파일을 불러온 경우: OS와 무관하게 실시간 대시보드는 숨기고, 정보 탭을 노출
+                    if (navAndroidDash) {
+                        navAndroidDash.classList.add('hidden');
+                        navAndroidDash.style.display = 'none';
+                    }
+                    if (navScanInfo) {
+                        // 검사 열기 모드에서는 OS와 무관하게 '검사 정보' 라벨 유지
+                        const labelSpan = navScanInfo.querySelector('span');
+                        const mode = String(osMode).toLowerCase();
+                        if (labelSpan) {
+                            labelSpan.textContent = '📝 검사 정보';
                         }
-                        if (navScanInfo) {
-                            navScanInfo.classList.remove('hidden');
-                            navScanInfo.style.display = 'block';
-                        }
-                    } else {
-                        if (navScanInfo) {
-                            navScanInfo.classList.add('hidden');
-                            navScanInfo.style.display = 'none';
-                        }
+                        navScanInfo.classList.remove('hidden');
+                        navScanInfo.style.display = 'block';
                     }
 
                     await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
