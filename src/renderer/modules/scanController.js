@@ -1832,10 +1832,12 @@ const renderActions = (actions, itemId) => {
             target: a.target,
             value: a.value,
             intent: a.intent,
+            component: a.component,
+
             itemId
         };
         const encoded = encodeURIComponent(JSON.stringify(data));
-        return `<button class="ds-action-btn" data-ds-action="${encoded}">${label}</button>`;
+        return `<button class="ds-btn ds-action-btn" data-ds-kind="${escapeHtml(kind)}" data-ds-action="${encoded}">${label}</button>`;
     }).join('');
     return `<div class="ds-actions">${btns}</div>`;
 };

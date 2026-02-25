@@ -107,9 +107,6 @@ function registerAndroidHandlers({
   // Legacy/compat channel used by renderer patches.
   // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
   ipcMain.handle('perform-device-security-action', async (_event, { serial, action } = {}) => {
-    if (CONFIG.IS_DEV_MODE) {
-      return { ok: true, dev: true, serial: serial || '-', action: action || null };
-    }
     try {
       return await androidService.performDeviceSecurityAction(serial, action);
     } catch (err) {

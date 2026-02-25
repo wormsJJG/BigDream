@@ -274,10 +274,7 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 const usbDebug = asBool(await getSetting('global', 'adb_enabled'));
                 const wifiDebug = asBool(await getSetting('global', 'adb_wifi_enabled')) ?? asBool(await getSetting('secure', 'adb_wifi_enabled'));
 
-                // App verification / Play Protect-ish signals
-                // NOTE: 사용자 요청에 따라 대시보드에서 표시하지 않음(기기별/OS별 편차가 커 혼란 유발)
-                // const pkgVerifier = asBool(await getSetting('global', 'package_verifier_enable'));
-                // const verifyAdbInstalls = asBool(await getSetting('global', 'verifier_verify_adb_installs'));
+                // (요구사항) Play 스토어 보안/자동 차단 관련 항목은 현재 화면에서 제외합니다.
 
                 // Unknown sources (legacy; modern Android is per-app, so this may be null)
                 const unknownSources = asBool(await getSetting('secure', 'install_non_market_apps'));
@@ -301,32 +298,42 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 // Action descriptors used by renderer to show "끄기/켜기/설정 열기" buttons.
                 // Renderer will call IPC to apply these actions.
                 const buildActions = (id, boolVal) => {
-                    // Toggle-able via ADB (best-effort)
-                    if (id === 'devOptions' || id === 'usbDebug' || id === 'wifiDebug') {
+                    // Renderer가 기대하는 스키마: { kind: 'toggle'|'openSettings', ... }
+                    // 요구사항:
+                    // - 개발자 옵션 / USB 디버깅: 화면에 "끄기" 버튼 제거
+                    // - 무선 디버깅: ON일 때만 "끄기" 제공 (OFF일 때 "켜기" 미제공)
+
+                    if (id === 'wifiDebug') {
+                        const actions = [];
                         if (boolVal === true) {
-                            return [{ type: 'toggle', id, enabled: false, label: '끄기' }];
+                            actions.push({ kind: 'toggle', label: '끄기', target: 'wifiDebug', value: false });
                         }
-                        if (boolVal === false) {
-                            return [{ type: 'toggle', id, enabled: true, label: '켜기' }];
-                        }
-                        // Unknown -> open settings
-                        return [{ type: 'openSettings', screen: 'DEVELOPER_OPTIONS', label: '설정 열기' }];
+                        actions.push({ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS' });
+                        return actions;
                     }
 
-                    // Settings-only navigations
+                    if (id === 'devOptions') {
+                        return [];
+                    }
+
+                    if (id === 'usbDebug') {
+                        return [];
+                    }
+
                     if (id === 'unknownSources') {
-                        return [{ type: 'openSettings', screen: 'UNKNOWN_APP_SOURCES', label: '설정 열기' }];
+                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.MANAGE_UNKNOWN_APP_SOURCES' }];
                     }
                     if (id === 'accessibility') {
-                        return [{ type: 'openSettings', screen: 'ACCESSIBILITY_SETTINGS', label: '설정 열기' }];
+                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.ACCESSIBILITY_SETTINGS' }];
                     }
                     if (id === 'deviceAdmin') {
-                        return [{ type: 'openSettings', screen: 'DEVICE_ADMIN_SETTINGS', label: '설정 열기' }];
+                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'com.android.settings/.DeviceAdminSettings' }];
                     }
                     if (id === 'notificationAccess') {
-                        return [{ type: 'openSettings', screen: 'NOTIFICATION_LISTENER_SETTINGS', label: '설정 열기' }];
+                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS' }];
                     }
-                    return [];
+
+                    return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.SETTINGS' }];
                 };
 
                 const push = (id, title, boolVal, { levelOn = 'warn', levelOff = 'ok', unknown = 'unknown', detailOn = '', detailOff = '', note } = {}) => {
@@ -371,7 +378,8 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                     note: '최신 Android는 “앱별로” 알 수 없는 앱 설치 권한을 관리합니다. 이 값이 UNKNOWN일 수 있습니다.'
                 });
 
-                // (removed) pkgVerifier / verifyAdbInstalls
+                // (요구사항) Play 스토어 관련 항목은 표시하지 않습니다.
+
 
                 // Accessibility services
                 const a11yCount = enabledA11yPkgs.size;
@@ -451,18 +459,18 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 // We'll try best-effort and return a friendly error if blocked.
                 if (id === 'devOptions') {
                     // Some devices mirror this in secure as well.
-                    try { await service.adbShellWithTimeout(target, `settings put global development_settings_enabled ${on}`); } catch (_e) {}
-                    try { await service.adbShellWithTimeout(target, `settings put secure development_settings_enabled ${on}`); } catch (_e) {}
+                    try { await service.adbShellWithTimeout(target, `settings put global development_settings_enabled ${on}`); } catch (_e) { }
+                    try { await service.adbShellWithTimeout(target, `settings put secure development_settings_enabled ${on}`); } catch (_e) { }
                     return { ok: true, changed: true, settingId: id, enabled: !!enabled };
                 }
                 if (id === 'usbDebug') {
                     // Best-effort: settings provider + usb functions fallback.
-                    try { await service.adbShellWithTimeout(target, `settings put global adb_enabled ${on}`); } catch (_e) {}
-                    try { await service.adbShellWithTimeout(target, `settings put secure adb_enabled ${on}`); } catch (_e) {}
+                    try { await service.adbShellWithTimeout(target, `settings put global adb_enabled ${on}`); } catch (_e) { }
+                    try { await service.adbShellWithTimeout(target, `settings put secure adb_enabled ${on}`); } catch (_e) { }
                     // Some OEMs require adjusting usb functions to actually drop adb.
                     if (!enabled) {
-                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions mtp`); } catch (_e) {}
-                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions none`); } catch (_e) {}
+                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions mtp`); } catch (_e) { }
+                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions none`); } catch (_e) { }
                     }
                     return { ok: true, changed: true, settingId: id, enabled: !!enabled };
                 }
@@ -492,7 +500,7 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                         `settings put secure verifier_verify_adb_installs ${on}`,
                     ];
                     for (const c of cmds) {
-                        try { await service.adbShellWithTimeout(target, c); } catch (_e) {}
+                        try { await service.adbShellWithTimeout(target, c); } catch (_e) { }
                     }
                     return { ok: true, changed: true, settingId: id, enabled: !!enabled };
                 }
@@ -525,10 +533,10 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
 
                 // Best-effort start settings activity (some devices require user/flags)
                 try {
-                    await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`);
+                    await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`, 12000);
                 } catch (_e) {
                     // Fallback for some Android versions
-                    await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`);
+                    await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`, 12000);
                 }
                 return { ok: true, opened: true, screen: s || 'SETTINGS' };
             } catch (err) {
@@ -540,25 +548,48 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
         // ✅ Compatibility action API used by renderer patches
         // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
         // ---------------------------------------------------------
-        async performDeviceSecurityAction(serial, action) {
+       async performDeviceSecurityAction(serial, action) {
             try {
                 const act = action || {};
                 const kind = String(act.kind || '').toLowerCase();
 
                 if (kind === 'opensettings') {
-                    // If renderer passes raw intent, use it; otherwise map via openAndroidSettings
-                    const intent = act.intent ? String(act.intent) : null;
-                    if (intent) {
-                        const devices = await client.listDevices();
-                        if (devices.length === 0) throw new Error('기기 연결 안 됨');
-                        const target = serial || devices[0].id;
+                    const devices = await client.listDevices();
+                    if (devices.length === 0) throw new Error('기기 연결 안 됨');
+                    const target = serial || devices[0].id;
+
+                    // Prefer explicit component if provided (more reliable on some OEM devices)
+                    const component = act.component ? String(act.component).trim() : '';
+                    if (component) {
                         try {
-                            await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`);
+                            await service.adbShellWithTimeout(target, `am start --user 0 -W -n ${component} -f 0x10000000`);
+                            return { ok: true, opened: true, component };
+                        } catch (_e) {
+                            try {
+                                await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -n ${component}`);
+                                return { ok: true, opened: true, component };
+                            } catch (_e2) { /* fallthrough */ }
+                        }
+                    }
+
+                    // If renderer passes raw intent, use it.
+                    const intent = act.intent ? String(act.intent).trim() : '';
+                    if (intent) {
+                        try {
+
+                            if (intent == 'com.android.settings/.DeviceAdminSettings') {
+
+                                await service.adbShellWithTimeout(target, `am start -n ${intent}`);
+                            } else {
+
+                                await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`);
+                            }
                         } catch (_e) {
                             await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`);
                         }
                         return { ok: true, opened: true, intent };
                     }
+
                     // Fallback to generic settings
                     return await service.openAndroidSettings(serial, 'SETTINGS');
                 }

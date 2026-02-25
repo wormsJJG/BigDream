@@ -156,23 +156,37 @@ const doAction = async (action) => {
 // 1) 개발자 옵션 끄기 시도
 const resDevOff = await doAction({ kind: 'toggle', target: 'devOptions', value: false });
 
-// 2) 실제 상태 재확인
+// 2) 실제 상태 재확인(지연/재시도: 기기 설정 반영에 시간이 걸리는 경우가 있음)
 let devNow = null; // true | false | null
-let securityAutoBlockNow = null; // true | false | null
+// NOTE: "보안 위험 자동 차단"(설정 UI)은 기기/OEM별로 DB 값과 1:1로 매핑되지 않는 경우가 있어
+// 앱에서 정확한 ON/OFF 판정/자동 토글을 보장하기 어렵습니다. (안내 문구만 표시)
+const toBool = (status) => {
+    const s = String(status || '').toUpperCase();
+    if (s.startsWith('ON')) return true;
+    if (s.startsWith('OFF')) return false;
+    return null;
+};
+
+const readSecurityStatus = async () => {
+    if (typeof api.getDeviceSecurityStatus !== 'function') return { devNow: null };
+    const st = await api.getDeviceSecurityStatus();
+    const items = (st && st.items) ? st.items : [];
+    const devItem = items.find(it => it && it.id === 'devOptions');
+    return { devNow: devItem ? toBool(devItem.status) : null };
+};
+
 try {
-    if (typeof api.getDeviceSecurityStatus === 'function') {
-        const st = await api.getDeviceSecurityStatus();
-        const items = (st && st.items) ? st.items : [];
-        const devItem = items.find(it => it && it.id === 'devOptions');
-        const secItem = items.find(it => it && (it.id === 'securityAutoBlock' || it.id === 'securityAutoBlockVerifyApps'));
-        const toBool = (status) => {
-            const s = String(status || '').toUpperCase();
-            if (s.startsWith('ON')) return true;
-            if (s.startsWith('OFF')) return false;
-            return null;
-        };
-        devNow = devItem ? toBool(devItem.status) : null;
-        securityAutoBlockNow = secItem ? toBool(secItem.status) : null;
+    // 최대 3회(총 ~1.6초) 재확인
+    for (let i = 0; i < 3; i++) {
+        const st = await readSecurityStatus();
+        devNow = st.devNow;
+        if (devNow === false) break;
+        // 토글 성공 응답이 왔으면 조금 기다렸다가 재조회
+        if (resDevOff && resDevOff.ok) {
+            await new Promise(r => setTimeout(r, 550));
+        } else {
+            break;
+        }
     }
 } catch (_e) { }
 
@@ -181,27 +195,32 @@ const lines = [];
 if (devNow === false) {
     lines.push('✅ 개발자 옵션이 정상적으로 꺼졌습니다.');
 } else if (devNow === true) {
-    lines.push('⚠️ 개발자 옵션이 아직 켜져 있습니다.');
+    if (resDevOff && resDevOff.ok) {
+        lines.push('⚠️ 개발자 옵션 끄기를 시도했지만, 현재 상태가 즉시 반영되지 않았거나 확인이 불확실합니다.');
+    } else {
+        lines.push('⚠️ 개발자 옵션이 아직 켜져 있습니다.');
+    }
 } else {
-    lines.push('⚠️ 개발자 옵션 상태를 확인할 수 없습니다.');
+    if (resDevOff && resDevOff.ok) {
+        lines.push('✅ 개발자 옵션 끄기 요청은 전송되었습니다. 다만 기기 상태를 즉시 확인하지 못했습니다.');
+    } else {
+        lines.push('⚠️ 개발자 옵션 상태를 확인할 수 없습니다.');
+    }
 }
 
 // 보안 위험 자동 차단 안내(사용자 인지용)
 lines.push('');
-if (securityAutoBlockNow === false) {
-    lines.push('🔒 검사를 위해 "보안 위험 자동 차단"을 꺼두셨다면, 이제 다시 켜주세요.');
-    lines.push('   (켜면 USB 디버깅이 자동으로 꺼질 수 있습니다.)');
-} else if (securityAutoBlockNow === true) {
-    lines.push('🔒 "보안 위험 자동 차단"이 켜져 있습니다.');
-} else {
-    lines.push('🔒 검사를 위해 "보안 위험 자동 차단"을 꺼두셨다면, 이제 다시 켜주세요.');
-    lines.push('   (켜면 USB 디버깅이 자동으로 꺼질 수 있습니다.)');
-}
+lines.push('🔒 검사를 위해 "보안 위험 자동 차단"을 꺼두셨다면, 이제 다시 켜주세요.');
+lines.push('   (켜면 USB 디버깅이 자동으로 꺼질 수 있습니다.)');
 
 // 개발자 옵션이 꺼지지 않았으면 설정 열기 제안
 if (devNow !== false) {
     await CustomUI.alert(lines.join('\n'));
-    const goSettings = await CustomUI.confirm('개발자 옵션을 자동으로 끄지 못했습니다.\n설정 화면을 열어 직접 끄시겠습니까?');
+    const goSettings = await CustomUI.confirm(
+        (devNow === true)
+            ? '개발자 옵션이 아직 켜져 있습니다.\n설정 화면을 열어 직접 끄시겠습니까?'
+            : '개발자 옵션 상태를 확인하지 못했습니다.\n설정 화면을 열어 직접 확인하시겠습니까?'
+    );
     if (goSettings) {
         await doAction({ kind: 'openSettings', intent: 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS' });
         await CustomUI.alert('설정에서 개발자 옵션을 끈 뒤, 앱으로 돌아와 주세요.');

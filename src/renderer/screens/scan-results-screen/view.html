@@ -235,7 +235,21 @@
   #device-security-container .ds-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  
+  #device-security-container .ds-btn {
+    transition: transform 0.05s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.06);
   }
+  #device-security-container .ds-btn:active { transform: translateY(1px); }
+
+  /* kind-based emphasis */
+  #device-security-container .ds-btn[data-ds-kind="toggle"]{
+    border-color:#fda29b;
+    background:#fffbfa;
+    color:#b42318;
+  }
+  #device-security-container .ds-btn[data-ds-kind="toggle"]:hover{ filter: brightness(0.99); }
+}
 </style>
 
 <div id="device-security-container">상태 확인 중...</div>

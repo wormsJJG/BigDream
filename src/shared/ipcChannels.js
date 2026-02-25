@@ -25,6 +25,8 @@ module.exports = {
     START_FULL_SCAN: 'start-full-scan',
     GET_DASHBOARD_DATA: 'get-android-dashboard-data',
     GET_DEVICE_SECURITY_STATUS: 'get-device-security-status',
+    // Device security action router (open settings / best-effort toggles)
+    PERFORM_DEVICE_SECURITY_ACTION: 'perform-device-security-action',
     SET_DEVICE_SECURITY_SETTING: 'set-device-security-setting',
     OPEN_ANDROID_SETTINGS: 'open-android-settings'
   },
