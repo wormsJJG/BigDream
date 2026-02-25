@@ -104,7 +104,16 @@
         -webkit-print-color-adjust: exact; 
     }
     
-    /* 외부 앱 강조 스타일 (회색) */
+    
+    /* [신규] 개인정보 유출 위협(주의) 앱 강조 스타일 (노란색) */
+    .compact-warning {
+        font-weight: bold;
+        color: #F0AD4E !important;
+        background-color: #FFF3CD !important;
+        -webkit-print-color-adjust: exact;
+    }
+
+/* 외부 앱 강조 스타일 (회색) */
     .compact-sideload { 
         font-weight: bold; 
         background: #eee !important; 
