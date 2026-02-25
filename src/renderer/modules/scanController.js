@@ -1720,7 +1720,7 @@ export function initScanController(ctx) {
                     <img src="./assets/systemAppLogo.png" class="scs-c35a5c87">
                 </div>
                 <div class="app-display-name">${apk.packageName}</div>
-                <div class="app-package-sub">${apk.fileSize || '용량 확인 중'}</div>
+                <div class="app-package-sub">${apk.installStatus || '미설치 파일'}</div>
                 <div class="scs-72caaa65">요구권한 ${apk.requestedCount}개</div>
             `;
 

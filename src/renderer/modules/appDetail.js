@@ -84,16 +84,16 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                 if (app.isApkFile) {
     
                     if (bgLabel) bgLabel.textContent = "저장 일시";
-                    if (netLabel) netLabel.textContent = "파일 크기";
+                    if (netLabel) netLabel.textContent = "설치 유무";
     
                     if (sideloadEl) {
-                        setMainSubText(sideloadEl, '외부 설치 (미설치 파일)', app.apkPath || '-', 'bd-detail-sub bd-detail-sub--mono bd-break-all');
+                        setMainSubText(sideloadEl, '외부 설치', app.apkPath || '-', 'bd-detail-sub bd-detail-sub--mono bd-break-all');
                     }
                     if (bgStatusEl) {
                         setMainSubText(bgStatusEl, app.installDate || '-', '(기기 내 파일 저장 시점)', 'bd-detail-sub bd-detail-sub--danger');
                     }
                     if (networkEl) {
-                        setMainSubText(networkEl, app.fileSize || '분석 중', '(APK 패키지 용량)', 'bd-detail-sub');
+                        setMainSubText(networkEl, app.installStatus || (app.isInstalled ? '설치된 파일' : '미설치 파일'), '', 'bd-detail-sub');
                     }
     
                     if (neutralizeBtnEl) neutralizeBtnEl.style.setProperty('display', 'none', 'important');
