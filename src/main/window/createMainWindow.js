@@ -4,22 +4,34 @@ const path = require('path');
 const { BrowserWindow } = require('electron');
 
 function createMainWindow({ baseDir }) {
-    console.log('--- [System] Main Window Created ---');
+  console.log('--- [System] Main Window Created ---');
 
-    const mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 900,
-        webPreferences: {
-            devTools: true,
-            preload: path.join(baseDir, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false
-        }
-    });
+  const mainWindow = new BrowserWindow({
+    show: false,
 
-    mainWindow.loadFile(path.join(baseDir, 'index.html'));
+    // 타이틀바(최소화/닫기) 유지
+    frame: true,
 
-    return mainWindow;
+    autoHideMenuBar: true,
+
+    width: 1280,
+    height: 900,
+    webPreferences: {
+      devTools: true,
+      preload: path.join(baseDir, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  mainWindow.loadFile(path.join(baseDir, 'index.html'));
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();  
+    mainWindow.show();
+  });
+
+  return mainWindow;
 }
 
 module.exports = { createMainWindow };

@@ -130,7 +130,13 @@ export function initClientDevice(ctx) {
     const disconnectBtn = document.getElementById('disconnect-btn');
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
-            if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
+            {
+            const isLoadedScan = !!(State && State.isLoadedScan);
+            const confirmMsg = isLoadedScan
+                ? '보고서를 닫고 초기 화면으로 돌아가시겠습니까?'
+                : '기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?';
+
+            if (await CustomUI.confirm(confirmMsg)) {
 
 // -------------------------------------------------
 // ✅ 연결 끊기 시 자동 조치
@@ -373,6 +379,8 @@ if (devNow !== false) {
                     await CustomUI.alert(msg);
                 } catch (_e) { }
             }
+        }
+
         });
     }
 

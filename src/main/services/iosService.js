@@ -355,8 +355,40 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         ticker = null;
                     };
 
+                    let disconnected = false;
+                    let watch = null;
+
                     try {
                         startTicker();
+
+                        // ✅ Device disconnect watchdog (during backup only)
+                        // If the cable is unplugged while idevicebackup2 is running, the process may hang.
+                        // We poll idevice_id -l and force-kill idevicebackup2 when the device disappears,
+                        // so the UI can fail fast with a clear message.
+                        const watchIntervalMs = 1200;
+                        watch = setInterval(async () => {
+                            if (disconnected) return;
+                            try {
+                                const out = await Utils.runCommand(`"${CONFIG.PATHS.IOS_ID}" -l`);
+                                const udids = String(out || '').trim();
+                                if (!udids) {
+                                    disconnected = true;
+                                    safeEmit(onProgress, {
+                                        step: 1,
+                                        totalSteps: 2,
+                                        stage: 'backup',
+                                        percent: Math.max(0, Math.min(99, lastPct)),
+                                        message: '⚠️ iOS 기기 연결이 끊겼습니다. 케이블 연결/신뢰 상태를 확인해주세요.'
+                                    });
+
+                                    // kill hanging tools (Windows)
+                                    try { await Utils.runCommand('taskkill /F /IM idevicebackup2.exe /T').catch(() => { }); } catch (_e) { }
+                                    try { await Utils.runCommand('taskkill /F /IM ideviceinfo.exe /T').catch(() => { }); } catch (_e) { }
+                                }
+                            } catch (_e) {
+                                // ignore polling errors
+                            }
+                        }, watchIntervalMs);
 
                         await spawnWithLineStream(IOS_BACKUP, ['backup', '--full', TEMP_BACKUP, '-u', udid], {
                             onLine: (line) => {
@@ -394,6 +426,14 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         console.warn('[iOS] 백업 종료 과정에서 경고가 발생했으나, 데이터 무결성을 확인합니다...');
                     } finally {
                         stopTicker();
+                        if (watch) clearInterval(watch);
+                        watch = null;
+                    }
+
+
+
+                    if (disconnected) {
+                        throw new Error('iOS 기기 연결이 끊겼습니다. 케이블 연결 상태를 확인하고 다시 시도해주세요.');
                     }
 
                     isBackupComplete = fs.existsSync(path.join(specificBackupPath, 'Status.plist'));
@@ -481,7 +521,8 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 totalSteps: 2,
                                 stage: 'mvt',
                                 percent: mvtLastPct,
-                                message: `MVT 정밀 분석 진행 중...  산출물 ${stat.files.toLocaleString('en-US')}개)`
+                                // UI 문구: '산출물' 표현 제거 (개수만 표시)
+                                message: `MVT 정밀 분석 진행 중... (${stat.files.toLocaleString('en-US')}개)`
                             });
                         } catch (_e) { }
                     }, 1000);

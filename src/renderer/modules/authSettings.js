@@ -340,7 +340,9 @@ export function initAuthSettings(ctx) {
                 console.warn('[BD-Scanner] scan-info render failed:', e);
             }
 
-            // [Patch] '검사 열기'(Android)에서 결과 탭은 유지하고, 실시간 대시보드는 숨김
+            // [Patch] '검사 열기'에서 결과 탭은 유지하고, 실시간 대시보드는 숨김
+            // - Android: result-sub-menu 유지
+            // - iOS: ios-sub-menu 유지
             try {
                 const subMenu = document.getElementById('result-sub-menu');
                 const iosSub = document.getElementById('ios-sub-menu');
@@ -349,12 +351,21 @@ export function initAuthSettings(ctx) {
                 const navCreate = document.getElementById('nav-create');
                 const navOpen = document.getElementById('nav-open');
 
+                const mode = String(State.currentDeviceMode || '').toLowerCase();
+
                 if (navCreate) { navCreate.classList.add('hidden'); navCreate.style.display = 'none'; }
                 if (navOpen) { navOpen.classList.add('hidden'); navOpen.style.display = 'none'; }
                 if (navResult) { navResult.classList.remove('hidden'); navResult.style.display = 'block'; }
 
-                if (subMenu) { subMenu.classList.remove('hidden'); subMenu.style.display = 'block'; }
-                if (iosSub) { iosSub.classList.add('hidden'); iosSub.style.display = 'none'; }
+                if (mode === 'ios') {
+                    // iOS 결과 파일을 '검사 열기'로 보는 경우: iOS 탭 유지
+                    if (subMenu) { subMenu.classList.add('hidden'); subMenu.style.display = 'none'; }
+                    if (iosSub) { iosSub.classList.remove('hidden'); iosSub.style.display = 'block'; }
+                } else {
+                    // Android 결과 파일을 '검사 열기'로 보는 경우: Android 탭 유지
+                    if (subMenu) { subMenu.classList.remove('hidden'); subMenu.style.display = 'block'; }
+                    if (iosSub) { iosSub.classList.add('hidden'); iosSub.style.display = 'none'; }
+                }
 
                 if (dash) { dash.classList.add('hidden'); dash.style.display = 'none'; }
             } catch (_e) { }

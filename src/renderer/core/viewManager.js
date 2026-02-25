@@ -55,6 +55,14 @@ export function createViewManager(State) {
             if (reportHeaderRoot) {
                 const shouldShowReportHeader = (screenId === 'scan-results-screen' || screenId === 'scan-info-screen');
                 reportHeaderRoot.classList.toggle('hidden', !shouldShowReportHeader);
+
+                // [Patch] When viewing a report loaded from file ('검사 열기'), change the disconnect button label to '닫기'
+                try {
+                    const disconnectBtn = document.getElementById('disconnect-btn');
+                    if (disconnectBtn) {
+                        disconnectBtn.textContent = (State && State.isLoadedScan) ? '닫기' : '연결 끊기';
+                    }
+                } catch (_e) { }
             }
 
 
@@ -337,7 +345,17 @@ export function createViewManager(State) {
                     const isDoneByPercent = Number.isFinite(p) && Math.round(p) >= 100;
                     const raw = String(text || '');
                     const isDoneByText = /analysis\s+complete/i.test(raw) || /complete\./i.test(raw) || /분석\s*완료/.test(raw);
-                    androidRunningText.textContent = (isDoneByPercent || isDoneByText) ? '검사 완료' : '검사 진행 중...';
+
+                    // Android scan has two visible progress cycles:
+                    // Phase 1 (metadata collection): plain step messages
+                    // Phase 2 (app-by-app scan): usually contains "[x/y]" or "검사 진행중"
+                    const isPhase2 = /\[\s*\d+\s*\/\s*\d+\s*\]/.test(raw) || /검사\s*진행\s*중/.test(raw) || /검사\s*진행중/.test(raw);
+
+                    if (isDoneByPercent || isDoneByText) {
+                        androidRunningText.textContent = '검사 완료';
+                    } else {
+                        androidRunningText.textContent = isPhase2 ? '검사 진행 중...' : '데이터 확보중...';
+                    }
                 }
 
                 appendAndroidLogLine(text);

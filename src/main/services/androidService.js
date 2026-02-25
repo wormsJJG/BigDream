@@ -50,6 +50,37 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
         },
 
         /**
+         * Open an Android system Settings screen on the connected device.
+         *
+         * NOTE:
+         * - This does NOT change any setting automatically. It only navigates the user to the relevant screen.
+         * - Some OEM/OS builds may block certain Settings intents; in that case we return success=false.
+         */
+        async openSettings(action) {
+            if (!action) throw new Error('action is required');
+
+            const devices = await client.listDevices();
+            if (!devices || devices.length === 0) throw new Error('기기 없음');
+            const serial = devices[0].id;
+
+            try {
+                // Use ActivityManager to open a Settings screen.
+                const outStream = await client.shell(serial, `am start -a ${action}`);
+                const out = (await adb.util.readAll(outStream)).toString();
+
+                // Common failure patterns: "Error: Activity not started" / "SecurityException" etc.
+                const lowered = out.toLowerCase();
+                if (lowered.includes('error') || lowered.includes('exception')) {
+                    return { success: false, output: out };
+                }
+
+                return { success: true, output: out };
+            } catch (err) {
+                return { success: false, error: err.message };
+            }
+        },
+
+        /**
          * Main Android scan pipeline (moved from IPC layer).
          */
         async runScan() {
@@ -694,6 +725,24 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
             }
         },
 
+        async getGrantedPermissions(packageName) {
+
+            const devices = await client.listDevices();
+            if (devices.length === 0) throw new Error('기기 연결 끊김');
+            const serial = devices[0].id;
+
+            const dumpOutput = await client.shell(serial, `dumpsys package ${packageName}`);
+            const dumpStr = (await adb.util.readAll(dumpOutput)).toString();
+
+            const grantedPerms = [];
+            const regex = /android\.permission\.([A-Z0-9_]+): granted=true/g;
+            let match;
+            while ((match = regex.exec(dumpStr)) !== null) {
+                grantedPerms.push(`android.permission.${match[1]}`);
+            }
+            return grantedPerms;
+        },
+
         // 앱 삭제 (Disable -> Uninstall)
         async uninstallApp(packageName) {
             try {
@@ -962,6 +1011,10 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
             // 💡 경로 중복 제거: /sdcard와 /storage/emulated/0는 같은 곳입니다.
             // 하나만 남기거나, 결과에서 경로 중복을 체크해야 합니다.
             const searchPaths = ['/sdcard/Download', '/data/local/tmp'];
+
+            // 설치 여부 판별을 위해 설치된 패키지 목록을 먼저 로드
+            const installedApps = await service.getInstalledApps(serial);
+            const installedSet = new Set(installedApps.map(a => a.packageName));
             let allApkData = [];
             const seenPaths = new Set(); // 💡 중복 체크를 위한 세트
 
@@ -988,6 +1041,12 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                         const rawSize = parts[parts.length - 4];
 
                         const fileName = filePath.split('/').pop();
+                        // APK의 실제 packageName(Manifest) 추출 (설치 여부 판별용)
+                        let apkManifestPackage = null;
+                        try {
+                            const perms = await service.getApkPermissionsOnly(serial, filePath);
+                            apkManifestPackage = perms && perms.__packageName ? perms.__packageName : null;
+                        } catch (_e) { }
                         const sizeNum = parseInt(rawSize);
                         const formattedSize = isNaN(sizeNum) ? "분석 중" : (sizeNum / (1024 * 1024)).toFixed(2) + " MB";
 
@@ -997,6 +1056,7 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                             fileSize: formattedSize,
                             installDate: `${datePart} ${timePart}`,
                             isApkFile: true,
+                            installStatus: (apkManifestPackage && installedSet.has(apkManifestPackage)) ? '현재 설치된 파일' : '현재 미설치된 파일',
                             isRunningBg: false,
                             isSideloaded: true,
                             requestedCount: 3,
@@ -1113,6 +1173,9 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 // 4. 권한 리스트 추출
                 const permissions = (manifest.usesPermissions || []).map(p => p.name);
 
+
+                // 설치 여부 판별을 위해 packageName도 함께 전달 (배열에 메타 프로퍼티로 부착)
+                try { permissions.__packageName = manifest.package || manifest.packageName || null; } catch (_e) { }
                 // 5. 임시 파일 삭제
                 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
