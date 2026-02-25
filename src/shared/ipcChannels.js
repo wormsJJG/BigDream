@@ -23,7 +23,10 @@ module.exports = {
     DELETE_APK_FILE: 'delete-apk-file',
     AUTO_PUSH_REPORT: 'auto-push-report-to-android',
     START_FULL_SCAN: 'start-full-scan',
-    GET_DASHBOARD_DATA: 'get-android-dashboard-data'
+    GET_DASHBOARD_DATA: 'get-android-dashboard-data',
+    GET_DEVICE_SECURITY_STATUS: 'get-device-security-status',
+    SET_DEVICE_SECURITY_SETTING: 'set-device-security-setting',
+    OPEN_ANDROID_SETTINGS: 'open-android-settings'
   },
 
   IOS: {

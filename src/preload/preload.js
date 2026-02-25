@@ -37,7 +37,8 @@ const bdScanner = {
         getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA),
 
         // Live dashboard: battery/mem/temp/top/spec (Android only)
-        getDashboardData: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA, payload)
+        getDashboardData: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA, payload),
+        getDeviceSecurityStatus: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, payload)
     },
     firestore: {
         call: (payload) => ipcRenderer.invoke(IPC.FIRESTORE.CALL, payload)
@@ -81,6 +82,7 @@ const electronAPI = {
     autoPushReportToAndroid: bdScanner.android.autoPushReportToAndroid,
     startFullScan: bdScanner.android.startFullScan,
     getAndroidDashboardData: bdScanner.android.getDashboardData,
+    getDeviceSecurityStatus: bdScanner.android.getDeviceSecurityStatus,
     readTextFile: bdScanner.app.readTextFile,
     firebaseAuthLogin: (email, password) => bdScanner.auth.login(email, password),
     firebaseAuthLogout: () => bdScanner.auth.logout(),

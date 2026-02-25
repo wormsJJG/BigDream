@@ -144,101 +144,20 @@
 </div>
 <div class="result-content-section" id="res-threats">
 <div class="content-card">
-<h3 id="res-threats-title">🔐 기기 보안 상태</h3>
-<p class="sub-text" id="res-threats-desc">스파이앱 침입 가능성을 높이는 설정을 점검합니다. (Android 검사 결과에서만 제공)</p>
+  <div class="card-header-row">
+    <h3 id="res-device-security-title">🔐 기기 보안 상태</h3>
+    <span class="pill pill-warn" id="res-device-security-badge" style="display:none;">주의</span>
+  </div>
+  <p class="sub-text" id="res-device-security-desc">스파이앱 침입에 악용될 수 있는 기기 설정 상태를 점검합니다. (Android 검사 결과 전용)</p>
 
-<style>
-  /* Device Security (scoped) */
-  #device-security-container { margin-top: 12px; }
-  #device-security-container .ds-guide {
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
-    border-radius: 14px;
-    padding: 14px 16px;
-    margin-bottom: 12px;
-  }
-  #device-security-container .ds-guide-title {
-    font-weight: 800;
-    font-size: 15px;
-    margin-bottom: 6px;
-  }
-  #device-security-container .ds-guide-desc { color: #475467; line-height: 1.5; font-size: 13px; }
+  <div class="content-card" style="margin-top: 14px; padding: 12px 14px; background: #f7f7f7; border: 1px solid #e5e5e5;">
+    <div style="font-weight: 700; margin-bottom: 6px;">ℹ️ 안내</div>
+    <div style="font-size: 13px; color: #555; line-height: 1.5;">
+      <b>USB 디버깅(ADB)</b>은 BD-SCANNER 검사를 위해 일시적으로 사용될 수 있습니다. 검사가 종료되면 비활성화될 예정입니다.
+    </div>
+  </div>
 
-  #device-security-container .ds-card {
-    border-radius: 14px;
-    padding: 14px 16px;
-    border: 1px solid #eaecf0;
-    background: #ffffff;
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-    margin-top: 10px;
-  }
-  #device-security-container .ds-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-  #device-security-container .ds-title { font-weight: 800; font-size: 15px; color: #101828; }
-  #device-security-container .ds-desc { margin-top: 8px; color: #475467; font-size: 13px; line-height: 1.45; }
-  #device-security-container .ds-note {
-    margin-top: 10px;
-    background: #fffaeb;
-    border: 1px solid #fedf89;
-    color: #7a2e0e;
-    border-radius: 12px;
-    padding: 10px 12px;
-    font-size: 12.5px;
-    line-height: 1.45;
-  }
-
-  /* severity accents */
-  #device-security-container .ds-high { border-color: #fda29b; background: #fffbfa; }
-  #device-security-container .ds-warn, #device-security-container .ds-medium { border-color: #fedf89; background: #fffcf5; }
-  #device-security-container .ds-info { border-color: #b2ddff; background: #f5fbff; }
-  #device-security-container .ds-ok { border-color: #abefc6; background: #f6fef9; }
-  #device-security-container .ds-unknown { border-color: #eaecf0; background: #fcfcfd; }
-
-  /* chips */
-  #device-security-container .ds-chip-row { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
-  #device-security-container .ds-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 10px;
-    border-radius: 999px;
-    border: 1px solid #eaecf0;
-    background: #f8fafc;
-    color: #344054;
-    font-size: 12px;
-    max-width: 100%;
-    word-break: break-all;
-  }
-
-  /* actions */
-  #device-security-container .ds-actions {
-    margin-top: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  #device-security-container .ds-btn {
-    appearance: none;
-    border: 1px solid #d0d5dd;
-    background: #ffffff;
-    color: #344054;
-    padding: 8px 10px;
-    border-radius: 10px;
-    font-size: 12.5px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  #device-security-container .ds-btn:hover { filter: brightness(0.98); }
-  #device-security-container .ds-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-</style>
-
-<div id="device-security-container">상태 확인 중...</div>
+  <div id="device-security-status-container" style="margin-top: 14px;">로딩 중...</div>
 </div>
 </div>
 <div class="result-content-section" id="res-apk">
