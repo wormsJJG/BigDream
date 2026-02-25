@@ -31,8 +31,7 @@ const IPC = {
         START_FULL_SCAN: 'start-full-scan',
         GET_DASHBOARD_DATA: 'get-android-dashboard-data',
         GET_DEVICE_SECURITY_STATUS: 'get-device-security-status',
-        SET_DEVICE_SECURITY_SETTING: 'set-device-security-setting',
-        OPEN_ANDROID_SETTINGS: 'open-android-settings'
+        PERFORM_DEVICE_SECURITY_ACTION: 'perform-device-security-action'
     },
     IOS: {
         CHECK_CONNECTION: 'check-ios-connection',
@@ -84,8 +83,7 @@ const bdScanner = {
         startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN),
         getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA),
         getDeviceSecurityStatus: () => invokeWithTimeout(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, {}),
-        setDeviceSecuritySetting: (settingId, enabled) => invokeWithTimeout(IPC.ANDROID.SET_DEVICE_SECURITY_SETTING, { settingId, enabled }),
-        openAndroidSettings: (screen) => invokeWithTimeout(IPC.ANDROID.OPEN_ANDROID_SETTINGS, { screen })
+        performDeviceSecurityAction: (payload) => invokeWithTimeout(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, payload || {})
     },
     auth: {
       login: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
@@ -137,8 +135,7 @@ const electronAPI = {
     firestoreCall: bdScanner.firestore.call,
     getAndroidDashboardData: bdScanner.android.getDashboardData,
     getDeviceSecurityStatus: bdScanner.android.getDeviceSecurityStatus,
-    setDeviceSecuritySetting: bdScanner.android.setDeviceSecuritySetting,
-    openAndroidSettings: bdScanner.android.openAndroidSettings,
+    performDeviceSecurityAction: bdScanner.android.performDeviceSecurityAction,
     // Firebase Auth (backward compatible helpers)
     firebaseAuthLogin: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
     firebaseAuthLogout: () => ipcRenderer.invoke('firebase-auth-logout'),

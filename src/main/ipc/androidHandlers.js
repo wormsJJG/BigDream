@@ -104,6 +104,20 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // ✅ Device Security Actions (toggle / open settings)
   // --------------------------------------------------
+  // Legacy/compat channel used by renderer patches.
+  // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
+  ipcMain.handle('perform-device-security-action', async (_event, { serial, action } = {}) => {
+    if (CONFIG.IS_DEV_MODE) {
+      return { ok: true, dev: true, serial: serial || '-', action: action || null };
+    }
+    try {
+      return await androidService.performDeviceSecurityAction(serial, action);
+    } catch (err) {
+      console.error('[perform-device-security-action] failed:', err);
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('set-device-security-setting', async (_event, { serial, settingId, enabled } = {}) => {
     if (CONFIG.IS_DEV_MODE) {
       return { ok: true, changed: true, settingId, enabled: !!enabled };

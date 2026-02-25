@@ -1816,23 +1816,34 @@ export function initScanController(ctx) {
                 return `<div class="ds-chip-row">${chips}</div>`;
             };
 
-            const renderActions = (actions, itemId) => {
-                if (!Array.isArray(actions) || actions.length === 0) return '';
-                const btns = actions.map((a) => {
-                    const type = String(a.type || '');
-                    const label = String(a.label || '조치');
-                    const enabled = (typeof a.enabled === 'boolean') ? String(a.enabled) : '';
-                    const screen = a.screen ? String(a.screen) : '';
-                    return `<button class="ds-btn" type="button" data-ds-action="${escapeHtml(type)}" data-ds-id="${escapeHtml(itemId)}" data-ds-enabled="${escapeHtml(enabled)}" data-ds-screen="${escapeHtml(screen)}">${escapeHtml(label)}</button>`;
-                }).join('');
-                return `<div class="ds-actions">${btns}</div>`;
-            };
+
+const renderActions = (actions, itemId) => {
+    if (!Array.isArray(actions) || actions.length === 0) return '';
+    const btns = actions.map((a) => {
+        const kind = String(a.kind || '').toLowerCase();
+        const label = escapeHtml(a.label || (kind === 'opensettings' ? '설정 열기' : '실행'));
+
+        // IMPORTANT:
+        // JSON 문자열을 escapeHtml()로 attribute에 넣으면 따옴표가 &quot;로 치환되어
+        // JSON.parse가 실패 → 버튼이 "아무 반응 없음"처럼 보입니다.
+        // 따라서 encodeURIComponent로 넣고, 클릭 시 decodeURIComponent 후 JSON.parse 합니다.
+        const data = {
+            kind: a.kind,
+            target: a.target,
+            value: a.value,
+            intent: a.intent,
+            itemId
+        };
+        const encoded = encodeURIComponent(JSON.stringify(data));
+        return `<button class="ds-action-btn" data-ds-action="${encoded}">${label}</button>`;
+    }).join('');
+    return `<div class="ds-actions">${btns}</div>`;
+};
 
             const rows = items.map((it) => {
                 const note = it.note ? `<div class="ds-note">${escapeHtml(it.note)}</div>` : '';
                 const detailText = it.detail || it.desc || '';
                 const chips = renderChips(it.list);
-                const actions = renderActions(it.actions, it.id);
 
                 return `
                   <div class="ds-card ds-${escapeHtml(String(it.level || 'unknown').toLowerCase())}">
@@ -1842,7 +1853,7 @@ export function initScanController(ctx) {
                     </div>
                     ${detailText ? `<div class="ds-desc">${escapeHtml(detailText)}</div>` : ''}
                     ${chips}
-                    ${actions}
+                    ${renderActions(it.actions, it.id)}
                     ${note}
                   </div>
                 `;
@@ -1862,68 +1873,46 @@ export function initScanController(ctx) {
               ${rows}
             `;
 
-            // Bind click handler once (event delegation)
-            if (!container.dataset.dsBound) {
-                container.dataset.dsBound = '1';
-                container.addEventListener('click', (ev) => {
-                    const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-ds-action]') : null;
-                    if (!btn) return;
+            // Bind action buttons once (event delegation)
+            try {
+                if (!container.__dsBound) {
+                    container.addEventListener('click', async (ev) => {
+                        const btn = ev.target && ev.target.closest ? ev.target.closest('.ds-action-btn') : null;
+                        if (!btn) return;
+                        const raw = btn.getAttribute('data-ds-action');
+                        if (!raw) return;
+                        let payload = null;
+                        try {
+                            payload = JSON.parse(decodeURIComponent(raw));
+                        } catch (_e) {
+                            payload = null;
+                        }
+                        if (!payload || !payload.kind) return;
 
-                    const action = btn.getAttribute('data-ds-action') || '';
-                    const id = btn.getAttribute('data-ds-id') || '';
-                    const enabledRaw = btn.getAttribute('data-ds-enabled');
-                    const screen = btn.getAttribute('data-ds-screen') || '';
-
-                    const refresh = () => {
-                        window.electronAPI.getDeviceSecurityStatus()
-                            .then((sec) => this.renderDeviceSecurityStatus(sec, container))
-                            .catch((_e) => {
-                                container.textContent = '기기 보안 상태를 새로고침하지 못했습니다.';
-                            });
-                    };
-
-                    if (action === 'toggle') {
-                        const enabled = (enabledRaw === 'true');
-                        if (!window.electronAPI?.setDeviceSecuritySetting) {
-                            alert('이 버전에서는 자동 조치를 지원하지 않습니다.');
+                        if (!window.electronAPI || typeof window.electronAPI.performDeviceSecurityAction !== 'function') {
+                            console.warn('[DeviceSecurityStatus] performDeviceSecurityAction not available');
                             return;
                         }
-                        btn.disabled = true;
-                        window.electronAPI.setDeviceSecuritySetting(id, enabled)
-                            .then((res) => {
-                                if (!res || res.ok === false) {
-                                    alert(res?.error || '설정 변경에 실패했습니다.');
-                                }
-                                refresh();
-                            })
-                            .catch((e) => {
-                                alert(e?.message || '설정 변경에 실패했습니다.');
-                                refresh();
-                            });
-                        return;
-                    }
 
-                    if (action === 'openSettings') {
-                        if (!window.electronAPI?.openAndroidSettings) {
-                            alert('이 버전에서는 설정 열기를 지원하지 않습니다.');
-                            return;
-                        }
                         btn.disabled = true;
-                        window.electronAPI.openAndroidSettings(screen || 'SETTINGS')
-                            .then((res) => {
-                                if (!res || res.ok === false) {
-                                    alert(res?.error || '설정 화면을 열지 못했습니다.');
-                                }
-                                setTimeout(refresh, 800);
-                            })
-                            .catch((e) => {
-                                alert(e?.message || '설정 화면을 열지 못했습니다.');
-                                setTimeout(refresh, 800);
-                            });
-                        return;
-                    }
-                });
-            }
+                        const oldText = btn.textContent;
+                        btn.textContent = '처리 중...';
+                        try {
+                            await window.electronAPI.performDeviceSecurityAction({ action: payload });
+                            // refresh
+                            const refreshed = await window.electronAPI.getDeviceSecurityStatus();
+                            this.renderDeviceSecurityStatus(refreshed, container);
+                        } catch (e) {
+                            console.warn('[DeviceSecurityStatus] action failed', e);
+                            try { btn.textContent = oldText || '실패'; } catch(_e) {}
+                        } finally {
+                            try { btn.disabled = false; } catch(_e) {}
+                            try { btn.textContent = oldText; } catch(_e) {}
+                        }
+                    });
+                    container.__dsBound = true;
+                }
+            } catch (_e) {}
         },
 
         // [MVT 분석 박스 렌더링 함수]

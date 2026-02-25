@@ -450,11 +450,20 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 // Some settings require WRITE_SECURE_SETTINGS (usually granted to shell on userdebug/eng).
                 // We'll try best-effort and return a friendly error if blocked.
                 if (id === 'devOptions') {
-                    await service.adbShellWithTimeout(target, `settings put global development_settings_enabled ${on}`);
+                    // Some devices mirror this in secure as well.
+                    try { await service.adbShellWithTimeout(target, `settings put global development_settings_enabled ${on}`); } catch (_e) {}
+                    try { await service.adbShellWithTimeout(target, `settings put secure development_settings_enabled ${on}`); } catch (_e) {}
                     return { ok: true, changed: true, settingId: id, enabled: !!enabled };
                 }
                 if (id === 'usbDebug') {
-                    await service.adbShellWithTimeout(target, `settings put global adb_enabled ${on}`);
+                    // Best-effort: settings provider + usb functions fallback.
+                    try { await service.adbShellWithTimeout(target, `settings put global adb_enabled ${on}`); } catch (_e) {}
+                    try { await service.adbShellWithTimeout(target, `settings put secure adb_enabled ${on}`); } catch (_e) {}
+                    // Some OEMs require adjusting usb functions to actually drop adb.
+                    if (!enabled) {
+                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions mtp`); } catch (_e) {}
+                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions none`); } catch (_e) {}
+                    }
                     return { ok: true, changed: true, settingId: id, enabled: !!enabled };
                 }
                 if (id === 'wifiDebug') {
@@ -468,6 +477,22 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                         await service.adbShellWithTimeout(target, `settings put secure adb_wifi_enabled ${on}`);
                     } catch (_e) {
                         // ignore
+                    }
+                    return { ok: true, changed: true, settingId: id, enabled: !!enabled };
+                }
+
+                if (id === 'securityAutoBlock') {
+                    // Best-effort: "app verification / play protect" style toggles.
+                    // NOTE: OEM features (e.g., Samsung Auto Blocker) may not be controllable via ADB settings.
+                    // We still try common keys to improve the odds.
+                    const cmds = [
+                        `settings put global package_verifier_enable ${on}`,
+                        `settings put secure package_verifier_enable ${on}`,
+                        `settings put global verifier_verify_adb_installs ${on}`,
+                        `settings put secure verifier_verify_adb_installs ${on}`,
+                    ];
+                    for (const c of cmds) {
+                        try { await service.adbShellWithTimeout(target, c); } catch (_e) {}
                     }
                     return { ok: true, changed: true, settingId: id, enabled: !!enabled };
                 }
@@ -498,9 +523,61 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 else if (s === 'UNKNOWN_APP_SOURCES') intent = 'android.settings.MANAGE_UNKNOWN_APP_SOURCES';
                 else if (s === 'SECURITY_SETTINGS') intent = 'android.settings.SECURITY_SETTINGS';
 
-                // am start -a <intent>
-                await service.adbShellWithTimeout(target, `am start -a ${intent}`);
+                // Best-effort start settings activity (some devices require user/flags)
+                try {
+                    await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`);
+                } catch (_e) {
+                    // Fallback for some Android versions
+                    await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`);
+                }
                 return { ok: true, opened: true, screen: s || 'SETTINGS' };
+            } catch (err) {
+                return { ok: false, error: err?.message || String(err) };
+            }
+        },
+
+        // ---------------------------------------------------------
+        // ✅ Compatibility action API used by renderer patches
+        // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
+        // ---------------------------------------------------------
+        async performDeviceSecurityAction(serial, action) {
+            try {
+                const act = action || {};
+                const kind = String(act.kind || '').toLowerCase();
+
+                if (kind === 'opensettings') {
+                    // If renderer passes raw intent, use it; otherwise map via openAndroidSettings
+                    const intent = act.intent ? String(act.intent) : null;
+                    if (intent) {
+                        const devices = await client.listDevices();
+                        if (devices.length === 0) throw new Error('기기 연결 안 됨');
+                        const target = serial || devices[0].id;
+                        try {
+                            await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`);
+                        } catch (_e) {
+                            await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`);
+                        }
+                        return { ok: true, opened: true, intent };
+                    }
+                    // Fallback to generic settings
+                    return await service.openAndroidSettings(serial, 'SETTINGS');
+                }
+
+                if (kind === 'toggle') {
+                    const tgt = String(act.target || '').trim();
+                    const enabled = act.value === true;
+                    // Map legacy targets -> settingId
+                    const map = {
+                        wifiDebug: 'wifiDebug',
+                        usbDebug: 'usbDebug',
+                        devOptions: 'devOptions',
+                        securityAutoBlock: 'securityAutoBlock',
+                    };
+                    const settingId = map[tgt] || tgt;
+                    return await service.setDeviceSecuritySetting(serial, settingId, enabled);
+                }
+
+                return { ok: false, error: 'INVALID_ACTION' };
             } catch (err) {
                 return { ok: false, error: err?.message || String(err) };
             }

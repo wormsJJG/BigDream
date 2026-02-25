@@ -132,105 +132,85 @@ export function initClientDevice(ctx) {
         disconnectBtn.addEventListener('click', async () => {
             if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
 
-                // -------------------------------------------------
-                // [UX] Help user quickly disable USB debugging / re-enable security
-                // - We cannot toggle these settings programmatically on normal devices,
-                //   but we CAN open the relevant Settings screens.
-                // -------------------------------------------------
-                const tryOpenAndroidSettings = async (action) => {
-                    try {
-                        const api = (window.bdScanner && window.bdScanner.android && window.bdScanner.android.openSettings)
-                            || (window.electronAPI && window.electronAPI.openAndroidSettings);
-                        if (!api) return false;
-                        const res = await api(action);
-                        return !!(res && res.success);
-                    } catch (_e) {
-                        return false;
-                    }
-                };
+// -------------------------------------------------
+// ✅ 연결 끊기 시 자동 조치
+// 1) 개발자 옵션 OFF (자동)
+// 2) 완료 안내 팝업 표시
+// 3) (선택) 개발자 옵션이 꺼지지 않으면 설정 화면 열기 제공
+//
+// NOTE:
+// - 사용자가 "보안 위험 자동 차단"을 꺼두었다면, 다시 켜면 USB 디버깅이 자동으로 꺼질 수 있습니다.
+// - 본 흐름에서는 보안 위험 자동 차단을 직접 토글하지 않고, 사용자에게 안내합니다.
+// -------------------------------------------------
+const api = window.electronAPI || {};
+const doAction = async (action) => {
+    try {
+        const fn = api.performDeviceSecurityAction;
+        if (typeof fn !== 'function') return { ok: false, error: 'NO_API' };
+        return await fn({ action });
+    } catch (e) {
+        return { ok: false, error: e?.message || String(e) };
+    }
+};
 
-                const showDisconnectSettingsModal = () => {
-                    // Lightweight modal created dynamically to avoid editing HTML templates.
-                    const overlay = document.createElement('div');
-                    overlay.style.cssText = `
-                        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                        background-color: rgba(0,0,0,0.55);
-                        display: flex; justify-content: center; align-items: center;
-                        z-index: 10000;
-                    `;
+// 1) 개발자 옵션 끄기 시도
+const resDevOff = await doAction({ kind: 'toggle', target: 'devOptions', value: false });
 
-                    const box = document.createElement('div');
-                    box.style.cssText = `
-                        background: #fff; padding: 18px 18px 14px 18px; border-radius: 10px;
-                        width: 420px; max-width: calc(100vw - 24px);
-                        box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-                        font-family: sans-serif;
-                    `;
+// 2) 실제 상태 재확인
+let devNow = null; // true | false | null
+let securityAutoBlockNow = null; // true | false | null
+try {
+    if (typeof api.getDeviceSecurityStatus === 'function') {
+        const st = await api.getDeviceSecurityStatus();
+        const items = (st && st.items) ? st.items : [];
+        const devItem = items.find(it => it && it.id === 'devOptions');
+        const secItem = items.find(it => it && (it.id === 'securityAutoBlock' || it.id === 'securityAutoBlockVerifyApps'));
+        const toBool = (status) => {
+            const s = String(status || '').toUpperCase();
+            if (s.startsWith('ON')) return true;
+            if (s.startsWith('OFF')) return false;
+            return null;
+        };
+        devNow = devItem ? toBool(devItem.status) : null;
+        securityAutoBlockNow = secItem ? toBool(secItem.status) : null;
+    }
+} catch (_e) { }
 
-                    box.innerHTML = `
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap: 10px;">
-                            <div style="font-size:16px; font-weight:700; color:#222;">보안 설정 확인</div>
-                            <button id="bd-disconnect-modal-close-x" style="border:none; background:transparent; cursor:pointer; font-size:18px; line-height:1; color:#666;">×</button>
-                        </div>
-                        <div style="margin-top:10px; font-size:13px; color:#333; line-height:1.45;">
-                            검사가 종료되었습니다. 보안을 위해 아래 설정을 확인해주세요.<br>
-                            <ul style="margin:8px 0 0 18px; padding:0;">
-                                <li>USB 디버깅: <b>OFF</b></li>
-                                <li>보안 위험 자동 차단(지원 기기): <b>ON</b></li>
-                            </ul>
-                        </div>
-                        <div style="display:flex; gap:10px; margin-top:14px; justify-content:flex-end; flex-wrap:wrap;">
-                            <button id="bd-open-dev-options" style="padding:9px 12px; border:none; background:#337ab7; color:#fff; border-radius:6px; cursor:pointer; font-size:13px;">개발자 옵션 열기</button>
-                            <button id="bd-open-security" style="padding:9px 12px; border:none; background:#f0f0f0; color:#222; border-radius:6px; cursor:pointer; font-size:13px;">보안 설정 열기</button>
-                            <button id="bd-disconnect-modal-close" style="padding:9px 12px; border:none; background:#f5f5f5; color:#222; border-radius:6px; cursor:pointer; font-size:13px;">닫기</button>
-                        </div>
-                        <div style="margin-top:10px; font-size:12px; color:#666; line-height:1.35;">
-                            ※ 일부 기기에서는 특정 설정 화면 바로가기가 제한될 수 있습니다.
-                        </div>
-                    `;
+// 3) 안내 팝업
+const lines = [];
+if (devNow === false) {
+    lines.push('✅ 개발자 옵션이 정상적으로 꺼졌습니다.');
+} else if (devNow === true) {
+    lines.push('⚠️ 개발자 옵션이 아직 켜져 있습니다.');
+} else {
+    lines.push('⚠️ 개발자 옵션 상태를 확인할 수 없습니다.');
+}
 
-                    overlay.appendChild(box);
-                    document.body.appendChild(overlay);
+// 보안 위험 자동 차단 안내(사용자 인지용)
+lines.push('');
+if (securityAutoBlockNow === false) {
+    lines.push('🔒 검사를 위해 "보안 위험 자동 차단"을 꺼두셨다면, 이제 다시 켜주세요.');
+    lines.push('   (켜면 USB 디버깅이 자동으로 꺼질 수 있습니다.)');
+} else if (securityAutoBlockNow === true) {
+    lines.push('🔒 "보안 위험 자동 차단"이 켜져 있습니다.');
+} else {
+    lines.push('🔒 검사를 위해 "보안 위험 자동 차단"을 꺼두셨다면, 이제 다시 켜주세요.');
+    lines.push('   (켜면 USB 디버깅이 자동으로 꺼질 수 있습니다.)');
+}
 
-                    const cleanup = () => {
-                        try { document.body.removeChild(overlay); } catch (_e) { }
-                    };
+// 개발자 옵션이 꺼지지 않았으면 설정 열기 제안
+if (devNow !== false) {
+    await CustomUI.alert(lines.join('\n'));
+    const goSettings = await CustomUI.confirm('개발자 옵션을 자동으로 끄지 못했습니다.\n설정 화면을 열어 직접 끄시겠습니까?');
+    if (goSettings) {
+        await doAction({ kind: 'openSettings', intent: 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS' });
+        await CustomUI.alert('설정에서 개발자 옵션을 끈 뒤, 앱으로 돌아와 주세요.');
+    }
+} else {
+    await CustomUI.alert(lines.join('\n'));
+}
 
-                    const closeBtn = box.querySelector('#bd-disconnect-modal-close');
-                    const closeXBtn = box.querySelector('#bd-disconnect-modal-close-x');
-                    const devBtn = box.querySelector('#bd-open-dev-options');
-                    const secBtn = box.querySelector('#bd-open-security');
-
-                    const openDev = async () => {
-                        const ok = await tryOpenAndroidSettings('android.settings.APPLICATION_DEVELOPMENT_SETTINGS');
-                        if (!ok) {
-                            try { await CustomUI.alert('개발자 옵션 화면을 열 수 없습니다.\n기기에서 직접 설정 > 개발자 옵션으로 이동해주세요.'); } catch (_e) {}
-                        }
-                    };
-
-                    const openSec = async () => {
-                        // Auto Blocker(보안 위험 자동 차단)는 제조사/버전에 따라 위치가 달라
-                        // 표준 Intent로는 보안 설정 화면으로 이동시킵니다.
-                        const ok = await tryOpenAndroidSettings('android.settings.SECURITY_SETTINGS');
-                        if (!ok) {
-                            const ok2 = await tryOpenAndroidSettings('android.settings.SETTINGS');
-                            if (!ok2) {
-                                try { await CustomUI.alert('보안 설정 화면을 열 수 없습니다.\n기기에서 직접 설정 > 보안 및 개인정보(또는 보안)로 이동해주세요.'); } catch (_e) {}
-                            }
-                        }
-                    };
-
-                    devBtn.addEventListener('click', openDev);
-                    secBtn.addEventListener('click', openSec);
-                    closeBtn.addEventListener('click', cleanup);
-                    closeXBtn.addEventListener('click', cleanup);
-                    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
-
-                    // Try to open developer options immediately for convenience.
-                    openDev();
-                };
-
-                // 1. 네비게이션 메뉴 상태 복구
+// 1. 네비게이션 메뉴 상태 복구
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
 
@@ -356,8 +336,23 @@ export function initClientDevice(ctx) {
 
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
 
-                // Show settings guidance modal after returning to the initial screen.
-                try { showDisconnectSettingsModal(); } catch (_e) { }
+                // 결과 안내 (사용자 요청: 추가 메뉴 대신 안내 모달)
+                try {
+	                    const ok1 = !!resAutoBlock?.ok;
+	                    const okDev = !!resDevOff?.ok;
+	                    const ok2 = !!resUsbOff?.ok;
+                    const msg = [
+                        '연결을 해제했습니다. 보안 설정을 복구했습니다.',
+                        '',
+	                        `• 보안 위험 자동 차단: ${ok1 ? 'ON 처리 완료' : '자동 처리 실패(기기 정책/권한 제한 가능)'}`,
+	                        `• 개발자 옵션: ${okDev ? 'OFF 처리 완료' : '자동 처리 실패(기기 정책/권한 제한 가능)'}`,
+                        `• USB 디버깅: ${ok2 ? 'OFF 처리 완료' : '자동 처리 실패(기기 정책/권한 제한 가능)'}`,
+                        '',
+                        '일부 기기는 제조사/OS 정책으로 자동 변경이 제한될 수 있습니다.',
+                        '그 경우 기기 설정에서 직접 확인해주세요.'
+                    ].join('\n');
+                    await CustomUI.alert(msg);
+                } catch (_e) { }
             }
         });
     }
