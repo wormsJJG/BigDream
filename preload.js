@@ -9,20 +9,29 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Guard against IPC invokes that never resolve (e.g. adb hang)
+function invokeWithTimeout(channel, args, timeoutMs = 15000) {
+    return Promise.race([
+        ipcRenderer.invoke(channel, args),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`IPC timeout: ${channel}`)), timeoutMs))
+    ]);
+}
+
 // IPC channel names (inlined for maximum compatibility)
 const IPC = {
     ANDROID: {
         CHECK_DEVICE_CONNECTION: 'check-device-connection',
         RUN_SCAN: 'run-scan',
         OPEN_SCAN_FILE: 'open-scan-file',
-        OPEN_SETTINGS: 'android-open-settings',
         GET_APP_DATA: 'get-app-data',
         UNINSTALL_APP: 'uninstall-app',
         NEUTRALIZE_APP: 'neutralize-app',
         DELETE_APK_FILE: 'delete-apk-file',
         AUTO_PUSH_REPORT: 'auto-push-report-to-android',
         START_FULL_SCAN: 'start-full-scan',
-        GET_DASHBOARD_DATA: 'get-android-dashboard-data'
+        GET_DASHBOARD_DATA: 'get-android-dashboard-data',
+        GET_DEVICE_SECURITY_STATUS: 'get-device-security-status',
+        PERFORM_DEVICE_SECURITY_ACTION: 'perform-device-security-action'
     },
     IOS: {
         CHECK_CONNECTION: 'check-ios-connection',
@@ -66,7 +75,6 @@ const bdScanner = {
         checkDeviceConnection: () => ipcRenderer.invoke(IPC.ANDROID.CHECK_DEVICE_CONNECTION),
         runScan: () => ipcRenderer.invoke(IPC.ANDROID.RUN_SCAN),
         openScanFile: () => ipcRenderer.invoke(IPC.ANDROID.OPEN_SCAN_FILE),
-        openSettings: (action) => ipcRenderer.invoke(IPC.ANDROID.OPEN_SETTINGS, { action }),
         getAppData: (packageName) => ipcRenderer.invoke(IPC.ANDROID.GET_APP_DATA, packageName),
         uninstallApp: (packageName) => ipcRenderer.invoke(IPC.ANDROID.UNINSTALL_APP, packageName),
         neutralizeApp: (pkg, perms) => ipcRenderer.invoke(IPC.ANDROID.NEUTRALIZE_APP, pkg, perms),
@@ -74,7 +82,9 @@ const bdScanner = {
         deleteApkFile: (data) => ipcRenderer.invoke(IPC.ANDROID.DELETE_APK_FILE, data),
         autoPushReportToAndroid: () => ipcRenderer.invoke(IPC.ANDROID.AUTO_PUSH_REPORT),
         startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN),
-        getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA)
+        getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA),
+        getDeviceSecurityStatus: () => invokeWithTimeout(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, {}),
+        performDeviceSecurityAction: (payload) => invokeWithTimeout(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, payload || {})
     },
     auth: {
       login: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
@@ -126,7 +136,8 @@ const electronAPI = {
     readTextFile: bdScanner.app.readTextFile,
     firestoreCall: bdScanner.firestore.call,
     getAndroidDashboardData: bdScanner.android.getDashboardData,
-    openAndroidSettings: bdScanner.android.openSettings,
+    getDeviceSecurityStatus: bdScanner.android.getDeviceSecurityStatus,
+    performDeviceSecurityAction: bdScanner.android.performDeviceSecurityAction,
     // Firebase Auth (backward compatible helpers)
     firebaseAuthLogin: (email, password) => ipcRenderer.invoke('firebase-auth-login', { email, password }),
     firebaseAuthLogout: () => ipcRenderer.invoke('firebase-auth-logout'),

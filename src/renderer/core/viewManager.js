@@ -124,7 +124,8 @@ export function createViewManager(State) {
                                 } 
                                 else {
                                     if (isScanComplete) {
-                                        if (target === 'res-network' || target === 'res-threats') {
+                                        // 네트워크 패킷 분석은 현재 숨김(기능 비활성)
+                                        if (target === 'res-network') {
                                             tab.style.display = 'none';
                                         } else {
                                             tab.style.display = 'block';
