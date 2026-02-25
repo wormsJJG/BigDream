@@ -55,6 +55,14 @@ export function createViewManager(State) {
             if (reportHeaderRoot) {
                 const shouldShowReportHeader = (screenId === 'scan-results-screen' || screenId === 'scan-info-screen');
                 reportHeaderRoot.classList.toggle('hidden', !shouldShowReportHeader);
+
+                // [Patch] When viewing a report loaded from file ('검사 열기'), change the disconnect button label to '닫기'
+                try {
+                    const disconnectBtn = document.getElementById('disconnect-btn');
+                    if (disconnectBtn) {
+                        disconnectBtn.textContent = (State && State.isLoadedScan) ? '닫기' : '연결 끊기';
+                    }
+                } catch (_e) { }
             }
 
 

@@ -87,22 +87,65 @@
 }
 
 
-/* Print report: app list risk coloring */
-.compact-item.compact-threat { color: var(--danger-color); font-weight: 800; }
-.compact-item.compact-warning { color: var(--warning-color); font-weight: 800; }
-
-/* Report header (공용 상단 프레임) */
-.report-header-root .results-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+/* ==========================================================================
+   Report header (shared for scan results + scan info)
+   ========================================================================== */
+.report-header-root {
+    margin-bottom: 14px;
 }
 
-.report-header-root .header-buttons {
+
+/* Shared report header (정밀 검사 결과 보고서) */
+.results-header {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+}
+
+.results-header h2 {
+    margin: 0;
+    line-height: 1.2;
+}
+
+.header-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     gap: 10px;
     margin-left: auto;
-    justify-content: flex-end;
-    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Keep the '닫기' button the same size as the original '연결 끊기' button
+   (both use the danger-button style in the report header). */
+.report-header-root .header-buttons .secondary-button.danger-button {
+    min-width: 112px;
+    text-align: center;
+}
+
+
+.report-info-card {
+    padding: 18px;
+}
+
+.report-info-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.report-saved-at {
+    font-size: 14px;
+    color: #666;
+    white-space: nowrap;
+}
+
+.report-info-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
