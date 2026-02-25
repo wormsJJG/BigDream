@@ -57,8 +57,10 @@
     
     /* --- 섹션 & 테이블 --- */
     .section-heading { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
-    .text-danger { color: #D9534F !important; }
-    .section-desc { font-size: 10px; color: #666; margin-bottom: 10px; }
+    \1
+    .text-warning { color: #F0AD4E !important; } /* 개인정보 유출 위협(노란색) */
+    .summary-box.status-warning { background: #FFF3CD; border-color: #F0AD4E; color: #8A6D3B; -webkit-print-color-adjust: exact; }
+.section-desc { font-size: 10px; color: #666; margin-bottom: 10px; }
 
     table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 10px; }
     th { background: #eee !important; font-weight: bold; text-align: center; padding: 5px; border: 1px solid #000; -webkit-print-color-adjust: exact; }
@@ -102,7 +104,16 @@
         -webkit-print-color-adjust: exact; 
     }
     
-    /* 외부 앱 강조 스타일 (회색) */
+        
+    /* 개인정보 유출 위협 앱 강조 스타일 (노란색) */
+    .compact-warning {
+        font-weight: bold;
+        color: #8A6D3B !important;
+        background: #FFF3CD !important;
+        -webkit-print-color-adjust: exact;
+    }
+
+/* 외부 앱 강조 스타일 (회색) */
     .compact-sideload { 
         font-weight: bold; 
         background: #eee !important; 

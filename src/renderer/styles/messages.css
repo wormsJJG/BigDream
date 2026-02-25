@@ -1,0 +1,14 @@
+/* messages.css - shared message/notice UI (no inline styles) */
+.bd-box-msg{
+  text-align:center;
+  padding:30px;
+  background:#fff;
+  border-radius:8px;
+  border:1px solid #e9ecef;
+  font-weight:600;
+}
+.bd-box-msg--success{ color:#28a745; }
+.bd-box-msg--info{ color:#0d6efd; }
+.bd-box-msg--warning{ color:#fd7e14; }
+.bd-box-msg--error{ color:#d9534f; }
+.bd-box-msg--muted{ color:#6c757d; font-weight:500; }

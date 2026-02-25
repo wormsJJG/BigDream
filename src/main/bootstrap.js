@@ -65,6 +65,19 @@ function start({ rootDir }) {
   autoUpdater.autoDownload = true; // 업데이트 발견 시 자동 다운로드
   autoUpdater.allowPrerelease = false;
 
+  // "true"(string) / true(boolean) 혼재로 인한 설정 오동작 방지
+  const parseBool = (v, fallback = false) => {
+      if (v === true) return true;
+      if (v === false) return false;
+      if (v === 1 || v === 0) return Boolean(v);
+      if (typeof v === 'string') {
+          const s = v.trim().toLowerCase();
+          if (s === 'true' || s === '1' || s === 'yes' || s === 'y') return true;
+          if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
+      }
+      return fallback;
+  };
+
   const CONFIG = {
       IS_DEV_MODE: false,
       KEEP_BACKUP: false,     // true: 백업 파일 삭제 안 함 (유지보수용) / false: 검사 후 즉각 삭제 (배포용)
@@ -80,6 +93,9 @@ function start({ rootDir }) {
           LOGIN_CONFIG_PATH: path.join(app.getPath('userData'), 'login-info.json')
       }
   };
+
+  // Normalize boolean flags (avoid "KEEP_BACKUP: 'true'" causing unexpected behavior)
+  CONFIG.KEEP_BACKUP = parseBool(CONFIG.KEEP_BACKUP, false);
 
   // ============================================================
   // [1-1] Services (side-effect free)
@@ -430,6 +446,12 @@ const updateService = createUpdateService({ firestoreService });
           }
 
           const filePath = result.filePath;
+
+          try {
+              data.meta = data.meta || {};
+              data.meta.savedAt = new Date().toISOString();
+          } catch (_e) { }
+
           const jsonContent = JSON.stringify(data, null, 2);
           fs.writeFileSync(filePath, jsonContent);
 
@@ -469,7 +491,14 @@ const updateService = createUpdateService({ firestoreService });
           const rawOs = String(scanData.deviceInfo.os).toLowerCase();
           const normalizedOsMode = rawOs.includes('ios') ? 'ios' : 'android';
 
-          return { success: true, data: scanData, osMode: normalizedOsMode };
+          const stat = fs.statSync(filePath);
+          const fileMeta = {
+              filePath,
+              mtimeMs: stat.mtimeMs,
+              savedAt: stat.mtimeMs
+          };
+
+          return { success: true, data: scanData, osMode: normalizedOsMode, fileMeta };
 
       } catch (e) {
           console.error("로컬 파일 열기 오류:", e);

@@ -130,10 +130,113 @@ export function initClientDevice(ctx) {
     const disconnectBtn = document.getElementById('disconnect-btn');
     if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
-            if (await CustomUI.confirm('기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?')) {
-                // 1. 네비게이션 메뉴 상태 복구
+            {
+            const isLoadedScan = !!(State && State.isLoadedScan);
+            const confirmMsg = isLoadedScan
+                ? '보고서를 닫고 초기 화면으로 돌아가시겠습니까?'
+                : '기기 연결을 끊고 초기 화면으로 돌아가시겠습니까?';
+
+
+            if (await CustomUI.confirm(confirmMsg)) {
+
+                // -------------------------------------------------
+                // ✅ 연결 끊기 시 자동 조치 (Android에서만)
+                // - iOS 검사 연결 끊기에서는 개발자 옵션(ADB) 토글이 동작하면 안 됨
+                // - '검사 열기'(보고서 로드)에서는 실제 기기 조치 없이 화면/상태만 정리
+                // -------------------------------------------------
+                const isLoaded = !!(State && State.isLoadedScan);
+                const isAndroid = !!(State && State.currentDeviceMode === 'android');
+
+                // 아래 요약 모달에서 참조되므로, 미선언으로 인한 ReferenceError를 방지하기 위해 기본값을 선언합니다.
+                let resAutoBlock = null;
+                let resUsbOff = null;
+                let resDevOff = null;
+
+                if (!isLoaded && isAndroid) {
+                    const api = window.electronAPI || {};
+                    const doAction = async (action) => {
+                        try {
+                            const fn = api.performDeviceSecurityAction;
+                            if (typeof fn !== 'function') return { ok: false, error: 'NO_API' };
+                            return await fn({ action });
+                        } catch (e) {
+                            return { ok: false, error: e?.message || String(e) };
+                        }
+                    };
+
+                    // 1) 개발자 옵션 끄기 시도
+                    resDevOff = await doAction({ kind: 'toggle', target: 'devOptions', value: false });
+
+                    // 2) 실제 상태 재확인(지연/재시도: 기기 설정 반영에 시간이 걸리는 경우가 있음)
+                    let devNow = null; // true | false | null
+                    const toBool = (status) => {
+                        const s = String(status || '').toUpperCase();
+                        if (s.startsWith('ON')) return true;
+                        if (s.startsWith('OFF')) return false;
+                        return null;
+                    };
+
+                    const readSecurityStatus = async () => {
+                        if (typeof api.getDeviceSecurityStatus !== 'function') return { devNow: null };
+                        const st = await api.getDeviceSecurityStatus();
+                        const items = (st && st.items) ? st.items : [];
+                        const devItem = items.find(it => it && it.id === 'devOptions');
+                        return { devNow: devItem ? toBool(devItem.status) : null };
+                    };
+
+                    try {
+                        // 최대 3회(총 ~1.6초) 재확인
+                        for (let i = 0; i < 3; i++) {
+                            const st = await readSecurityStatus();
+                            devNow = st.devNow;
+                            if (devNow === false) break;
+
+                            // 토글 성공 응답이 왔으면 조금 기다렸다가 재조회
+                            if (resDevOff && resDevOff.ok) {
+                                await new Promise(r => setTimeout(r, 550));
+                            } else {
+                                break;
+                            }
+                        }
+                    } catch (_e) { }
+
+                    // 3) 안내 팝업 (Android에서만)
+                    const lines = [];
+                    if (devNow === false) {
+                        lines.push('✅ 개발자 옵션이 정상적으로 꺼졌습니다.');
+                    } else if (devNow === true) {
+                        if (resDevOff && resDevOff.ok) {
+                            lines.push('⚠️ 개발자 옵션 끄기를 시도했지만, 현재 상태가 즉시 반영되지 않았거나 확인이 불확실합니다.');
+                        } else {
+                            lines.push('⚠️ 개발자 옵션이 아직 켜져 있습니다.');
+                        }
+                    } else {
+                        if (resDevOff && resDevOff.ok) {
+                            lines.push('✅ 개발자 옵션 끄기 요청은 전송되었습니다. 다만 기기 상태를 즉시 확인하지 못했습니다.');
+                        } else {
+                            lines.push('⚠️ 개발자 옵션 상태를 확인할 수 없습니다.');
+                        }
+                    }
+
+                    // 보안 위험 자동 차단 안내(사용자 인지용)
+                    lines.push('');
+                    lines.push('🔒 검사를 위해 "보안 위험 자동 차단"을 꺼두셨다면, 이제 다시 켜주세요.');
+
+                    await CustomUI.alert(lines.join('\n'));
+                }
+
+
+// 1. 네비게이션 메뉴 상태 복구
                 document.getElementById('nav-create').classList.remove('hidden');
                 document.getElementById('nav-open').classList.remove('hidden');
+
+                const navScanInfo = document.getElementById('nav-scan-info');
+                if (navScanInfo) {
+                    navScanInfo.classList.add('hidden');
+                    navScanInfo.classList.remove('active');
+                    navScanInfo.style.display = 'none';
+                }
+
 
                 const navResult = document.getElementById('nav-result');
                 if (navResult) {
@@ -191,6 +294,21 @@ export function initClientDevice(ctx) {
 
                 // 2. 상태값 및 화면 전환
 
+
+                // Loaded scan cleanup (file open)
+                try {
+                    State.isLoadedScan = false;
+                    State.lastScanData = null;
+                    State.lastScanFileMeta = null;
+                    window.lastScanData = null;
+                } catch (_e) { }
+
+                try {
+                    if (typeof window.__bd_renderScanInfo === 'function') {
+                        window.__bd_renderScanInfo(null, null);
+                    }
+                } catch (_e) { }
+
                 // Android dashboard cleanup (nav/scroll/polling/ui)
                 // [Patch] only show dashboard nav when scan is active
                 if (window.State && window.State.__bd_scanInProgress) {
@@ -233,7 +351,10 @@ export function initClientDevice(ctx) {
                 try { window.__bd_lastScanData = null; } catch (e) { }
 
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
+
             }
+        }
+
         });
     }
 

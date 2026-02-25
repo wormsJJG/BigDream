@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentDeviceMode: null, // 'android' or 'ios'
         currentUdid: null,       // iOS UDID
         lastScanData: null,      // 인쇄용 데이터 백업
+        isLoadedScan: false,     // true when a scan result is loaded via "검사 열기"
         androidTargetMinutes: 0, // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
         agencyName: 'BD SCANNER', // 회사 정보 상태
         quota: -1, // -1은 로딩 중 또는 알 수 없음
@@ -178,68 +179,80 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         prompt(message, defaultValue = '') {
             return new Promise((resolve) => {
-                // 1. 모달 배경 생성
+                // NOTE:
+                // - inline style / innerHTML(데이터 주입) 제거
+                // - 기존 동작(Enter=확인, ESC=취소, autofocus/select) 유지
                 const modalOverlay = document.createElement('div');
-                modalOverlay.style.cssText = `
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.5); display: flex;
-            justify-content: center; align-items: center; z-index: 10000;
-                `;
+                modalOverlay.className = 'modal bd-prompt-modal bd-modal-z10000';
 
-                // 2. 모달 박스 생성
                 const modalBox = document.createElement('div');
-                modalBox.style.cssText = `
-                    background: white; padding: 20px; border-radius: 8px;
-            width: 350px; 
-            max-height: 80vh; /* 화면 높이의 80%까지만 커짐 */
-            overflow-y: auto;  /* 내용이 길면 내부 스크롤 생성 */
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            text-align: center; font-family: sans-serif;
-            display: flex; flex-direction: column; /* 버튼을 하단에 고정하기 위함 */
-                `;
+                modalBox.className = 'modal-content bd-prompt-content';
 
-                // 3. 내용물 (텍스트, 입력창, 버튼)
-                modalBox.innerHTML = `
-                    <h3 style="margin-top:0; color:#333; font-size:16px;">${message.replace(/\n/g, '<br>')}</h3>
-                    <input type="text" id="custom-prompt-input" value="${defaultValue}" 
-                        style="width: 100%; padding: 10px; margin: 15px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px;">
-                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                        <button id="prompt-cancel-btn" style="padding: 8px 16px; border: none; background: #f5f5f5; border-radius: 4px; cursor: pointer;">취소</button>
-                        <button id="prompt-ok-btn" style="padding: 8px 16px; border: none; background: #337ab7; color: white; border-radius: 4px; cursor: pointer;">확인</button>
-                    </div>
-                `;
+                const title = document.createElement('h3');
+                title.className = 'bd-prompt-title bd-preline';
+                title.textContent = String(message ?? '');
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = 'custom-prompt-input';
+                input.className = 'bd-prompt-input';
+                input.value = String(defaultValue ?? '');
+
+                const btnRow = document.createElement('div');
+                btnRow.className = 'bd-prompt-actions';
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.id = 'prompt-cancel-btn';
+                cancelBtn.className = 'secondary-button bd-prompt-btn';
+                cancelBtn.textContent = '취소';
+
+                const okBtn = document.createElement('button');
+                okBtn.type = 'button';
+                okBtn.id = 'prompt-ok-btn';
+                okBtn.className = 'primary-button bd-prompt-btn';
+                okBtn.textContent = '확인';
+
+                btnRow.appendChild(cancelBtn);
+                btnRow.appendChild(okBtn);
+
+                modalBox.appendChild(title);
+                modalBox.appendChild(input);
+                modalBox.appendChild(btnRow);
 
                 modalOverlay.appendChild(modalBox);
                 document.body.appendChild(modalOverlay);
-
-                const input = modalBox.querySelector('#custom-prompt-input');
-                const okBtn = modalBox.querySelector('#prompt-ok-btn');
-                const cancelBtn = modalBox.querySelector('#prompt-cancel-btn');
 
                 // 포커스 자동 지정
                 input.focus();
                 input.select();
 
-                // 4. 이벤트 핸들러
+                const cleanup = () => {
+                    okBtn.removeEventListener('click', handleOk);
+                    cancelBtn.removeEventListener('click', handleCancel);
+                    input.removeEventListener('keydown', handleKeydown);
+                    modalOverlay.remove();
+                };
+
                 const handleOk = () => {
                     const val = input.value;
-                    modalOverlay.remove();
-                    resolve(val); // 입력값 반환
+                    cleanup();
+                    resolve(val);
                 };
 
                 const handleCancel = () => {
-                    modalOverlay.remove();
-                    resolve(null); // 취소 시 null 반환
+                    cleanup();
+                    resolve(null);
+                };
+
+                const handleKeydown = (e) => {
+                    if (e.key === 'Enter') handleOk();
+                    if (e.key === 'Escape') handleCancel();
                 };
 
                 okBtn.addEventListener('click', handleOk);
                 cancelBtn.addEventListener('click', handleCancel);
-
-                // 엔터키 누르면 확인, ESC 누르면 취소
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') handleOk();
-                    if (e.key === 'Escape') handleCancel();
-                });
+                input.addEventListener('keydown', handleKeydown);
             });
         }
     };

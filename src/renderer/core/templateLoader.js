@@ -32,7 +32,7 @@ export async function loadTemplates() {
     // Load screens by id into their placeholder sections
     const screenIds = [
         'login-screen','support-screen','create-scan-screen','device-connection-screen','open-scan-screen',
-        'scan-progress-screen','scan-dashboard-screen','scan-results-screen','admin-screen','admin-report-detail-screen',
+        'scan-progress-screen','scan-dashboard-screen','scan-info-screen','scan-results-screen','admin-screen','admin-report-detail-screen',
     ];
 
     for (const id of screenIds) {

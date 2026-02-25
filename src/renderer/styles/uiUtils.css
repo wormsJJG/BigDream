@@ -1,0 +1,20 @@
+/* uiUtils.css - utilities and tag styles for DOM-rendered dynamic blocks */
+.bd-preline{ white-space: pre-line; }
+.bd-text-right{ text-align: right; }
+.bd-mt-10{ margin-top: 10px; }
+.bd-mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+/* Threat list tags (replaces inline styles) */
+.bd-tag{
+  display: inline-block;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.bd-tag--sideload{ background:#fff3e0; color:#e65100; }
+.bd-tag--running{ background:#e3f2fd; color:#1565c0; margin-left:5px; }
+
+/* Title line */
+.bd-threat-title-line{ display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.bd-threat-index{ font-weight:700; color:#555; }

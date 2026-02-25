@@ -80,6 +80,68 @@ function registerAndroidHandlers({
   });
 
   // --------------------------------------------------
+  // ✅ Device Security Status (Android results-only)
+  // --------------------------------------------------
+  ipcMain.handle('get-device-security-status', async (_event, { serial } = {}) => {
+    if (CONFIG.IS_DEV_MODE) {
+      return {
+        ok: true,
+        items: [
+          { id: 'devOptions', title: '개발자 옵션', status: 'ON', level: 'warn' },
+          { id: 'usbDebug', title: 'USB 디버깅', status: 'ON', level: 'info', note: '검사를 위해 일시적으로 사용됩니다. 검사 종료 시 비활성화됩니다.' },
+        ],
+      };
+    }
+
+    try {
+      return await androidService.getDeviceSecurityStatus(serial);
+    } catch (err) {
+      console.error('[get-device-security-status] failed:', err);
+      return { ok: false, error: err.message, items: [] };
+    }
+  });
+
+  // --------------------------------------------------
+  // ✅ Device Security Actions (toggle / open settings)
+  // --------------------------------------------------
+  // Legacy/compat channel used by renderer patches.
+  // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
+  ipcMain.handle('perform-device-security-action', async (_event, { serial, action } = {}) => {
+    try {
+      return await androidService.performDeviceSecurityAction(serial, action);
+    } catch (err) {
+      console.error('[perform-device-security-action] failed:', err);
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('set-device-security-setting', async (_event, { serial, settingId, enabled } = {}) => {
+    if (CONFIG.IS_DEV_MODE) {
+      return { ok: true, changed: true, settingId, enabled: !!enabled };
+    }
+
+    try {
+      return await androidService.setDeviceSecuritySetting(serial, settingId, enabled);
+    } catch (err) {
+      console.error('[set-device-security-setting] failed:', err);
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('open-android-settings', async (_event, { serial, screen } = {}) => {
+    if (CONFIG.IS_DEV_MODE) {
+      return { ok: true, opened: true, screen: screen || 'UNKNOWN' };
+    }
+
+    try {
+      return await androidService.openAndroidSettings(serial, screen);
+    } catch (err) {
+      console.error('[open-android-settings] failed:', err);
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // --------------------------------------------------
   // App uninstall
   // --------------------------------------------------
   ipcMain.handle('uninstall-app', async (_event, packageName) => {
@@ -101,12 +163,24 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Neutralize app
   // --------------------------------------------------
-  ipcMain.handle('neutralize-app', async (_event, packageName) => {
+  ipcMain.handle('neutralize-app', async (_event, packageName, perms) => {
     if (CONFIG.IS_DEV_MODE) {
       await Utils.sleep(1500);
-      return { success: true, count: 5 };
+      return { success: true, count: (perms?.length ?? 0)};
     }
-    return await androidService.neutralizeApp(packageName);
+    console.log('[neutralize-app] perms:', perms);
+    return await androidService.neutralizeApp(packageName, perms);
+  });
+
+  ipcMain.handle('get-granted-permissions', async (_event, packageName) => {
+  if (CONFIG.IS_DEV_MODE) {
+    return [
+      'android.permission.CAMERA',
+      'android.permission.RECORD_AUDIO',
+      'android.permission.ACCESS_FINE_LOCATION'
+    ];
+  }
+  return await androidService.getGrantedPermissions(packageName);
   });
 
   // --------------------------------------------------
@@ -160,6 +234,15 @@ function registerAndroidHandlers({
       return { success: true, remotePath };
     } catch (err) {
       console.error(err);
+      return { success: false, error: err.message };
+    }
+  });
+
+   ipcMain.handle('android-open-settings', async (_event, { action } = {}) => {
+    if (CONFIG.IS_DEV_MODE) return { success: true };
+    try {
+      return await androidService.openSettings(action);
+    } catch (err) {
       return { success: false, error: err.message };
     }
   });

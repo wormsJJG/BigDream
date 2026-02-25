@@ -30,14 +30,17 @@ const bdScanner = {
         openScanFile: () => ipcRenderer.invoke(IPC.ANDROID.OPEN_SCAN_FILE),
         getAppData: (packageName) => ipcRenderer.invoke(IPC.ANDROID.GET_APP_DATA, packageName),
         uninstallApp: (packageName) => ipcRenderer.invoke(IPC.ANDROID.UNINSTALL_APP, packageName),
-        neutralizeApp: (pkg) => ipcRenderer.invoke(IPC.ANDROID.NEUTRALIZE_APP, pkg),
+        neutralizeApp: (pkg, perms) => ipcRenderer.invoke(IPC.ANDROID.NEUTRALIZE_APP, pkg, perms),
+        getGrantedPermissions: (pkg) => ipcRenderer.invoke('get-granted-permissions', pkg),
         deleteApkFile: (data) => ipcRenderer.invoke(IPC.ANDROID.DELETE_APK_FILE, data),
         autoPushReportToAndroid: () => ipcRenderer.invoke(IPC.ANDROID.AUTO_PUSH_REPORT),
         startFullScan: () => ipcRenderer.invoke(IPC.ANDROID.START_FULL_SCAN),
         getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA),
 
         // Live dashboard: battery/mem/temp/top/spec (Android only)
-        getDashboardData: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA, payload)
+        getDashboardData: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA, payload),
+        getDeviceSecurityStatus: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, payload),
+        performDeviceSecurityAction: (payload = {}) => ipcRenderer.invoke(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, payload)
     },
     firestore: {
         call: (payload) => ipcRenderer.invoke(IPC.FIRESTORE.CALL, payload)
@@ -66,6 +69,7 @@ const electronAPI = {
     getAppData: bdScanner.android.getAppData,
     uninstallApp: bdScanner.android.uninstallApp,
     neutralizeApp: bdScanner.android.neutralizeApp,
+    getGrantedPermissions: bdScanner.android.getGrantedPermissions,
     checkIosConnection: bdScanner.ios.checkConnection,
     runIosScan: bdScanner.ios.runScan,
     deleteIosBackup: bdScanner.ios.deleteBackup,
@@ -81,6 +85,8 @@ const electronAPI = {
     autoPushReportToAndroid: bdScanner.android.autoPushReportToAndroid,
     startFullScan: bdScanner.android.startFullScan,
     getAndroidDashboardData: bdScanner.android.getDashboardData,
+    getDeviceSecurityStatus: bdScanner.android.getDeviceSecurityStatus,
+    performDeviceSecurityAction: bdScanner.android.performDeviceSecurityAction,
     readTextFile: bdScanner.app.readTextFile,
     firebaseAuthLogin: (email, password) => bdScanner.auth.login(email, password),
     firebaseAuthLogout: () => bdScanner.auth.logout(),

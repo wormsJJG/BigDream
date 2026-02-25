@@ -9,10 +9,9 @@ function normalizeDeviceMode(modeValue) {
 
 // Auto-split module: scanController
 
-import { Utils } from '../core/utils.js';
-import { setCircularGauge } from '../lib/circularGauge.js';
-
-import { renderSuspiciousListView } from '../features/scan/scanView.js';
+import { Utils } from '../../../shared/core/utils.js';
+import { setCircularGauge } from '../../../shared/lib/circularGauge.js';
+import { renderSuspiciousEvidence } from '../ui/scanView.js';
 export function initScanController(ctx) {
 
     // Shared access to AppDetailManager (module-safe)
@@ -59,57 +58,6 @@ export function initScanController(ctx) {
         if (!el) return;
         el.classList.toggle('hidden', shouldHide);
     }
-
-    // =========================================================
-    // DOM helpers (no innerHTML / no inline-style rendering)
-    // =========================================================
-    const BD_DOM = {
-        clear(el) { if (el) el.replaceChildren(); },
-        text(el, value) { if (el) el.textContent = value == null ? '' : String(value); },
-        el(tag, opts = {}, children = []) {
-            const n = document.createElement(tag);
-            if (opts.className) n.className = opts.className;
-            if (opts.id) n.id = opts.id;
-            if (opts.attrs) {
-                Object.entries(opts.attrs).forEach(([k, v]) => {
-                    if (v === undefined || v === null) return;
-                    n.setAttribute(k, String(v));
-                });
-            }
-            if (!Array.isArray(children)) children = [children];
-            children.forEach((c) => {
-                if (c === undefined || c === null) return;
-                if (typeof c === 'string') n.appendChild(document.createTextNode(c));
-                else n.appendChild(c);
-            });
-            return n;
-        },
-        // Supports only <b>...</b> tags (safe, deterministic)
-        setBoldText(el, textWithBTags) {
-            if (!el) return;
-            el.replaceChildren();
-            const s = String(textWithBTags ?? '');
-            const reBold = /<b>(.*?)<\/b>/g;
-            let last = 0;
-            let m;
-            while ((m = reBold.exec(s)) !== null) {
-                const idx = m.index;
-                if (idx > last) el.appendChild(document.createTextNode(s.slice(last, idx)));
-                const b = document.createElement('b');
-                b.textContent = m[1];
-                el.appendChild(b);
-                last = idx + m[0].length;
-            }
-            if (last < s.length) el.appendChild(document.createTextNode(s.slice(last)));
-        },
-        emptyMessage(text, className = 'sc-empty-center') {
-            const p = document.createElement('p');
-            p.className = className;
-            p.textContent = text;
-            return p;
-        }
-    };
-
 
     function renderScanInfo(payload, fileMeta) {
         const hasPayload = !!payload;
@@ -228,7 +176,7 @@ export function initScanController(ctx) {
     function bdResetAndroidDashboardUI() {
         // log lines
         const log = document.getElementById('log-container');
-        if (log) BD_DOM.clear(log);
+        if (log) log.innerHTML = '';
 
         // connection badge
         const badge = document.getElementById('dash-connection');
@@ -260,14 +208,7 @@ export function initScanController(ctx) {
         // top processes
         const tbody = document.getElementById('dash-top-tbody');
         if (tbody) {
-            BD_DOM.clear(tbody);
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = 4;
-            td.className = 'empty';
-            td.textContent = '데이터 대기 중...';
-            tr.appendChild(td);
-            tbody.appendChild(tr);
+            tbody.innerHTML = `<tr><td colspan="4" class="empty">데이터 대기 중...</td></tr>`;
         }
 
         // progress bar text (optional)
@@ -370,15 +311,7 @@ export function initScanController(ctx) {
                 show(iosSub);
                 hide(subMenu);
                 hide(dashNav);
-
-                // iOS 결과 화면:
-                // - 실시간 검사 결과: 기존 iOS 서브메뉴만 노출
-                // - '검사 열기'로 불러온 결과: Android와 동일하게 '검사 정보' 탭도 노출
-                if (State.isLoadedScan) {
-                    show(scanInfoNav);
-                } else {
-                    hide(scanInfoNav);
-                }
+                hide(scanInfoNav);
             } else {
                 show(subMenu);
                 hide(iosSub);
@@ -639,20 +572,21 @@ export function initScanController(ctx) {
                     if (navOpen) navOpen.classList.add('hidden');
                     if (navResult) navResult.classList.remove('hidden');
 
-                    // '검사 열기'로 결과 파일을 불러온 경우: OS와 무관하게 실시간 대시보드는 숨기고, 정보 탭을 노출
-                    if (navAndroidDash) {
-                        navAndroidDash.classList.add('hidden');
-                        navAndroidDash.style.display = 'none';
-                    }
-                    if (navScanInfo) {
-                        // 검사 열기 모드에서는 OS와 무관하게 '검사 정보' 라벨 유지
-                        const labelSpan = navScanInfo.querySelector('span');
-                        const mode = String(osMode).toLowerCase();
-                        if (labelSpan) {
-                            labelSpan.textContent = '📝 검사 정보';
+                    // Android "검사 열기"에서는 실시간 대시보드 대신 "검사 정보"를 노출
+                    if (String(osMode).toLowerCase() === 'android') {
+                        if (navAndroidDash) {
+                            navAndroidDash.classList.add('hidden');
+                            navAndroidDash.style.display = 'none';
                         }
-                        navScanInfo.classList.remove('hidden');
-                        navScanInfo.style.display = 'block';
+                        if (navScanInfo) {
+                            navScanInfo.classList.remove('hidden');
+                            navScanInfo.style.display = 'block';
+                        }
+                    } else {
+                        if (navScanInfo) {
+                            navScanInfo.classList.add('hidden');
+                            navScanInfo.style.display = 'none';
+                        }
                     }
 
                     await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
@@ -710,8 +644,7 @@ export function initScanController(ctx) {
 
                     const alertText = document.getElementById('phoneStatusAlert');
                     if (alertText) {
-                        alertText.textContent = 'SYSTEM SCANNING';
-                        alertText.classList.add('sc-preline');
+                        alertText.innerHTML = 'SYSTEM<br>SCANNING';
                         alertText.style.color = '#00d2ff';
                     }
 
@@ -1008,32 +941,6 @@ export function initScanController(ctx) {
             window.lastScanData = null;
             this.toggleLaser(true)
 
-            // iOS 실시간 진행률 이벤트 연결 (main -> preload -> renderer)
-            // NOTE: startIosScan 종료 시 반드시 해제해야 중복 리스너로 인한 UI 오동작을 방지할 수 있습니다.
-            let offIosProgress = null;
-            try {
-                if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
-                    offIosProgress = window.electronAPI.onIosScanProgress((payload) => {
-                        try {
-                            const pctRaw = payload && payload.percent;
-                            const pct = Number(pctRaw);
-                            const msg = (payload && payload.message) ? String(payload.message) : '';
-
-                            if (Number.isFinite(pct)) {
-                                const clamped = Math.max(0, Math.min(100, Math.floor(pct)));
-                                ViewManager.updateProgress(clamped, msg || '아이폰 백업 및 분석 진행 중...', true);
-                            } else if (msg) {
-                                // percent가 없더라도 메시지는 갱신
-                                const currentPctText = document.getElementById('progress-percent-text')?.textContent || '0%';
-                                const currentPct = Number(String(currentPctText).replace('%', ''));
-                                const safePct = Number.isFinite(currentPct) ? currentPct : 0;
-                                ViewManager.updateProgress(safePct, msg, true);
-                            }
-                        } catch (_e) { }
-                    });
-                }
-            } catch (_e) { }
-
             ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
                 // 1. 실제 검사 수행
@@ -1059,13 +966,6 @@ export function initScanController(ctx) {
 
             } catch (error) {
                 this.handleError(error);
-            } finally {
-                // iOS 진행률 리스너 정리
-                try {
-                    if (typeof offIosProgress === 'function') {
-                        offIosProgress();
-                    }
-                } catch (_e) { }
             }
         },
 
@@ -1093,16 +993,17 @@ export function initScanController(ctx) {
 
             // 3. 텍스트 초기화
             if (alertText) {
-                alertText.textContent = 'SYSTEM SCANNING';
-                        alertText.classList.add('sc-preline');
+                alertText.innerHTML = 'SYSTEM<br>SCANNING';
                 alertText.style.color = '';
                 alertText.style.textShadow = '';
             }
 
             // 4. 하단 목록 초기화
             if (statusList) {
-                statusList.textContent = '[!] 비정상 권한 접근 탐지...\n\n                    [!] 실시간 프로세스 감시...\n\n                    [!] AI 기반 지능형 위협 분석 중...';
-                statusList.classList.add('sc-preline');
+                statusList.innerHTML = `
+                    [!] 비정상 권한 접근 탐지...<br>
+                    [!] 실시간 프로세스 감시...<br>
+                    [!] AI 기반 지능형 위협 분석 중...`;
             }
 
             // 5. 입자 재활성화
@@ -1244,41 +1145,17 @@ export function initScanController(ctx) {
             // Top processes
             const tbody = document.getElementById('dash-top-tbody');
             if (tbody) {
-                BD_DOM.clear(tbody);
-
                 if (Array.isArray(top) && top.length) {
-                    const frag = document.createDocumentFragment();
-                    top.forEach((p) => {
-                        const tr = document.createElement('tr');
-
-                        const tdPid = document.createElement('td');
-                        tdPid.textContent = (p && p.pid != null) ? String(p.pid) : '-';
-
-                        const tdCpu = document.createElement('td');
-                        tdCpu.textContent = (p && p.cpu != null) ? String(p.cpu) : '-';
-
-                        const tdMem = document.createElement('td');
-                        tdMem.textContent = (p && p.mem != null) ? String(p.mem) : '-';
-
-                        const tdName = document.createElement('td');
-                        tdName.className = 'name';
-                        tdName.textContent = (p && p.name != null) ? String(p.name) : '-';
-
-                        tr.appendChild(tdPid);
-                        tr.appendChild(tdCpu);
-                        tr.appendChild(tdMem);
-                        tr.appendChild(tdName);
-                        frag.appendChild(tr);
-                    });
-                    tbody.appendChild(frag);
+                    tbody.innerHTML = top.map(p => `
+                          <tr>
+                            <td>${p.pid ?? '-'}</td>
+                            <td>${p.cpu ?? '-'}</td>
+                            <td>${p.mem ?? '-'}</td>
+                            <td class="name">${p.name ?? '-'}</td>
+                          </tr>
+                        `).join('');
                 } else {
-                    const tr = document.createElement('tr');
-                    const td = document.createElement('td');
-                    td.colSpan = 4;
-                    td.className = 'empty';
-                    td.textContent = '데이터 대기 중...';
-                    tr.appendChild(td);
-                    tbody.appendChild(tr);
+                    tbody.innerHTML = `<tr><td colspan="4" class="empty">데이터 대기 중...</td></tr>`;
                 }
             }
         },
@@ -1316,8 +1193,7 @@ export function initScanController(ctx) {
             }
 
             if (hackAlert) {
-                hackAlert.textContent = 'SCAN COMPLETED';
-                hackAlert.classList.add('sc-preline');
+                hackAlert.innerHTML = 'SCAN<br>COMPLETED';
                 hackAlert.style.color = 'var(--success-color)';
                 hackAlert.style.textShadow = '0 0 15px var(--success-color)';
             }
@@ -1333,10 +1209,7 @@ export function initScanController(ctx) {
             if (logContainer) {
                 const doneLine = document.createElement('div');
                 doneLine.className = 'log-line';
-                const span = document.createElement('span');
-                span.className = 'sc-success-text';
-                span.textContent = '[SYSTEM] Security Scan Successfully Completed.';
-                doneLine.appendChild(span);
+                doneLine.innerHTML = `<span style="color:var(--success-color)">[SYSTEM] Security Scan Successfully Completed.</span>`;
                 logContainer.appendChild(doneLine);
                 logContainer.scrollTop = logContainer.scrollHeight;
             }
@@ -1414,7 +1287,7 @@ export function initScanController(ctx) {
             ];
             containers.forEach(id => {
                 const el = document.getElementById(id);
-                if (el) BD_DOM.clear(el);
+                if (el) el.innerHTML = '';
             });
 
             // 2. 모든 결과 섹션을 일단 숨김 처리 
@@ -1502,13 +1375,13 @@ export function initScanController(ctx) {
                     const basis = parts.join(' · ');
 
                     if (spywareCount > 0 && privacyCount > 0) {
-                        BD_DOM.setBoldText(narrationEl, `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 스파이앱 <b>${spywareCount}건</b>, 개인정보 유출 위협 <b>${privacyCount}건</b>이 탐지되었습니다.`);
+                        narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 스파이앱 <b>${spywareCount}건</b>, 개인정보 유출 위협 <b>${privacyCount}건</b>이 탐지되었습니다.`;
                     } else if (spywareCount > 0) {
-                        BD_DOM.setBoldText(narrationEl, `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 스파이앱 <b>${spywareCount}건</b>이 탐지되었습니다.`);
+                        narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 스파이앱 <b>${spywareCount}건</b>이 탐지되었습니다.`;
                     } else if (privacyCount > 0) {
-                        BD_DOM.setBoldText(narrationEl, `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 개인정보 유출 위협 <b>${privacyCount}건</b>이 탐지되었습니다.`);
+                        narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 개인정보 유출 위협 <b>${privacyCount}건</b>이 탐지되었습니다.`;
                     } else {
-                        BD_DOM.setBoldText(narrationEl, `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 현재 결과 기준으로 명확한 스파이웨어 흔적은 확인되지 않았습니다.`);
+                        narrationEl.innerHTML = `이번 정밀 검사는 <b>${basis}</b>를 기반으로 분석했습니다. 현재 결과 기준으로 명확한 스파이웨어 흔적은 확인되지 않았습니다.`;
                     }
                 }
 
@@ -1531,15 +1404,7 @@ export function initScanController(ctx) {
                         steps.push('최종적으로 <b>접근성/기기관리자/지속성</b> 조합 신호가 강한 경우에만 스파이앱으로 확정(미탐 최소화)합니다.');
                     }
 
-                    BD_DOM.clear(stepsEl);
-                    const frag = document.createDocumentFragment();
-                    steps.forEach((s) => {
-                        const li = document.createElement('li');
-                        // allow only <b> tags inside step text
-                        BD_DOM.setBoldText(li, String(s));
-                        frag.appendChild(li);
-                    });
-                    stepsEl.appendChild(frag);
+                    stepsEl.innerHTML = steps.map(s => `<li>${s}</li>`).join('');
                 }
             } catch (e) {
                 console.warn('[Summary] binding failed', e);
@@ -1561,8 +1426,8 @@ export function initScanController(ctx) {
 
             try {
                 // 문구 변경을 위한 엘리먼트 참조 (공통으로 사용)
-                const threatsTitle = document.getElementById('res-threats-title');
-                const threatsDesc = document.getElementById('res-threats-desc');
+                const threatsTitle = document.getElementById('res-threats-title') || document.getElementById('res-device-security-title');
+                const threatsDesc = document.getElementById('res-threats-desc') || document.getElementById('res-device-security-desc');
                 const iosAppDesc = document.getElementById('ios-app-list-description');
                 const appsHeader = document.querySelector('#res-apps h3');
 
@@ -1580,12 +1445,12 @@ export function initScanController(ctx) {
                     if (appsHeader) appsHeader.textContent = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
                     if (iosAppDesc) {
                         iosAppDesc.style.display = 'block'; // iOS에서만 노출
-                        iosAppDesc.textContent = `${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
+                        iosAppDesc.innerHTML = `${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
                     }
 
                     // 3. 데이터 렌더링 호출
                     // (1) 요약 탭: 기기정보 + 정밀 분석 결과
-                    renderSuspiciousListView({ suspiciousApps: (data.suspiciousApps || []), isIos: true, Utils });
+                    this.renderSuspiciousList(data.suspiciousApps || [], true);
                     // (2) 5대 핵심영역: 영역별 상세 리포트(분리 메뉴)
                     this.renderIosCoreAreas(data.mvtResults || {});
 
@@ -1595,7 +1460,7 @@ export function initScanController(ctx) {
 
                     // (3) 앱 목록 탭: iOS 전용 리스트
                     if (appGrid) {
-                        BD_DOM.clear(appGrid);
+                        appGrid.innerHTML = '';
                         appGrid.className = ""; // iOS는 리스트 형태이므로 클래스 초기화
                         this.renderIosInstalledApps(data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || [], appGrid);
                         // [Patch] bind iOS search safely
@@ -1614,7 +1479,7 @@ export function initScanController(ctx) {
 
                     // 1. 안드로이드 원래 문구로 복구 
                     if (threatsTitle) threatsTitle.textContent = "🔐 기기 보안 상태";
-                    if (threatsDesc) threatsDesc.textContent = "스파이앱 침입 가능성을 높이는 설정을 점검합니다.";
+                    if (threatsDesc) threatsDesc.textContent = "스파이앱 침입에 악용될 수 있는 기기 설정 상태를 점검합니다.";
                     if (iosAppDesc) iosAppDesc.style.display = 'none'; // 안드로이드에선 숨김
 
                     const totalApps = data.allApps ? data.allApps.length : 0; // 전체 앱 개수 계산
@@ -1631,27 +1496,26 @@ export function initScanController(ctx) {
                     // 2. 데이터 렌더링 호출
                     // (1) 위협 탐지 목록 (요약 탭 상단)
 
-                    renderSuspiciousListView({ suspiciousApps: (data.suspiciousApps || []), isIos: false, Utils });
+                    this.renderSuspiciousList(data.suspiciousApps || [], false);
                     this.renderPrivacyThreatList(data.privacyThreatApps || []);
 
                     // (2) 모든 설치된 앱 (앱 목록 탭)
                     const allAndroidApps = (data.allApps || data.apps || data.applications || data.installedApps || data.appList || data.targetApps || data.mvtResults?.apps || data.mvtResults?.applications || []);
 
                     if (appGrid) {
-                        BD_DOM.clear(appGrid);
+                        appGrid.innerHTML = '';
                         appGrid.className = 'app-grid';
                         allAndroidApps.forEach(app => this.createAppIcon(app, appGrid, 'installed'));
                     }
 
                     // (3) 백그라운드 앱 (백그라운드 탭)
                     if (bgAppGrid) {
-                        BD_DOM.clear(bgAppGrid);
+                        bgAppGrid.innerHTML = '';
                         const bgApps = allAndroidApps.filter(a => a.isRunningBg);
                         if (bgApps.length > 0) {
                             bgApps.forEach(app => this.createAppIcon(app, bgAppGrid, 'bg'));
                         } else {
-                            BD_DOM.clear(bgAppGrid);
-                            bgAppGrid.appendChild(BD_DOM.emptyMessage('실행 중인 백그라운드 앱이 없습니다.'));
+                            bgAppGrid.innerHTML = '<p style="padding:20px; color:#999; width:100%; text-align:center;">실행 중인 백그라운드 앱이 없습니다.</p>';
                         }
                     }
 
@@ -1676,18 +1540,14 @@ export function initScanController(ctx) {
 
                     // (5) 🔐 기기 보안 상태 (Android 전용)
                     try {
-                        const container = document.getElementById('device-security-container');
-                        if (container && window.electronAPI?.getDeviceSecurityStatus) {
-                            container.textContent = '상태 확인 중...';
-                            window.electronAPI.getDeviceSecurityStatus()
-                                .then((sec) => this.renderDeviceSecurityStatus(sec, container))
-                                .catch((e) => {
-                                    console.warn('[DeviceSecurityStatus] load failed', e);
-                                    try { container.textContent = '기기 보안 상태를 불러오지 못했습니다.'; } catch (_e) { }
-                                });
+                        const secContainer = document.getElementById('device-security-status-container');
+                        if (secContainer && window.electronAPI && typeof window.electronAPI.getDeviceSecurityStatus === 'function') {
+                            const serial = data.deviceInfo?.serial;
+                            const res = window.electronAPI.getDeviceSecurityStatus({ serial });
+                            this.renderDeviceSecurityStatus(res, secContainer);
                         }
                     } catch (e) {
-                        console.warn('[DeviceSecurityStatus] load failed', e);
+                        console.warn('[DeviceSecurityStatus] failed:', e);
                     }
 
                     // 초기 화면 설정: 요약 섹션만 보이고 나머지는 숨김
@@ -1715,10 +1575,10 @@ export function initScanController(ctx) {
 
         renderApkList(apkFiles, container) {
             if (!container) return;
-            BD_DOM.clear(container);
+            container.innerHTML = '';
 
             if (!apkFiles || apkFiles.length === 0) {
-                container.innerHTML = '<p class="scs-d2055e02">발견된 APK 설치 파일이 없습니다.</p>';
+                container.innerHTML = '<p style="padding:20px; color:#999; text-align:center; width:100%;">발견된 APK 설치 파일이 없습니다.</p>';
                 return;
             }
 
@@ -1733,11 +1593,11 @@ export function initScanController(ctx) {
 
                 div.innerHTML = `
                 <div class="app-icon-wrapper">
-                    <img src="./assets/systemAppLogo.png" class="scs-c35a5c87">
+                    <img src="./assets/systemAppLogo.png" style="width:100%; height:100%; object-fit:contain;">
                 </div>
                 <div class="app-display-name">${apk.packageName}</div>
-                <div class="app-package-sub">${apk.installStatus || '미설치 파일'}</div>
-                <div class="scs-72caaa65">요구권한 ${apk.requestedCount}개</div>
+                <div class="app-package-sub">${apk.fileSize || '용량 확인 중'}</div>
+                <div style="font-size:10px; color:#f0ad4e; margin-top:4px;">요구권한 ${apk.requestedCount}개</div>
             `;
 
                 // ✅ DOM 참조 캐싱(선택): APK 목록에서도 재렌더/필터 시 재사용할 수 있도록 저장
@@ -1754,174 +1614,6 @@ export function initScanController(ctx) {
 
                 container.appendChild(div);
             });
-        },
-
-        // ---------------------------------------------
-        // 🔐 Device Security Status (Android)
-        // ---------------------------------------------
-        renderDeviceSecurityStatus(payload, container) {
-            if (!container) return;
-
-            // If a Promise was accidentally passed, resolve it first.
-            if (payload && typeof payload.then === 'function') {
-                container.textContent = '상태 확인 중...';
-                payload
-                    .then((resolved) => this.renderDeviceSecurityStatus(resolved, container))
-                    .catch((e) => {
-                        console.warn('[DeviceSecurityStatus] load failed', e);
-                        container.textContent = '기기 보안 상태를 불러오지 못했습니다.';
-                    });
-                return;
-            }
-
-            if (!payload || payload.ok === false) {
-                container.textContent = payload?.error ? `불러오기 실패: ${payload.error}` : '불러오기 실패';
-                return;
-            }
-
-            const items = Array.isArray(payload.items) ? payload.items : [];
-            if (items.length === 0) {
-                container.textContent = '표시할 점검 항목이 없습니다.';
-                return;
-            }
-
-            const badge = (status, level) => {
-                const raw = String(status || 'UNKNOWN');
-                const upper = raw.toUpperCase();
-                const s = upper.startsWith('ON') ? 'ON'
-                    : upper.startsWith('OFF') ? 'OFF'
-                        : upper.startsWith('UNKNOWN') ? 'UNKNOWN'
-                            : upper;
-
-                const sev = String(level || '').toLowerCase();
-                let cls = 'pill';
-                let style = '';
-                if (s === 'ON' && (sev === 'high' || sev === 'medium')) {
-                    cls += ' pill-danger';
-                } else if (s === 'ON' && sev === 'info') {
-                    cls += ' pill-warn';
-                } else if (s === 'OFF') {
-                    style = 'background:#ecfdf3;color:#027a48;border:1px solid #abefc6;';
-                } else {
-                    style = 'background:#f2f4f7;color:#344054;border:1px solid #eaecf0;';
-                }
-                // If status contains count (e.g., "ON (3)"), show it.
-                const suffix = upper.startsWith('ON') && raw.includes('(') ? escapeHtml(raw.slice(2).trim()) : '';
-                return `<span class="${cls}" style="${style}">${s}${suffix ? ` <span style="opacity:.8; font-weight:500;">${suffix}</span>` : ''}</span>`;
-            };
-
-            const escapeHtml = (v) => String(v ?? '')
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;')
-                .replaceAll('"', '&quot;')
-                .replaceAll("'", '&#39;');
-
-            const renderChips = (list) => {
-                if (!Array.isArray(list) || list.length === 0) return '';
-                const chips = list.map((x) => `<span class="ds-chip">${escapeHtml(x)}</span>`).join('');
-                return `<div class="ds-chip-row">${chips}</div>`;
-            };
-
-
-const renderActions = (actions, itemId) => {
-    if (!Array.isArray(actions) || actions.length === 0) return '';
-    const btns = actions.map((a) => {
-        const kind = String(a.kind || '').toLowerCase();
-        const label = escapeHtml(a.label || (kind === 'opensettings' ? '설정 열기' : '실행'));
-
-        // IMPORTANT:
-        // JSON 문자열을 escapeHtml()로 attribute에 넣으면 따옴표가 &quot;로 치환되어
-        // JSON.parse가 실패 → 버튼이 "아무 반응 없음"처럼 보입니다.
-        // 따라서 encodeURIComponent로 넣고, 클릭 시 decodeURIComponent 후 JSON.parse 합니다.
-        const data = {
-            kind: a.kind,
-            target: a.target,
-            value: a.value,
-            intent: a.intent,
-            component: a.component,
-
-            itemId
-        };
-        const encoded = encodeURIComponent(JSON.stringify(data));
-        return `<button class="ds-btn ds-action-btn" data-ds-kind="${escapeHtml(kind)}" data-ds-action="${encoded}">${label}</button>`;
-    }).join('');
-    return `<div class="ds-actions">${btns}</div>`;
-};
-
-            const rows = items.map((it) => {
-                const note = it.note ? `<div class="ds-note">${escapeHtml(it.note)}</div>` : '';
-                const detailText = it.detail || it.desc || '';
-                const chips = renderChips(it.list);
-
-                return `
-                  <div class="ds-card ds-${escapeHtml(String(it.level || 'unknown').toLowerCase())}">
-                    <div class="ds-head">
-                      <div class="ds-title">${escapeHtml(it.title)}</div>
-                      ${badge(it.status, it.level)}
-                    </div>
-                    ${detailText ? `<div class="ds-desc">${escapeHtml(detailText)}</div>` : ''}
-                    ${chips}
-                    ${renderActions(it.actions, it.id)}
-                    ${note}
-                  </div>
-                `;
-            }).join('');
-
-            // Add a small guide card at top
-            container.innerHTML = `
-              <div class="ds-guide">
-                <div class="ds-guide-title">안내</div>
-                <div class="ds-guide-desc">
-                  이 메뉴는 스파이앱 침입에 악용될 수 있는 설정을 점검합니다. 목록에 앱이 표시된다고 해서 <b>곧바로 스파이앱</b>을 의미하지는 않습니다.
-                  다만 사용자가 설치/허용한 앱 중 <b>모르는 앱</b>이 있으면 점검이 필요합니다.
-                  <br><br>
-                  <b>USB 디버깅(ADB)</b>은 정밀 검사 수행을 위해 활성화될 수 있으며, 검사 종료 후에는 비활성화하는 것을 권장합니다.
-                </div>
-              </div>
-              ${rows}
-            `;
-
-            // Bind action buttons once (event delegation)
-            try {
-                if (!container.__dsBound) {
-                    container.addEventListener('click', async (ev) => {
-                        const btn = ev.target && ev.target.closest ? ev.target.closest('.ds-action-btn') : null;
-                        if (!btn) return;
-                        const raw = btn.getAttribute('data-ds-action');
-                        if (!raw) return;
-                        let payload = null;
-                        try {
-                            payload = JSON.parse(decodeURIComponent(raw));
-                        } catch (_e) {
-                            payload = null;
-                        }
-                        if (!payload || !payload.kind) return;
-
-                        if (!window.electronAPI || typeof window.electronAPI.performDeviceSecurityAction !== 'function') {
-                            console.warn('[DeviceSecurityStatus] performDeviceSecurityAction not available');
-                            return;
-                        }
-
-                        btn.disabled = true;
-                        const oldText = btn.textContent;
-                        btn.textContent = '처리 중...';
-                        try {
-                            await window.electronAPI.performDeviceSecurityAction({ action: payload });
-                            // refresh
-                            const refreshed = await window.electronAPI.getDeviceSecurityStatus();
-                            this.renderDeviceSecurityStatus(refreshed, container);
-                        } catch (e) {
-                            console.warn('[DeviceSecurityStatus] action failed', e);
-                            try { btn.textContent = oldText || '실패'; } catch(_e) {}
-                        } finally {
-                            try { btn.disabled = false; } catch(_e) {}
-                            try { btn.textContent = oldText; } catch(_e) {}
-                        }
-                    });
-                    container.__dsBound = true;
-                }
-            } catch (_e) {}
         },
 
         // [MVT 분석 박스 렌더링 함수]
@@ -2043,18 +1735,18 @@ const renderActions = (actions, itemId) => {
             const isWarning = warningCount > 0;
 
             const statusBadge = isWarning
-                ? `<span class="scs-19b6cd4a">경고</span>`
-                : `<span class="scs-186eff43">안전</span>`;
+                ? `<span style="background:#f0ad4e; color:#fff; padding:4px 10px; border-radius:999px; font-weight:900; font-size:12px;">경고</span>`
+                : `<span style="background:#5cb85c; color:#fff; padding:4px 10px; border-radius:999px; font-weight:900; font-size:12px;">안전</span>`;
 
             const evidenceHtml = isWarning
-                ? `<div class="scs-a9e72425">
-                            <div class="scs-a95df9ac">🔎 탐지된 단서</div>
-                            <ul class="scs-54163068">
+                ? `<div style="margin-top:12px; padding:12px; background:#fff; border:1px solid #f3d3b4; border-radius:10px;">
+                            <div style="font-weight:900; color:#8a6d3b; margin-bottom:6px;">🔎 탐지된 단서</div>
+                            <ul style="margin:0; padding-left:18px; color:#8a6d3b; font-size:13px; line-height:1.5;">
                                 ${warnings.slice(0, 12).map(w => `<li>${w}</li>`).join('')}
                             </ul>
-                            ${warningCount > 12 ? `<div class="scs-0f2749a6">외 ${warningCount - 12}건 단서가 더 있습니다.</div>` : ''}
+                            ${warningCount > 12 ? `<div style="margin-top:6px; font-size:12px; color:#999;">외 ${warningCount - 12}건 단서가 더 있습니다.</div>` : ''}
                         </div>`
-                : `<div class="scs-29934e59">
+                : `<div style="margin-top:12px; padding:12px; background:#fff; border:1px solid #e9ecef; border-radius:10px; color:#5cb85c; font-weight:700;">
                             ✅ 발견된 이상 징후가 없습니다.
                         </div>`;
 
@@ -2070,37 +1762,37 @@ const renderActions = (actions, itemId) => {
                 : `<span class="ios-major-file-empty">표시할 파일 목록이 없습니다.</span>`;
 
             container.innerHTML = `
-                    <div class="scs-c6adeaee">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
                         <div>
                             <div class="ios-major-files"><span class="ios-major-label">주요 검사 파일</span><div class="ios-major-files-text">${filesHtml}</div></div>
                         </div>
-                        <div class="scs-f6e3d7fe">
+                        <div style="text-align:right;">
                             ${statusBadge}
-                            <div class="scs-ad985d83">단서 ${warningCount}건</div>
+                            <div style="margin-top:6px; font-size:12px; color:#666;">단서 ${warningCount}건</div>
                         </div>
                     </div>
 
-                    <div class="scs-ff4196fe">
-                        <div class="scs-640ff1f9">
-                            <div class="scs-e80f7011">정상 기기 특징</div>
-                            <ul class="scs-8f2fd949">
+                    <div style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                        <div style="padding:12px; background:#f8f9fa; border:1px solid #e9ecef; border-radius:10px;">
+                            <div style="font-weight:900; margin-bottom:8px;">정상 기기 특징</div>
+                            <ul style="margin:0; padding-left:18px; color:#444; font-size:13px; line-height:1.55;">
                                 ${area.normal.map(x => `<li>${x}</li>`).join('')}
                             </ul>
                         </div>
-                        <div class="scs-4371676c">
-                            <div class="scs-ad255a56">해킹 기기 특징</div>
-                            <ul class="scs-2309330d">
+                        <div style="padding:12px; background:#fff7e6; border:1px solid #f3d3b4; border-radius:10px;">
+                            <div style="font-weight:900; margin-bottom:8px; color:#8a6d3b;">해킹 기기 특징</div>
+                            <ul style="margin:0; padding-left:18px; color:#6b5a2a; font-size:13px; line-height:1.55;">
                                 ${area.hacked.map(x => `<li>${x}</li>`).join('')}
                             </ul>
                         </div>
                     </div>
 
-                    <div class="scs-ccd73b55">
-                        <div class="scs-0291ed2a">
-                            <div class="scs-033e0808">🤖</div>
-                            <div class="scs-da5cd676">
-                                <div class="scs-797d93e9">AI 해석</div>
-                                <div class="scs-97257567">${aiText}</div>
+                    <div style="margin-top:12px; padding:14px; background:#eef4ff; border:1px solid #cfe0ff; border-radius:10px;">
+                        <div style="display:flex; gap:10px; align-items:flex-start;">
+                            <div style="font-size:18px; line-height:1;">🤖</div>
+                            <div style="flex:1;">
+                                <div style="font-weight:900; margin-bottom:6px; color:#2a4a8a;">AI 해석</div>
+                                <div style="font-size:13px; line-height:1.55; color:#2a4a8a;">${aiText}</div>
                             </div>
                         </div>
                     </div>
@@ -2174,14 +1866,14 @@ const renderActions = (actions, itemId) => {
                 const result = mvtResults[section.id] || { status: 'safe', warnings: [] };
                 const isWarning = result.warnings && result.warnings.length > 0;
                 html += `
-                    <div class="analysis-section scs-034955b6">
-                        <div class="analysis-header" onclick="window.toggleAnalysis(this)" class="scs-570575cd">
-                            <span class="scs-2031001f">${section.title}</span>
-                            <span class="scs-c08f1310">${isWarning ? '경고' : '안전'}</span>
+                    <div class="analysis-section" style="margin-bottom:12px; border-left: 5px solid ${isWarning ? '#f57c00' : '#4caf50'}; background:#fcfcfc; border:1px solid #eee; border-radius:4px;">
+                        <div class="analysis-header" onclick="window.toggleAnalysis(this)" style="padding:15px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size: 15px; font-weight: 700;">${section.title}</span>
+                            <span style="color:${isWarning ? '#f57c00' : '#5cb85c'}; font-weight:bold;">${isWarning ? '경고' : '안전'}</span>
                         </div>
-                        <div class="analysis-content scs-bc9d24cf">
+                        <div class="analysis-content" style="display:${isWarning ? 'block' : 'none'}; padding:15px; border-top:1px solid #eee; background:#fff; font-size:13px; color:#666;">
                             <p>주요 검사 파일: ${section.files}</p>
-                            ${isWarning ? `<ul class="scs-c1939deb">${result.warnings.map(w => `<li>${w}</li>`).join('')}</ul>` : '<p class="scs-43252e92">발견된 이상 징후가 없습니다.</p>'}
+                            ${isWarning ? `<ul style="margin-top:10px; color:#d9534f;">${result.warnings.map(w => `<li>${w}</li>`).join('')}</ul>` : '<p style="color:#5cb85c; margin-top:5px;">발견된 이상 징후가 없습니다.</p>'}
                         </div>
                     </div>`;
             });
@@ -2193,11 +1885,11 @@ const renderActions = (actions, itemId) => {
             if (!container) return;
 
             const list = Array.isArray(apps) ? apps : [];
-            BD_DOM.clear(container);
+            container.innerHTML = '';
 
             if (!list.length) {
                 container.innerHTML = `
-                        <div class="scs-49866b83">
+                        <div style="padding: 18px; background:#fff; border:1px solid #eee; border-radius:10px; color:#777;">
                             검사 대상 애플리케이션이 없습니다.
                         </div>
                     `;
@@ -2279,25 +1971,25 @@ const renderActions = (actions, itemId) => {
                 if (isWarning) {
                     // 경고 항목에 포렌식 느낌의 폰트/색상 강조
                     warningList = result.warnings.map(warning => `
-                        <li class="scs-117ea7fb">
-                            <span class="scs-0a152536">[IOC Match]</span> ${warning}
+                        <li style="color:#D9534F; margin-bottom:5px; font-size:13px; font-family: monospace;">
+                            <span style="font-weight:bold;">[IOC Match]</span> ${warning}
                         </li>
                     `).join('');
-                    warningList = `<ul class="scs-df53a407">${warningList}</ul>`;
+                    warningList = `<ul style="list-style:disc; padding-left:20px; margin-top:10px; margin-bottom:0;">${warningList}</ul>`;
                 }
 
                 // 
                 html += `
-                    <div class="analysis-section" data-status="${isWarning ? 'warning' : 'safe'}" class="scs-c1a7e9ad">
-                        <div class="analysis-header" onclick="toggleAnalysis(this)" class="scs-2250f14c">
-                            <span class="scs-2031001f">${section.title}</span>
-                            <div class="scs-72200502">
-                                 <span class="scs-ed440f63">주요 검사 파일: <code>${section.files.split(',')[0].trim()}...</code></span>
+                    <div class="analysis-section" data-status="${isWarning ? 'warning' : 'safe'}" style="margin-bottom:12px; border-left: 4px solid ${isWarning ? '#f57c00' : '#4caf50'};">
+                        <div class="analysis-header" onclick="toggleAnalysis(this)" style="padding:15px; background-color:${isWarning ? '#fffde7' : '#fafafa'}; transition: background-color 0.2s;">
+                            <span style="font-size: 15px; font-weight: 700;">${section.title}</span>
+                            <div style="display:flex; align-items:center;">
+                                 <span style="font-size: 12px; margin-right: 10px; color: #888;">주요 검사 파일: <code>${section.files.split(',')[0].trim()}...</code></span>
                                 <span class="analysis-status ${statusClass}">${statusText} (${result.warnings ? result.warnings.length : 0}건)</span>
                             </div>
                         </div>
-                        <div class="analysis-content scs-5661eca1">
-                            <p class="scs-271a6ab4">
+                        <div class="analysis-content" style="${contentStyle} padding: 15px 15px 5px 15px;">
+                            <p style="margin-bottom:10px; font-weight:500;">
                                 **[${isWarning ? '위협 경로' : '검사 완료'}]** ${isWarning
                         ? `MVT는 이 영역에서 ${result.warnings.length}건의 알려진 스파이웨어 흔적(IOC)과 일치하는 항목을 발견했습니다.`
                         : `MVT 분석 엔진은 이 영역의 데이터베이스(${section.files})에서 특이사항을 발견하지 못했습니다.`
@@ -2351,8 +2043,8 @@ const renderActions = (actions, itemId) => {
 
             div.innerHTML = `
                     <div class="app-icon-wrapper">
-                        <img src="" class="app-real-icon scs-cb458930" alt="${initialName}">
-                        <span class="app-fallback-icon scs-412ba910">📱</span>
+                        <img src="" class="app-real-icon" style="display:none;" alt="${initialName}">
+                        <span class="app-fallback-icon" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:24px;">📱</span>
                     </div>
                     <div class="app-display-name">${initialName}</div>
                 `;
@@ -2592,9 +2284,9 @@ const renderActions = (actions, itemId) => {
 
                 const sorted = [...filtered].sort(compare(sortKey || 'permDesc'));
 
-                BD_DOM.clear(container);
+                container.innerHTML = '';
                 if (sorted.length === 0) {
-                    container.innerHTML = `<p class="scs-8a8fe311">${emptyMessage}</p>`;
+                    container.innerHTML = `<p style="padding:20px; color:#999; width:100%; text-align:center;">${emptyMessage}</p>`;
                     return;
                 }
 
@@ -2655,6 +2347,14 @@ const renderActions = (actions, itemId) => {
 
         // 위협 리스트 렌더링 (요약 탭: 스파이앱 탐지 근거)
         renderSuspiciousList(suspiciousApps, isIos = false) {
+            // Prefer extracted DOM renderer (prevents innerHTML/inlined styles issues)
+            try {
+                renderSuspiciousEvidence({ suspiciousApps, isIos, Utils });
+                return;
+            } catch (e) {
+                console.warn('[renderSuspiciousList] scanView render failed, using legacy renderer:', e);
+            }
+
             // 요약 탭 전용 컨테이너(신규 UI) 우선 사용, 없으면 구버전 컨테이너 사용
             const container = document.getElementById('spyware-detail-container') || document.getElementById('suspicious-list-container');
             if (!container) return;
@@ -2666,10 +2366,10 @@ const renderActions = (actions, itemId) => {
                     ? '정밀 분석 결과, 알려진 스파이웨어 흔적이 발견되지 않았습니다.'
                     : '정밀 분석 결과, 스파이앱으로 확정된 항목이 없습니다.';
                 container.innerHTML = `
-                    <div class="empty-soft scs-1ca3ba3c">
-                        <div class="scs-568eaa97">✅</div>
-                        <div class="scs-8e18acb2">안전함 (Clean)</div>
-                        <div class="scs-6503d6d6">${safeMessage}</div>
+                    <div class="empty-soft" style="padding:18px; background:#f8f9fa; border-radius:10px; color:#666; text-align:center;">
+                        <div style="font-size:34px; margin-bottom:8px;">✅</div>
+                        <div style="font-weight:900; color:#2b7a2b;">안전함 (Clean)</div>
+                        <div style="margin-top:6px; font-size:13px;">${safeMessage}</div>
                     </div>
                 `;
                 return;
@@ -2701,21 +2401,21 @@ const renderActions = (actions, itemId) => {
                 const s = String(sev || '').toUpperCase();
                 const color = (s === 'HIGH') ? '#d9534f' : (s === 'MEDIUM' ? '#f0ad4e' : '#5bc0de');
                 const label = (s === 'HIGH') ? '높음' : (s === 'MEDIUM' ? '중간' : '참고');
-                return `<span class="scs-e2f81c9f">${label}</span>`;
+                return `<span style="display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:900; color:#fff; background:${color};">${label}</span>`;
             };
 
             const actionChips = `
-                <div class="scs-4b8a213c">
-                    <span class="scs-31de4950">🛡️ 권한 무력화</span>
-                    <span class="scs-31de4950">🗑️ 강제 삭제</span>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                    <span style="display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius:999px; border:1px solid #e8d2d2; background:#fff; font-size:12px; font-weight:900; color:#7a2b2b;">🛡️ 권한 무력화</span>
+                    <span style="display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius:999px; border:1px solid #e8d2d2; background:#fff; font-size:12px; font-weight:900; color:#7a2b2b;">🗑️ 강제 삭제</span>
                 </div>
-                <div class="scs-06b90fa5">
+                <div style="margin-top:10px; padding:12px; border:1px solid #f2dede; background:#fff; border-radius:10px; color:#7a2b2b; font-size:13px; line-height:1.55;">
                     <b>증거 보존을 원하신다면</b> 우선 <b>권한을 무력화</b>하여 증거를 보존하세요. 핵심 권한이 차단되면 스파이앱은 실질적인 활동을 수행하기 어렵습니다.<br/>
                     <b>강제 삭제</b>는 증거 보존에는 불리할 수 있지만, 보고서(PDF)가 출력되므로 "찝찝함"을 해소하려면 삭제가 가장 확실한 방법입니다.
                 </div>
             `;
 
-            const html = [`<div class="evidence-list scs-1be5ad5c">`];
+            const html = [`<div class="evidence-list" style="display:flex; flex-direction:column; gap:12px;">`];
             list.forEach(app => {
                 const name = app.cachedTitle || Utils.formatAppName(app.packageName);
                 const pkg = app.packageName || app.bundleId || '-';
@@ -2723,16 +2423,16 @@ const renderActions = (actions, itemId) => {
                 const reasons = normalizeReasons(app);
 
                 const reasonsHtml = reasons.length ? `
-                    <div class="scs-5371db16">
-                        <div class="scs-481a87d1">🤖 탐지 근거</div>
-                        <div class="scs-5ba2fd66">
+                    <div style="margin-top:10px;">
+                        <div style="font-weight:900; color:#7a2b2b; margin-bottom:6px;">🤖 탐지 근거</div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
                             ${reasons.slice(0, 10).map(r => `
-                                <div class="scs-c2a105f8">
-                                    <div class="scs-d03ad3be">
-                                        <div class="scs-9e326a8b">${escapeHtml(r.title)}</div>
+                                <div style="padding:10px; border-radius:10px; background:#fff; border:1px solid #f2dede;">
+                                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                                        <div style="font-weight:900; color:#7a2b2b;">${escapeHtml(r.title)}</div>
                                         ${sevBadge(r.sev)}
                                     </div>
-                                    ${r.detail ? `<div class="scs-59def752">${escapeHtml(r.detail)}</div>` : ''}
+                                    ${r.detail ? `<div style="margin-top:6px; font-size:13px; color:#5a2b2b; line-height:1.55;">${escapeHtml(r.detail)}</div>` : ''}
                                 </div>
                             `).join('')}
                         </div>
@@ -2740,15 +2440,15 @@ const renderActions = (actions, itemId) => {
                 ` : '';
 
                 html.push(`
-                    <details class="evidence-item" open class="scs-840eea4c">
-                        <summary class="scs-172f5022">
-                            <div class="scs-088b1b25">🚨 ${escapeHtml(name)} <span class="scs-275677d5">(${escapeHtml(pkg)})</span></div>
-                            <span class="scs-b169df12">최종 확정</span>
+                    <details class="evidence-item" open style="border:1px solid #f2dede; border-radius:12px; background:#fff5f5; padding:12px;">
+                        <summary style="cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                            <div style="font-weight:900; color:#b52b2b;">🚨 ${escapeHtml(name)} <span style="font-size:12px; font-weight:700; color:#888;">(${escapeHtml(pkg)})</span></div>
+                            <span style="font-size:12px; font-weight:900; color:#b52b2b;">최종 확정</span>
                         </summary>
-                        ${narration ? `<div class="scs-df496d2a"><b>BD_SFA 해석</b><br/>${escapeHtml(narration)}</div>` : ''}
+                        ${narration ? `<div style="margin-top:10px; padding:12px; background:#fff; border:1px solid #f2dede; border-radius:10px; font-size:13px; color:#5a2b2b; line-height:1.55;"><b>BD_SFA 해석</b><br/>${escapeHtml(narration)}</div>` : ''}
                         ${reasonsHtml}
-                        <div class="scs-002535c2">
-                            <div class="scs-9e326a8b">✅ 권장 조치</div>
+                        <div style="margin-top:12px;">
+                            <div style="font-weight:900; color:#7a2b2b;">✅ 권장 조치</div>
                             ${actionChips}
                         </div>
                     </details>
@@ -2765,11 +2465,11 @@ const renderActions = (actions, itemId) => {
             ].filter(Boolean);
             if (containers.length === 0) return;
 
-            containers.forEach(c => { BD_DOM.clear(c); });
+            containers.forEach(c => { c.innerHTML = ''; });
 
             if (!Array.isArray(privacyApps) || privacyApps.length === 0) {
                 const emptyHtml = `
-                                    <div class="scs-3116fb7c">
+                                    <div style="text-align:center; padding:30px; background:#f9f9f9; border-radius:8px; color:#999;">
                                         ✅ 탐지된 개인정보 유출 위협이 없습니다.
                                     </div>`;
                 containers.forEach(c => { c.innerHTML = emptyHtml; });
@@ -2778,7 +2478,7 @@ const renderActions = (actions, itemId) => {
 
             const buildChips = (items) => {
                 if (!Array.isArray(items) || items.length === 0) return '';
-                return items.map(x => `<span class="scs-a0b0d84f">${x.label || x}</span>`).join('');
+                return items.map(x => `<span style="display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #e9d8a6; background:#fff; font-size:12px; font-weight:700; margin-right:8px; margin-bottom:8px;">${x.label || x}</span>`).join('');
             };
 
             const buildReasons = (reasons) => {
@@ -2837,11 +2537,11 @@ const renderActions = (actions, itemId) => {
                         }
 
                         // 오른쪽(초기 디자인)처럼: 굵은 제목 + 얇은 설명(있을 때만)
-                        return `<li class="scs-dddb9c88">
-            <span class="scs-9f4a211c"></span>
-            <div class="scs-3f9f96c6">
-                <div class="scs-a6341b0b">${escapeHtml(title)}</div>
-                ${desc ? `<div class="scs-56d5d3f9">${escapeHtml(desc)}</div>` : ''}
+                        return `<li style="display:flex; gap:10px; align-items:flex-start; margin: 8px 0;">
+            <span style="margin-top:6px; width:6px; height:6px; border-radius:50%; background:#F0AD4E; flex: 0 0 6px;"></span>
+            <div style="min-width:0;">
+                <div style="font-weight:800; color:#333; line-height:1.35;">${escapeHtml(title)}</div>
+                ${desc ? `<div style="font-size:12px; color:#666; line-height:1.45; margin-top:2px; word-break:break-word;">${escapeHtml(desc)}</div>` : ''}
             </div>
         </li>`;
                     })
@@ -2860,26 +2560,26 @@ const renderActions = (actions, itemId) => {
                 ];
 
                 return `
-                                    <div class="scs-51065922">
-                                        <div class="scs-ca5e0e95">
-                                            <div class="scs-84b9e4a2">
-                                                ⚠️ ${dName} <span class="scs-0fcb4300">(${app.packageName})</span>
+                                    <div style="padding:16px; background:#fcf8e3; border:1px solid #faebcc; border-radius:10px; margin-bottom:12px;">
+                                        <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                                            <div style="color:#8a6d3b; font-weight:900; font-size:15px;">
+                                                ⚠️ ${dName} <span style="font-size:12px; font-weight:normal; color:#888;">(${app.packageName})</span>
                                             </div>
-                                            ${policyLabel ? `<div class="scs-c3c4423e">정책: ${policyLabel}</div>` : ''}
+                                            ${policyLabel ? `<div style="font-size:12px; font-weight:800; color:#8a6d3b; padding:4px 10px; border-radius:999px; border:1px solid #f3d3b4; background:#fff;">정책: ${policyLabel}</div>` : ''}
                                         </div>
 
-                                        <div class="scs-6551985d">
-                                            <div class="scs-989b00fa">🤖 AI 안내</div>
-                                            <div class="scs-a73acd8b">${aiText}</div>
+                                        <div style="margin-top:10px; padding:12px; background:#fff7e6; border:1px solid #f3d3b4; border-radius:10px;">
+                                            <div style="font-weight:900; margin-bottom:6px;">🤖 AI 안내</div>
+                                            <div style="font-size:13px; line-height:1.6; color:#555;">${aiText}</div>
                                         </div>
 
-                                        <div class="scs-6b9902a8">
-                                            <div class="scs-989b00fa">🤖 AI 판단 근거</div>
+                                        <div style="margin-top:10px; padding:12px; background:#fff; border:1px solid #f3d3b4; border-radius:10px;">
+                                            <div style="font-weight:900; margin-bottom:6px;">🤖 AI 판단 근거</div>
                                             ${buildReasons(reasons)}
                                         </div>
 
-                                        <div class="scs-5371db16">
-                                            <div class="scs-3493d013">✅ 권장 조치</div>
+                                        <div style="margin-top:10px;">
+                                            <div style="font-weight:900; margin-bottom:8px; color:#3c763d;">✅ 권장 조치</div>
                                             <div>${buildChips(recs)}</div>
                                         </div>
                                     </div>

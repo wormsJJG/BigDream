@@ -28,11 +28,11 @@
     padding: 25px;
     border-radius: 8px;
     width: 300px;
-    
+
     /* 추가된 부분 */
     max-height: 70vh;    /* 너무 길어지지 않게 제한 */
     overflow-y: auto;    /* 내용이 길면 스크롤 발생 */
-    
+
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     animation: slideDown 0.3s ease;
 }
@@ -53,3 +53,186 @@
 }
 
 /* ==========================================================================
+   BD-SCANNER modal extensions (inline-style 제거용)
+   ========================================================================== */
+
+/* 텍스트 줄바꿈 유지 (message에 \n 포함 시) */
+.bd-preline { white-space: pre-line; }
+
+/* z-index variants */
+.bd-modal-z10000 { z-index: 10000; }
+.bd-modal-z11000 { z-index: 11000; }
+
+/* Common typography */
+.bd-modal-title {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.bd-modal-desc {
+    font-size: 14px;
+    color: #666;
+    margin: 0 0 15px 0;
+}
+
+.bd-modal-hint {
+    font-size: 12px;
+    color: #666;
+}
+
+/* Inputs */
+.bd-modal-input,
+.bd-prompt-input {
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.bd-modal-input { margin-bottom: 20px; }
+.bd-prompt-input { margin: 15px 0; }
+
+/* Action rows */
+.bd-modal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.bd-modal-actions-right {
+    justify-content: flex-end;
+}
+
+.bd-confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.bd-flex1 { flex: 1; }
+
+.bd-modal-footer-right {
+    text-align: right;
+    margin-top: 20px;
+}
+
+/* Sized modal-content helpers */
+.bd-modal-center { text-align: center; }
+.bd-modal-content-sm { width: 300px; }
+.bd-modal-content-md { width: 320px; }
+.bd-modal-content-lg { width: 500px; }
+
+.bd-modal-scroll {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* Emoji block */
+.bd-modal-emoji {
+    font-size: 40px;
+    margin-bottom: 10px;
+}
+
+/* Messages / fullwidth button */
+.bd-modal-message {
+    color: #333;
+    font-weight: 500;
+    margin: 0 0 20px 0;
+}
+
+.bd-modal-fullwidth { width: 100%; }
+
+/* Prompt modal (CustomUI.prompt) */
+.bd-prompt-modal { background-color: rgba(0, 0, 0, 0.5); }
+.bd-prompt-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    width: 350px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+}
+
+.bd-prompt-title {
+    margin-top: 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.bd-prompt-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.bd-prompt-btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* Update modal */
+.bd-update-modal { background: rgba(0,0,0,0.85); }
+
+.bd-update-content {
+    width: 400px;
+    text-align: center;
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+
+.bd-update-icon { font-size: 50px; margin-bottom: 20px; }
+
+.bd-update-title {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.bd-update-subtitle {
+    color: #666;
+    margin: 0 0 30px 0;
+}
+
+.bd-update-progress {
+    background: #eee;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.bd-update-progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #3A539B, #5CB85C);
+    transition: width 0.3s ease;
+}
+
+.bd-update-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #888;
+    font-family: monospace;
+}
+
+.bd-update-size {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 5px;
+    text-align: right;
+}
+
+.bd-update-warn {
+    margin-top: 30px;
+    font-size: 14px;
+    color: #d9534f;
+    font-weight: bold;
+}

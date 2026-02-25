@@ -27,6 +27,7 @@ export function createViewManager(State) {
                 'open-scan-screen',
                 'scan-progress-screen',
                 'scan-results-screen',
+                'scan-info-screen',
                 'admin-screen',
                 'admin-report-detail-screen',
                 'app-detail-view',
@@ -49,6 +50,22 @@ export function createViewManager(State) {
                 screenToShow.style.display = 'block';
             }
 
+
+            const reportHeaderRoot = document.getElementById('report-header-root');
+            if (reportHeaderRoot) {
+                const shouldShowReportHeader = (screenId === 'scan-results-screen' || screenId === 'scan-info-screen');
+                reportHeaderRoot.classList.toggle('hidden', !shouldShowReportHeader);
+
+                // [Patch] When viewing a report loaded from file ('검사 열기'), change the disconnect button label to '닫기'
+                try {
+                    const disconnectBtn = document.getElementById('disconnect-btn');
+                    if (disconnectBtn) {
+                        disconnectBtn.textContent = (State && State.isLoadedScan) ? '닫기' : '연결 끊기';
+                    }
+                } catch (_e) { }
+            }
+
+
             const subMenu = document.getElementById('result-sub-menu');
             const iosSubMenu = document.getElementById('ios-sub-menu');
             const navCreate = document.getElementById('nav-create');
@@ -57,17 +74,11 @@ export function createViewManager(State) {
             const _mode = String(State.currentDeviceMode || '').toLowerCase();
             const isIos = _mode.includes('ios');
 
-            // iOS scan progress must fit in a single screen without right-side scrollbar.
-            const mainContent = document.querySelector('.main-content');
-            if (mainContent) {
-                const shouldFit = isIos && screenId === 'scan-progress-screen';
-                mainContent.classList.toggle('ios-progress-fit', shouldFit);
-            }
-
             // 결과 메뉴는 "결과 화면"(scan-results) 및 결과 상세(app-detail)에서만 노출
             // 스캔 진행 중 대시보드(scan-dashboard)에서는 결과 메뉴가 보이면 UX가 혼동되어 숨김 처리
             const shouldShowResultMenu = (
                 screenId === 'scan-results-screen' ||
+                screenId === 'scan-info-screen' ||
                 screenId === 'app-detail-view' ||
                 screenId === 'res-privacy' ||
                 (window.lastScanData && screenId === 'admin-screen')
@@ -76,6 +87,20 @@ export function createViewManager(State) {
             console.log("📍 [Debug] 최종 판단 - shouldShowResultMenu:", shouldShowResultMenu);
 
             if (shouldShowResultMenu) {
+                // "검사 정보" 화면은 결과 메뉴(하위 탭)를 표시하지 않는다.
+                if (screenId === 'scan-info-screen') {
+                    if (subMenu) {
+                        subMenu.classList.add('hidden');
+                        subMenu.style.setProperty('display', 'none', 'important');
+                    }
+                    if (iosSubMenu) {
+                        iosSubMenu.classList.add('hidden');
+                        iosSubMenu.style.setProperty('display', 'none', 'important');
+                    }
+
+                    if (navCreate) navCreate.style.display = 'none';
+                    if (navOpen) navOpen.style.display = 'none';
+                } else
                 if (isIos) {
                     if (subMenu) subMenu.style.setProperty('display', 'none', 'important');
                     if (iosSubMenu) {
@@ -99,7 +124,8 @@ export function createViewManager(State) {
                                 } 
                                 else {
                                     if (isScanComplete) {
-                                        if (target === 'res-network' || target === 'res-threats') {
+                                        // 네트워크 패킷 분석은 현재 숨김(기능 비활성)
+                                        if (target === 'res-network') {
                                             tab.style.display = 'none';
                                         } else {
                                             tab.style.display = 'block';
@@ -113,6 +139,11 @@ export function createViewManager(State) {
                     }
                 if (navCreate) navCreate.style.display = 'none';
                 if (navOpen) navOpen.style.display = 'none';
+                // "검사 정보" 화면은 결과 하위탭이 아닌 별도 화면이므로, 결과 탭 UI는 숨긴다.
+                if (screenId === 'scan-info-screen') {
+                    if (subMenu) subMenu.style.setProperty('display', 'none', 'important');
+                    if (iosSubMenu) iosSubMenu.style.setProperty('display', 'none', 'important');
+                }
             } else {
                 if (subMenu) {
                     subMenu.classList.add('hidden'); 
@@ -314,7 +345,17 @@ export function createViewManager(State) {
                     const isDoneByPercent = Number.isFinite(p) && Math.round(p) >= 100;
                     const raw = String(text || '');
                     const isDoneByText = /analysis\s+complete/i.test(raw) || /complete\./i.test(raw) || /분석\s*완료/.test(raw);
-                    androidRunningText.textContent = (isDoneByPercent || isDoneByText) ? '검사 완료' : '검사 진행 중...';
+
+                    // Android scan has two visible progress cycles:
+                    // Phase 1 (metadata collection): plain step messages
+                    // Phase 2 (app-by-app scan): usually contains "[x/y]" or "검사 진행중"
+                    const isPhase2 = /\[\s*\d+\s*\/\s*\d+\s*\]/.test(raw) || /검사\s*진행\s*중/.test(raw) || /검사\s*진행중/.test(raw);
+
+                    if (isDoneByPercent || isDoneByText) {
+                        androidRunningText.textContent = '검사 완료';
+                    } else {
+                        androidRunningText.textContent = isPhase2 ? '검사 진행 중...' : '데이터 확보중...';
+                    }
                 }
 
                 appendAndroidLogLine(text);
