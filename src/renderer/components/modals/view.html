@@ -32,6 +32,33 @@
   </div>
 </div>
 
+<!-- Permission modal -->
+<div class="bd-perm-modal hidden bd-modal-z11000" id="perm-modal-overlay">
+  <div class="bd-perm-modal-box">
+    <div class="bd-perm-modal-header">
+      <div>
+        <div class="bd-perm-modal-title">무력화할 권한 선택</div>
+        <div id="perm-modal-subtitle" class="bd-perm-modal-subtitle"></div>
+      </div>
+
+      <button type="button" id="perm-select-all-btn" class="secondary-button">
+        전체 선택
+      </button>
+    </div>
+
+    <div class="bd-perm-modal-search">
+      <input id="perm-search-input" type="text" placeholder="권한 검색" class="bd-perm-search-input" />
+    </div>
+
+    <div id="perm-chip-container" class="bd-perm-chip-container"></div>
+
+    <div class="bd-perm-modal-actions">
+      <button id="perm-cancel-btn" class="primary-button">취소</button>
+      <button id="perm-confirm-btn" class="primary-button warning-button">선택 권한 무력화</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal hidden" id="admin-result-modal">
   <div class="modal-content bd-modal-content-lg bd-modal-scroll">
     <h3 class="bd-modal-title">📊 검사 이력 확인</h3>

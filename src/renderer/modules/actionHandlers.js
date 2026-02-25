@@ -144,31 +144,113 @@ export function initActionHandlers(ctx) {
         });
     }
 
-    // 2. 무력화
-    const neutralizeBtn = document.getElementById('neutralize-btn');
-    if (neutralizeBtn) {
+        function ensurePermissionModal() {
+            const modal = document.getElementById('perm-modal-overlay');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+        }
+
+        function hidePermissionModal() {
+            const modal = document.getElementById('perm-modal-overlay');
+            if (!modal) return;
+            modal.classList.add('hidden');
+        }
+
+        // 2. 무력화
+        const neutralizeBtn = document.getElementById('neutralize-btn');
+        if (neutralizeBtn) {
         neutralizeBtn.addEventListener('click', async () => {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
-            if (!await CustomUI.confirm(`[주의] '${appName}' 앱의 모든 권한을 회수하고 강제 종료하시겠습니까?`)) return;
+            // const perms = await window.electronAPI.getGrantedPermissions(packageName);
+            // console.log('권한 목록:', perms);
+            const rawPerms = await window.electronAPI.getGrantedPermissions(packageName);
 
-            neutralizeBtn.disabled = true;
-            neutralizeBtn.textContent = "무력화 중...";
+            const perms = Array.from(new Set(
+            (rawPerms ?? [])
+                .map(p => String(p).trim())
+                .filter(p => p.startsWith('android.permission.'))
+            ));
 
-            try {
-                const result = await window.electronAPI.neutralizeApp(packageName);
-                if (result.success) {
-                    await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
-                    document.getElementById('back-to-dashboard-btn').click();
-                } else {
-                    throw new Error(result.error);
-                }
-            } catch (err) {
-                await CustomUI.alert(`무력화 실패: ${err.message}`);
-            } finally {
-                neutralizeBtn.disabled = false;
-                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+            console.log('권한 목록(raw):', rawPerms?.length, rawPerms);
+            console.log('권한 목록(normalized):', perms.length, perms);
+
+            ensurePermissionModal();
+
+            const confirmBtnForData = document.getElementById('perm-confirm-btn');
+            if (confirmBtnForData) {
+                confirmBtnForData.dataset.package = packageName;
+                confirmBtnForData.dataset.appname = appName;
+            }
+
+            const subtitle = document.getElementById('perm-modal-subtitle');
+            if (subtitle) subtitle.textContent = `'${appName}' 권한 ${perms.length}개`;
+
+            const container = document.getElementById('perm-chip-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const updateSelectAll = () => {
+                const btn = document.getElementById('perm-select-all-btn');
+                if (!btn) return;
+
+                const chips = [...container.querySelectorAll('.bd-perm-chip')];
+                const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+
+                btn.classList.toggle('is-active', allOn);
+                btn.textContent = allOn ? '전체 해제' : '전체 선택';
+            };
+
+            window.Utils.renderPermissionCategories(perms, container, updateSelectAll);
+
+            updateSelectAll(); // ✅ 초기 상태 반영
+
+            const selectAllBtn = document.getElementById('perm-select-all-btn');
+            if (selectAllBtn) {
+                selectAllBtn.onclick = () => {
+                    const chips = [...container.querySelectorAll('.bd-perm-chip')];
+                    const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+                    const next = !allOn;
+
+                    chips.forEach(chip => {
+                        chip.dataset.selected = next ? '1' : '0';
+                        chip.classList.toggle('is-selected', next);
+                    });
+
+                    updateSelectAll();
+                };
+            }
+
+            const searchInput = document.getElementById('perm-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                searchInput.oninput = () => {
+                    const q = searchInput.value.trim().toLowerCase();
+
+                    const cats = [...container.querySelectorAll('.bd-perm-cat')];
+                    cats.forEach(catEl => {
+                    const chips = [...catEl.querySelectorAll('.bd-perm-chip')];
+                    let anyVisible = false;
+
+                    chips.forEach(chip => {
+                        const text = (chip.textContent || '').toLowerCase();
+                        const ok = q === '' ? true : text.includes(q);
+                        chip.style.display = ok ? '' : 'none';
+                        if (ok) anyVisible = true;
+                    });
+
+                    if (q !== '') {
+                        catEl.style.display = anyVisible ? '' : 'none';
+                        if (anyVisible) catEl.classList.remove('collapsed');
+                    } else {
+                        catEl.style.display = '';
+                        const catName = catEl.dataset.cat;
+                        if (DEFAULT_OPEN_CATS.has(catName)) catEl.classList.remove('collapsed');
+                        else catEl.classList.add('collapsed');
+                    }
+                    });
+                };
             }
         });
     }
@@ -827,4 +909,86 @@ export function initActionHandlers(ctx) {
 
         return 0; // 두 버전이 같음
     }
+
+    if (window.__permModalDelegationBound) return;
+window.__permModalDelegationBound = true;
+
+document.addEventListener('click', async (e) => {
+  const confirmBtn = e.target.closest('#perm-confirm-btn');
+  const cancelBtn  = e.target.closest('#perm-cancel-btn');
+
+  // ✅ 권한 모달 id는 이거임 (permission-modal 아님)
+  const modalEl = document.getElementById('perm-modal-overlay');
+
+  // 취소
+  if (cancelBtn) {
+    // 너 구조가 class hidden이면 이게 더 정석이지만, 일단 최소 수정:
+    // modalEl?.classList.add('hidden');
+    if (modalEl) modalEl.classList.add('hidden');
+    return;
+  }
+
+        // 확인
+    if (confirmBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const container = document.getElementById('perm-chip-container');
+        const packageName = confirmBtn.dataset.package;
+        const appName = confirmBtn.dataset.appname;
+
+        if (!container || !packageName) return;
+
+        const selectedPerms = Array.from(container.querySelectorAll('button, .bd-perm-chip'))
+            .filter(btn => btn.dataset.selected === '1')
+            .map(btn => btn.dataset.perm)
+            .filter(Boolean);
+
+        // ✅ 선택 없음: (너가 쓰던 방식 유지)
+        if (selectedPerms.length === 0) {
+            document.getElementById('perm-cancel-btn')?.click(); // 모달 닫고 alert 위로
+            await CustomUI.alert('선택된 권한이 없습니다.');
+            // ✅ alert 확인 후 다시 권한 모달 열고 싶으면:
+            // modalEl?.classList.remove('hidden');
+            return;
+        }
+
+        // ✅ confirm 띄우기 전에 모달 닫는 건 유지
+        document.getElementById('perm-cancel-btn')?.click();
+
+        const ok = await CustomUI.confirm(
+            `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
+        );
+
+            // ✅ 취소면: 권한 모달 다시 보여주고 끝 (여기가 핵심)
+        if (!ok) {
+            if (modalEl) modalEl.classList.remove('hidden');
+            return;
+        }
+
+            // ✅ OK면: 모달은 닫힌 상태 유지하고 neutralize 진행
+        const neutralizeBtn = document.getElementById('neutralize-btn');
+        if (neutralizeBtn) {
+            neutralizeBtn.disabled = true;
+            neutralizeBtn.textContent = "무력화 중...";
+        }
+
+        try {
+            const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
+            if (result.success) {
+                await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
+                document.getElementById('back-to-dashboard-btn')?.click();
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (err) {
+        await CustomUI.alert(`무력화 실패: ${err.message}`);
+        } finally {
+            if (neutralizeBtn) {
+                neutralizeBtn.disabled = false;
+                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+                }
+            }
+        }
+    });
 }
