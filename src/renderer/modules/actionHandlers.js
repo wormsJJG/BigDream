@@ -251,6 +251,7 @@ export function initActionHandlers(ctx) {
             const suspiciousApps = Array.isArray(data.suspiciousApps) ? data.suspiciousApps : [];
             const allApps = Array.isArray(data.allApps) ? data.allApps : [];
             const apkFiles = Array.isArray(data.apkFiles) ? data.apkFiles : [];
+            const privacyThreatApps = Array.isArray(data.privacyThreatApps) ? data.privacyThreatApps : [];
 
             // --- [1] 검사자 및 고객 정보 (Client Info Form에서 가져옴) ---
             // 익명 처리된 값 가져오기 (폼 값이 익명 처리 값일 경우 그대로 출력)
@@ -312,7 +313,7 @@ export function initActionHandlers(ctx) {
 
             document.getElementById('print-total-count').textContent = allApps.length;
             document.getElementById('print-threat-count').textContent = threatCount;
-            document.getElementById('print-file-count').textContent = apkFiles.length;
+            document.getElementById('print-file-count').textContent = isIos ? 0 : apkFiles.length;
 
 
             // 5. 위협 탐지 내역 (표)
@@ -427,17 +428,26 @@ export function initActionHandlers(ctx) {
             // 이름순 정렬
             const sortedApps = [...allApps].sort((a, b) => String(a.packageName || a.bundleId || '').localeCompare(String(b.packageName || b.bundleId || '')));
 
+            // iOS 결과는 allApps에 riskLevel이 없고 privacyThreatApps에만 있는 경우가 있어, 출력 단계에서 매핑합니다.
+            const privacyRiskMap = new Map();
+            (privacyThreatApps || []).forEach((card) => {
+                const key = String(card?.packageName || card?.bundleId || card?.id || card?.identifier || '').toLowerCase();
+                if (key) privacyRiskMap.set(key, card);
+            });
+
             sortedApps.forEach(app => {
 
                 const div = document.createElement('div');
 
                 // 위험도 기반 색상 (스파이앱=빨강, 개인정보 유출 위협=노랑)
-                const riskLevel = String(app.riskLevel || '').toUpperCase();
+                const appId = String(app.packageName || app.bundleId || app.id || app.identifier || '').toLowerCase();
+                const mappedPrivacy = (State.currentDeviceMode === 'ios') ? privacyRiskMap.get(appId) : null;
+                const effectiveRiskLevel = String(app.riskLevel || mappedPrivacy?.riskLevel || '').toUpperCase();
 
-                if (riskLevel === 'SPYWARE') {
+                if (effectiveRiskLevel === 'SPYWARE') {
                     // 1순위: 스파이앱 (빨간색)
                     div.className = 'compact-item compact-threat';
-                } else if (riskLevel === 'PRIVACY_RISK') {
+                } else if (effectiveRiskLevel === 'PRIVACY_RISK') {
                     // 2순위: 개인정보 유출 위협 (노란색)
                     div.className = 'compact-item compact-warning';
                 } else if (app.isSideloaded) {
@@ -450,13 +460,9 @@ export function initActionHandlers(ctx) {
 
                 // 앱 이름 표시 (스파이앱=[위협], 개인정보 유출 위협=[주의], 외부설치=[외부])
                 let prefix = '';
-                const risk = (app.riskLevel || app.aiGrade || '').toString();
-                const isSpy = risk === 'SPYWARE' || risk === 'DANGER' || app.isSpyApp === true;
-                const isPrivacy = risk === 'PRIVACY_RISK' || risk === 'WARNING';
-
-                if (isSpy) {
+                if (effectiveRiskLevel === 'SPYWARE') {
                     prefix = '[위협] ';
-                } else if (isPrivacy) {
+                } else if (effectiveRiskLevel === 'PRIVACY_RISK') {
                     prefix = '[주의] ';
                 } else if (app.isSideloaded) {
                     prefix = '[외부] ';
