@@ -3,6 +3,7 @@
  * Responsibility: Android domain operations only (no IPC wiring).
  */
 function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, log, exec, CONFIG, analyzeAppWithStaticModel }) {
+
     // NOTE: bootstrap.js passes a single options object.
     if (!client) throw new Error('createAndroidService requires client');
     if (!adb) throw new Error('createAndroidService requires adb');
