@@ -345,6 +345,24 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
             }
         },
 
+        async getGrantedPermissions(packageName) {
+
+            const devices = await client.listDevices();
+            if (devices.length === 0) throw new Error('기기 연결 끊김');
+            const serial = devices[0].id;
+
+            const dumpOutput = await client.shell(serial, `dumpsys package ${packageName}`);
+            const dumpStr = (await adb.util.readAll(dumpOutput)).toString();
+
+            const grantedPerms = [];
+            const regex = /android\.permission\.([A-Z0-9_]+): granted=true/g;
+            let match;
+            while ((match = regex.exec(dumpStr)) !== null) {
+                grantedPerms.push(`android.permission.${match[1]}`);
+            }
+            return grantedPerms;
+        },
+
         // 앱 삭제 (Disable -> Uninstall)
         async uninstallApp(packageName) {
             try {
