@@ -144,68 +144,28 @@ export function initActionHandlers(ctx) {
         });
     }
 
-    // 무력화 버튼
-    function ensurePermissionModal() {
-        let overlay = document.getElementById('perm-modal-overlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-            return;
+        function ensurePermissionModal() {
+            const modal = document.getElementById('perm-modal-overlay');
+            if (!modal) return;
+            modal.classList.remove('hidden');
         }
 
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = `
-            <div id="perm-modal-overlay" style="
-            position:fixed; inset:0; background:rgba(0,0,0,.45);
-            display:flex; align-items:center; justify-content:center; z-index:999999;">
-            <div style="
-                background:#fff; border-radius:12px; width:min(980px,92vw); max-height:86vh;
-                overflow:hidden; display:flex; flex-direction:column;">
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 18px; border-bottom:1px solid #eee;">
-                <div>
-                    <div style="font-weight:700; font-size:16px;">무력화할 권한 선택</div>
-                    <div id="perm-modal-subtitle" style="font-size:12px; opacity:.7; margin-top:4px;"></div>
-                </div>
-                <label style="display:flex; gap:8px; align-items:center; font-weight:600; user-select:none;">
-                    <input type="checkbox" id="perm-select-all-checkbox" />
-                    <span>전체 선택</span>
-                </label>
-                </div>
+        function hidePermissionModal() {
+            const modal = document.getElementById('perm-modal-overlay');
+            if (!modal) return;
+            modal.classList.add('hidden');
+        }
 
-                <div style="padding:12px 18px; border-bottom:1px solid #eee;">
-                <input id="perm-search-input" type="text" placeholder="권한 검색" style="
-                    width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; outline:none;" />
-                </div>
-
-                <div id="perm-chip-container" style="padding:14px 18px; overflow:auto; display:flex; flex-wrap:wrap; gap:10px;"></div>
-
-                <div style="padding:14px 18px; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #eee;">
-                <button id="perm-cancel-btn" class="primary-button">취소</button>
-                <button id="perm-confirm-btn" class="primary-button warning-button">선택 권한 무력화</button>
-                </div>
-            </div>
-            </div>
-        `;
-
-        (document.body || document.documentElement).appendChild(wrapper.firstElementChild);
-
-        document.getElementById('perm-cancel-btn').addEventListener('click', () => {
-            const el = document.getElementById('perm-modal-overlay');
-            if (el) el.style.display = 'none';
-        });
-    }
-
-    // 2. 무력화
-    const neutralizeBtn = document.getElementById('neutralize-btn');
-    if (neutralizeBtn) {
+        // 2. 무력화
+        const neutralizeBtn = document.getElementById('neutralize-btn');
+        if (neutralizeBtn) {
         neutralizeBtn.addEventListener('click', async () => {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
-            // 1) 권한 목록 가져오기
             const perms = await window.electronAPI.getGrantedPermissions(packageName);
             console.log('권한 목록:', perms);
 
-            // 2) 권한 선택 모달 띄우기 (ensurePermissionModal()은 네가 이미 actionHandlers.js에 추가해둔 상태라고 가정)
             ensurePermissionModal();
 
             const confirmBtnForData = document.getElementById('perm-confirm-btn');
@@ -214,73 +174,74 @@ export function initActionHandlers(ctx) {
                 confirmBtnForData.dataset.appname = appName;
             }
 
-            document.getElementById('perm-modal-subtitle').textContent =
-            `'${appName}' 권한 ${perms.length}개`;
+            const subtitle = document.getElementById('perm-modal-subtitle');
+            if (subtitle) subtitle.textContent = `'${appName}' 권한 ${perms.length}개`;
 
             const container = document.getElementById('perm-chip-container');
+            if (!container) return;
             container.innerHTML = '';
 
-            // 3) 전체 선택
             const updateSelectAll = () => {
-                const selectAll = document.getElementById('perm-select-all-checkbox');
-                if (!selectAll) return;
-                const chips = [...container.querySelectorAll('button')];
-                selectAll.checked = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+                const btn = document.getElementById('perm-select-all-btn');
+                if (!btn) return;
+
+                const chips = [...container.querySelectorAll('.bd-perm-chip')];
+                const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+
+                btn.classList.toggle('is-active', allOn);
+                btn.textContent = allOn ? '전체 해제' : '전체 선택';
             };
 
-            perms.forEach((p) => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.dataset.perm = p;
-                chip.dataset.selected = '0';
-                chip.textContent = window.Utils.getKoreanPermission(p); // 화면 표시용 한글
-                chip.style.padding = '6px 12px';
-                chip.style.borderRadius = '20px';
-                chip.style.border = '1px solid #ddd';
-                chip.style.background = '#f5f5f5';
-                chip.style.cursor = 'pointer';
+            renderPermissionCategories(perms, container, updateSelectAll);
 
-                chip.addEventListener('click', () => {
-                    const next = chip.dataset.selected !== '1';
-                    chip.dataset.selected = next ? '1' : '0';
-                    chip.style.background = next ? '#4caf50' : '#f5f5f5';
-                    chip.style.color = next ? '#fff' : '#000';
-                    updateSelectAll();
-                });
-            container.appendChild(chip);
-            });
+            updateSelectAll(); // ✅ 초기 상태 반영
 
-            // ✅ (3) 여기부터 추가: 전체선택 연결 (forEach 끝난 직후!)
-            const selectAll = document.getElementById('perm-select-all-checkbox');
-            if (selectAll) {
-                selectAll.checked = false;
+            const selectAllBtn = document.getElementById('perm-select-all-btn');
+            if (selectAllBtn) {
+                selectAllBtn.onclick = () => {
+                    const chips = [...container.querySelectorAll('.bd-perm-chip')];
+                    const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+                    const next = !allOn;
 
-                selectAll.onchange = () => {
-                    const chips = container.querySelectorAll('button');
                     chips.forEach(chip => {
-                        const on = selectAll.checked;
-                        chip.dataset.selected = on ? '1' : '0';
-                        chip.style.background = on ? '#4caf50' : '#f5f5f5';
-                        chip.style.color = on ? '#fff' : '#000';
+                        chip.dataset.selected = next ? '1' : '0';
+                        chip.classList.toggle('is-selected', next);
                     });
+
                     updateSelectAll();
                 };
             }
 
-            // ✅ (4) 여기부터 추가: 검색 연결 (전체선택 코드 아래!)
             const searchInput = document.getElementById('perm-search-input');
             if (searchInput) {
                 searchInput.value = '';
                 searchInput.oninput = () => {
                     const q = searchInput.value.trim().toLowerCase();
-                    const chips = container.querySelectorAll('button');
+
+                    const cats = [...container.querySelectorAll('.bd-perm-cat')];
+                    cats.forEach(catEl => {
+                    const chips = [...catEl.querySelectorAll('.bd-perm-chip')];
+                    let anyVisible = false;
+
                     chips.forEach(chip => {
                         const text = (chip.textContent || '').toLowerCase();
-                        chip.style.display = text.includes(q) ? '' : 'none';
+                        const ok = q === '' ? true : text.includes(q);
+                        chip.style.display = ok ? '' : 'none';
+                        if (ok) anyVisible = true;
+                    });
+
+                    if (q !== '') {
+                        catEl.style.display = anyVisible ? '' : 'none';
+                        if (anyVisible) catEl.classList.remove('collapsed');
+                    } else {
+                        catEl.style.display = '';
+                        const catName = catEl.dataset.cat;
+                        if (DEFAULT_OPEN_CATS.has(catName)) catEl.classList.remove('collapsed');
+                        else catEl.classList.add('collapsed');
+                    }
                     });
                 };
             }
-            return;
         });
     }
 
@@ -940,74 +901,300 @@ export function initActionHandlers(ctx) {
     }
 
     if (window.__permModalDelegationBound) return;
-    window.__permModalDelegationBound = true;
-    // ✅ Permission modal confirm/cancel: event delegation (딱 1번만 등록)
-    document.addEventListener('click', async (e) => {
-        const confirmBtn = e.target.closest('#perm-confirm-btn');
-        const cancelBtn  = e.target.closest('#perm-cancel-btn');
-        const modalEl    = document.getElementById('permission-modal');
+window.__permModalDelegationBound = true;
 
-        // 취소
-        if (cancelBtn) {
-            if (modalEl) modalEl.style.display = 'none';
+document.addEventListener('click', async (e) => {
+  const confirmBtn = e.target.closest('#perm-confirm-btn');
+  const cancelBtn  = e.target.closest('#perm-cancel-btn');
+
+  // ✅ 권한 모달 id는 이거임 (permission-modal 아님)
+  const modalEl = document.getElementById('perm-modal-overlay');
+
+  // 취소
+  if (cancelBtn) {
+    // 너 구조가 class hidden이면 이게 더 정석이지만, 일단 최소 수정:
+    // modalEl?.classList.add('hidden');
+    if (modalEl) modalEl.classList.add('hidden');
+    return;
+  }
+
+        // 확인
+    if (confirmBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const container = document.getElementById('perm-chip-container');
+        const packageName = confirmBtn.dataset.package;
+        const appName = confirmBtn.dataset.appname;
+
+        if (!container || !packageName) return;
+
+        const selectedPerms = Array.from(container.querySelectorAll('button, .bd-perm-chip'))
+            .filter(btn => btn.dataset.selected === '1')
+            .map(btn => btn.dataset.perm)
+            .filter(Boolean);
+
+        // ✅ 선택 없음: (너가 쓰던 방식 유지)
+        if (selectedPerms.length === 0) {
+            document.getElementById('perm-cancel-btn')?.click(); // 모달 닫고 alert 위로
+            await CustomUI.alert('선택된 권한이 없습니다.');
+            // ✅ alert 확인 후 다시 권한 모달 열고 싶으면:
+            // modalEl?.classList.remove('hidden');
             return;
         }
 
-        // 확인
-        if (confirmBtn) {
-            e.preventDefault();
-            e.stopPropagation();
+        // ✅ confirm 띄우기 전에 모달 닫는 건 유지
+        document.getElementById('perm-cancel-btn')?.click();
 
-            const container = document.getElementById('perm-chip-container');
-            const packageName = confirmBtn.dataset.package;
-            const appName = confirmBtn.dataset.appname;
+        const ok = await CustomUI.confirm(
+            `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
+        );
 
-            if (!container || !packageName) return;
+            // ✅ 취소면: 권한 모달 다시 보여주고 끝 (여기가 핵심)
+        if (!ok) {
+            if (modalEl) modalEl.classList.remove('hidden');
+            return;
+        }
 
-            const selectedPerms = Array.from(container.querySelectorAll('button'))
-                .filter(btn => btn.dataset.selected === '1')
-                .map(btn => btn.dataset.perm)
-                .filter(Boolean);
+            // ✅ OK면: 모달은 닫힌 상태 유지하고 neutralize 진행
+        const neutralizeBtn = document.getElementById('neutralize-btn');
+        if (neutralizeBtn) {
+            neutralizeBtn.disabled = true;
+            neutralizeBtn.textContent = "무력화 중...";
+        }
 
-            if (selectedPerms.length === 0) {
-                document.getElementById('perm-cancel-btn')?.click();
-                await CustomUI.alert('선택된 권한이 없습니다.');
-                return;
-            }
-
-            document.getElementById('perm-cancel-btn')?.click();
-
-            // 기존 멘트 그대로
-            const ok = await CustomUI.confirm(
-                `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
-            );
-
-            // 취소면 모달 다시 보여주기(원하면 유지)
-            if (!ok) { return; }
-            if (modalEl) modalEl.style.display = 'block';
-
-            const neutralizeBtn = document.getElementById('neutralize-btn');
-            if (neutralizeBtn) {
-                neutralizeBtn.disabled = true;
-                neutralizeBtn.textContent = "무력화 중...";
-            }
-
-            try {
-                const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
+        try {
+            const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
             if (result.success) {
                 await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
                 document.getElementById('back-to-dashboard-btn')?.click();
             } else {
                 throw new Error(result.error);
             }
-            } catch (err) {
-                await CustomUI.alert(`무력화 실패: ${err.message}`);
-            } finally {
-                if (neutralizeBtn) {
-                    neutralizeBtn.disabled = false;
-                    neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+        } catch (err) {
+        await CustomUI.alert(`무력화 실패: ${err.message}`);
+        } finally {
+            if (neutralizeBtn) {
+                neutralizeBtn.disabled = false;
+                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
                 }
             }
         }
     });
+
+    // 기본 펼침(주요 기능)
+    const DEFAULT_OPEN_CATS = new Set([
+    '카메라/화면',
+    '마이크/오디오',
+    '전화/SMS',
+    '위치',
+    '파일/저장소',
+    '네트워크',
+    '백그라운드/자동실행',
+    '알림/상태바',
+    '계정/인증/보안'
+    ]);
+
+    function categorizePermission(permString) {
+    const short = (permString || '').split('.').pop() || '';
+    const s = short.toUpperCase();
+
+    if (
+        s.includes('CAMERA') ||
+        s.includes('FLASHLIGHT') ||
+        s.includes('MEDIA_PROJECTION') ||
+        s.includes('SCREEN_CAPTURE') ||
+        s.includes('FRAME_BUFFER') ||
+        s.includes('WALLPAPER')
+    ) return '카메라/화면';
+
+    if (
+        s.includes('RECORD_AUDIO') ||
+        s.includes('MICROPHONE') ||
+        s.includes('AUDIO') ||
+        s.includes('SOUND') ||
+        s.includes('VOICE') ||
+        s.includes('HOTWORD')
+    ) return '마이크/오디오';
+
+    if (
+        s.includes('CALL') ||
+        s.includes('PHONE') ||
+        s.includes('TELECOM') ||
+        s.includes('VOICEMAIL') ||
+        s.includes('SIP') ||
+        s.includes('SMS') ||
+        s.includes('MMS') ||
+        s.includes('WAP_PUSH') ||
+        s.includes('CELL_BROADCAST')
+    ) return '전화/SMS';
+
+    if (s.includes('LOCATION') || s.includes('GPS') || s.includes('COARSE') || s.includes('FINE'))
+        return '위치';
+
+    if (
+        s.includes('STORAGE') ||
+        s.includes('MEDIA') ||
+        s.includes('DOCUMENT') ||
+        s.includes('FILES') ||
+        s.includes('MOUNT') ||
+        s.includes('EXTERNAL') ||
+        s.includes('MANAGE_EXTERNAL_STORAGE') ||
+        s.includes('MANAGE_DOCUMENTS')
+    ) return '파일/저장소';
+
+    if (
+        s.includes('INTERNET') ||
+        s.includes('NETWORK') ||
+        s.includes('WIFI') ||
+        s.includes('BLUETOOTH') ||
+        s.includes('NFC') ||
+        s.includes('VPN') ||
+        s.includes('TETHER') ||
+        s.includes('UWB') ||
+        s.includes('CONNECTIVITY')
+    ) return '네트워크';
+
+    if (
+        s.includes('FOREGROUND_SERVICE') ||
+        s.includes('BOOT') ||
+        s.includes('WAKE_LOCK') ||
+        s.includes('ALARM') ||
+        s.includes('JOB') ||
+        s.includes('BATTERY_OPTIMIZ') ||
+        s.includes('START_ACTIVITIES_FROM_BACKGROUND') ||
+        s.includes('RUN_USER_INITIATED_JOBS')
+    ) return '백그라운드/자동실행';
+
+    if (
+        s.includes('NOTIFICATION') ||
+        s.includes('POST_NOTIFICATIONS') ||
+        s.includes('STATUS_BAR') ||
+        s.includes('EXPAND_STATUS_BAR') ||
+        s.includes('COLLAPSE_STATUS_BAR')
+    ) return '알림/상태바';
+
+    if (
+        s.includes('ACCOUNT') ||
+        s.includes('CREDENTIAL') ||
+        s.includes('AUTH') ||
+        s.includes('BIOMETRIC') ||
+        s.includes('FINGERPRINT') ||
+        s.includes('KEYGUARD')
+    ) return '계정/인증/보안';
+
+    if (
+        s.startsWith('BIND_') ||
+        s.startsWith('MANAGE_') ||
+        s.startsWith('CONTROL_') ||
+        s.startsWith('MODIFY_') ||
+        s.startsWith('WRITE_') ||
+        s.includes('DEVICE_ADMIN') ||
+        s.includes('PACKAGE') ||
+        s.includes('INSTALL') ||
+        s.includes('DELETE_PACKAGES') ||
+        s.includes('USAGE_STATS') ||
+        s.includes('DUMP') ||
+        s.includes('READ_LOGS') ||
+        s.includes('INJECT_EVENTS') ||
+        s.includes('REBOOT') ||
+        s.includes('MASTER_CLEAR') ||
+        s.includes('DEBUG') ||
+        s.includes('TEST') ||
+        s.includes('STATS') ||
+        s.includes('COMPAT')
+    ) return '시스템/관리';
+
+    return '기타';
+    }
+
+    function makePermChip(p, updateSelectAll) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'bd-perm-chip';
+    chip.dataset.perm = p;
+    chip.dataset.selected = '0';
+    chip.textContent = window.Utils.getKoreanPermission(p);
+
+    chip.addEventListener('click', () => {
+        const next = chip.dataset.selected !== '1';
+        chip.dataset.selected = next ? '1' : '0';
+        chip.classList.toggle('is-selected', next);
+        updateSelectAll();
+    });
+
+    return chip;
+    }
+
+    function renderPermissionCategories(perms, container, updateSelectAll) {
+    container.innerHTML = '';
+
+    // group
+    const groups = new Map();
+    for (const p of perms) {
+        const cat = categorizePermission(p);
+        if (!groups.has(cat)) groups.set(cat, []);
+        groups.get(cat).push(p);
+    }
+
+    // order: 주요 → 시스템/관리 → 기타 → 나머지(알파)
+    const fixedOrder = [
+        '카메라/화면',
+        '마이크/오디오',
+        '전화/SMS',
+        '위치',
+        '파일/저장소',
+        '네트워크',
+        '백그라운드/자동실행',
+        '알림/상태바',
+        '계정/인증/보안',
+        '시스템/관리',
+        '기타'
+    ];
+
+    const cats = [...groups.keys()];
+    cats.sort((a, b) => {
+        const ia = fixedOrder.indexOf(a);
+        const ib = fixedOrder.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+    });
+
+    for (const cat of cats) {
+        const list = groups.get(cat);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'bd-perm-cat';
+        wrap.dataset.cat = cat;
+
+        // 기본 펼침
+        const isDefaultOpen = DEFAULT_OPEN_CATS.has(cat);
+        if (!isDefaultOpen) wrap.classList.add('collapsed');
+
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'bd-perm-cat-header';
+        header.innerHTML = `
+        <span class="bd-perm-cat-title">${cat}</span>
+        <span class="bd-perm-cat-count">${list.length}개</span>
+        `;
+
+        header.addEventListener('click', () => {
+        wrap.classList.toggle('collapsed');
+        });
+
+        const body = document.createElement('div');
+        body.className = 'bd-perm-cat-body';
+
+        for (const p of list) {
+        body.appendChild(makePermChip(p, updateSelectAll));
+        }
+
+        wrap.appendChild(header);
+        wrap.appendChild(body);
+        container.appendChild(wrap);
+        }
+    }
 }
