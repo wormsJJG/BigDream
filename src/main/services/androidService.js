@@ -366,7 +366,8 @@ processedApps.forEach((app) => {
               }
 
               // 권한 박탈
-              const targetPerms = Array.isArray(perms) && perms.length > 0 ? perms : grantedPerms;
+              const targetPerms = [...new Set(Array.isArray(perms) && perms.length > 0 ? perms : grantedPerms)];
+              
 
               let revokedCount = 0;
               for (const perm of targetPerms) {
@@ -398,7 +399,7 @@ processedApps.forEach((app) => {
             while ((match = regex.exec(dumpStr)) !== null) {
                 grantedPerms.push(`android.permission.${match[1]}`);
             }
-            return grantedPerms;
+            return [...new Set(grantedPerms)];
         },
 
       // 설치된 앱 목록 (시스템 앱 필터링 강화 버전)

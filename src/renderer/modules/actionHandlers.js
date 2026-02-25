@@ -163,8 +163,18 @@ export function initActionHandlers(ctx) {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
-            const perms = await window.electronAPI.getGrantedPermissions(packageName);
-            console.log('권한 목록:', perms);
+            // const perms = await window.electronAPI.getGrantedPermissions(packageName);
+            // console.log('권한 목록:', perms);
+            const rawPerms = await window.electronAPI.getGrantedPermissions(packageName);
+
+            const perms = Array.from(new Set(
+            (rawPerms ?? [])
+                .map(p => String(p).trim())
+                .filter(p => p.startsWith('android.permission.'))
+            ));
+
+            console.log('권한 목록(raw):', rawPerms?.length, rawPerms);
+            console.log('권한 목록(normalized):', perms.length, perms);
 
             ensurePermissionModal();
 
@@ -192,7 +202,7 @@ export function initActionHandlers(ctx) {
                 btn.textContent = allOn ? '전체 해제' : '전체 선택';
             };
 
-            renderPermissionCategories(perms, container, updateSelectAll);
+            window.Utils.renderPermissionCategories(perms, container, updateSelectAll);
 
             updateSelectAll(); // ✅ 초기 상태 반영
 
@@ -981,220 +991,4 @@ document.addEventListener('click', async (e) => {
             }
         }
     });
-
-    // 기본 펼침(주요 기능)
-    const DEFAULT_OPEN_CATS = new Set([
-    '카메라/화면',
-    '마이크/오디오',
-    '전화/SMS',
-    '위치',
-    '파일/저장소',
-    '네트워크',
-    '백그라운드/자동실행',
-    '알림/상태바',
-    '계정/인증/보안'
-    ]);
-
-    function categorizePermission(permString) {
-    const short = (permString || '').split('.').pop() || '';
-    const s = short.toUpperCase();
-
-    if (
-        s.includes('CAMERA') ||
-        s.includes('FLASHLIGHT') ||
-        s.includes('MEDIA_PROJECTION') ||
-        s.includes('SCREEN_CAPTURE') ||
-        s.includes('FRAME_BUFFER') ||
-        s.includes('WALLPAPER')
-    ) return '카메라/화면';
-
-    if (
-        s.includes('RECORD_AUDIO') ||
-        s.includes('MICROPHONE') ||
-        s.includes('AUDIO') ||
-        s.includes('SOUND') ||
-        s.includes('VOICE') ||
-        s.includes('HOTWORD')
-    ) return '마이크/오디오';
-
-    if (
-        s.includes('CALL') ||
-        s.includes('PHONE') ||
-        s.includes('TELECOM') ||
-        s.includes('VOICEMAIL') ||
-        s.includes('SIP') ||
-        s.includes('SMS') ||
-        s.includes('MMS') ||
-        s.includes('WAP_PUSH') ||
-        s.includes('CELL_BROADCAST')
-    ) return '전화/SMS';
-
-    if (s.includes('LOCATION') || s.includes('GPS') || s.includes('COARSE') || s.includes('FINE'))
-        return '위치';
-
-    if (
-        s.includes('STORAGE') ||
-        s.includes('MEDIA') ||
-        s.includes('DOCUMENT') ||
-        s.includes('FILES') ||
-        s.includes('MOUNT') ||
-        s.includes('EXTERNAL') ||
-        s.includes('MANAGE_EXTERNAL_STORAGE') ||
-        s.includes('MANAGE_DOCUMENTS')
-    ) return '파일/저장소';
-
-    if (
-        s.includes('INTERNET') ||
-        s.includes('NETWORK') ||
-        s.includes('WIFI') ||
-        s.includes('BLUETOOTH') ||
-        s.includes('NFC') ||
-        s.includes('VPN') ||
-        s.includes('TETHER') ||
-        s.includes('UWB') ||
-        s.includes('CONNECTIVITY')
-    ) return '네트워크';
-
-    if (
-        s.includes('FOREGROUND_SERVICE') ||
-        s.includes('BOOT') ||
-        s.includes('WAKE_LOCK') ||
-        s.includes('ALARM') ||
-        s.includes('JOB') ||
-        s.includes('BATTERY_OPTIMIZ') ||
-        s.includes('START_ACTIVITIES_FROM_BACKGROUND') ||
-        s.includes('RUN_USER_INITIATED_JOBS')
-    ) return '백그라운드/자동실행';
-
-    if (
-        s.includes('NOTIFICATION') ||
-        s.includes('POST_NOTIFICATIONS') ||
-        s.includes('STATUS_BAR') ||
-        s.includes('EXPAND_STATUS_BAR') ||
-        s.includes('COLLAPSE_STATUS_BAR')
-    ) return '알림/상태바';
-
-    if (
-        s.includes('ACCOUNT') ||
-        s.includes('CREDENTIAL') ||
-        s.includes('AUTH') ||
-        s.includes('BIOMETRIC') ||
-        s.includes('FINGERPRINT') ||
-        s.includes('KEYGUARD')
-    ) return '계정/인증/보안';
-
-    if (
-        s.startsWith('BIND_') ||
-        s.startsWith('MANAGE_') ||
-        s.startsWith('CONTROL_') ||
-        s.startsWith('MODIFY_') ||
-        s.startsWith('WRITE_') ||
-        s.includes('DEVICE_ADMIN') ||
-        s.includes('PACKAGE') ||
-        s.includes('INSTALL') ||
-        s.includes('DELETE_PACKAGES') ||
-        s.includes('USAGE_STATS') ||
-        s.includes('DUMP') ||
-        s.includes('READ_LOGS') ||
-        s.includes('INJECT_EVENTS') ||
-        s.includes('REBOOT') ||
-        s.includes('MASTER_CLEAR') ||
-        s.includes('DEBUG') ||
-        s.includes('TEST') ||
-        s.includes('STATS') ||
-        s.includes('COMPAT')
-    ) return '시스템/관리';
-
-    return '기타';
-    }
-
-    function makePermChip(p, updateSelectAll) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'bd-perm-chip';
-    chip.dataset.perm = p;
-    chip.dataset.selected = '0';
-    chip.textContent = window.Utils.getKoreanPermission(p);
-
-    chip.addEventListener('click', () => {
-        const next = chip.dataset.selected !== '1';
-        chip.dataset.selected = next ? '1' : '0';
-        chip.classList.toggle('is-selected', next);
-        updateSelectAll();
-    });
-
-    return chip;
-    }
-
-    function renderPermissionCategories(perms, container, updateSelectAll) {
-    container.innerHTML = '';
-
-    // group
-    const groups = new Map();
-    for (const p of perms) {
-        const cat = categorizePermission(p);
-        if (!groups.has(cat)) groups.set(cat, []);
-        groups.get(cat).push(p);
-    }
-
-    // order: 주요 → 시스템/관리 → 기타 → 나머지(알파)
-    const fixedOrder = [
-        '카메라/화면',
-        '마이크/오디오',
-        '전화/SMS',
-        '위치',
-        '파일/저장소',
-        '네트워크',
-        '백그라운드/자동실행',
-        '알림/상태바',
-        '계정/인증/보안',
-        '시스템/관리',
-        '기타'
-    ];
-
-    const cats = [...groups.keys()];
-    cats.sort((a, b) => {
-        const ia = fixedOrder.indexOf(a);
-        const ib = fixedOrder.indexOf(b);
-        if (ia !== -1 && ib !== -1) return ia - ib;
-        if (ia !== -1) return -1;
-        if (ib !== -1) return 1;
-        return a.localeCompare(b);
-    });
-
-    for (const cat of cats) {
-        const list = groups.get(cat);
-
-        const wrap = document.createElement('div');
-        wrap.className = 'bd-perm-cat';
-        wrap.dataset.cat = cat;
-
-        // 기본 펼침
-        const isDefaultOpen = DEFAULT_OPEN_CATS.has(cat);
-        if (!isDefaultOpen) wrap.classList.add('collapsed');
-
-        const header = document.createElement('button');
-        header.type = 'button';
-        header.className = 'bd-perm-cat-header';
-        header.innerHTML = `
-        <span class="bd-perm-cat-title">${cat}</span>
-        <span class="bd-perm-cat-count">${list.length}개</span>
-        `;
-
-        header.addEventListener('click', () => {
-        wrap.classList.toggle('collapsed');
-        });
-
-        const body = document.createElement('div');
-        body.className = 'bd-perm-cat-body';
-
-        for (const p of list) {
-        body.appendChild(makePermChip(p, updateSelectAll));
-        }
-
-        wrap.appendChild(header);
-        wrap.appendChild(body);
-        container.appendChild(wrap);
-        }
-    }
 }
