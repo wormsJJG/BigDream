@@ -778,38 +778,41 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
         },
 
         // 앱 무력화 (권한 박탈 + 강제 종료)
-        async neutralizeApp(packageName) {
-            try {
-                const devices = await client.listDevices();
-                if (devices.length === 0) throw new Error('기기 연결 끊김');
-                const serial = devices[0].id;
+        async neutralizeApp(packageName, perms) {
+          try {
+              const devices = await client.listDevices();
+              if (devices.length === 0) throw new Error('기기 연결 끊김');
+              const serial = devices[0].id;
 
-                // 권한 조회
-                const dumpOutput = await client.shell(serial, `dumpsys package ${packageName}`);
-                const dumpStr = (await adb.util.readAll(dumpOutput)).toString();
+              // 권한 조회
+              const dumpOutput = await client.shell(serial, `dumpsys package ${packageName}`);
+              const dumpStr = (await adb.util.readAll(dumpOutput)).toString();
 
-                const grantedPerms = [];
-                const regex = /android\.permission\.([A-Z0-9_]+): granted=true/g;
-                let match;
-                while ((match = regex.exec(dumpStr)) !== null) {
-                    grantedPerms.push(`android.permission.${match[1]}`);
-                }
+              const grantedPerms = [];
+              const regex = /android\.permission\.([A-Z0-9_]+): granted=true/g;
+              let match;
+              while ((match = regex.exec(dumpStr)) !== null) {
+                  grantedPerms.push(`android.permission.${match[1]}`);
+              }
 
-                // 권한 박탈
-                let revokedCount = 0;
-                for (const perm of grantedPerms) {
-                    try {
-                        await client.shell(serial, `pm revoke ${packageName} ${perm}`);
-                        revokedCount++;
-                    } catch (e) { }
-                }
-                // 강제 종료
-                await client.shell(serial, `am force-stop ${packageName}`);
-                return { success: true, count: revokedCount };
-            } catch (err) {
-                return { success: false, error: err.message };
-            }
-        },
+              // 권한 박탈
+              const targetPerms = [...new Set(Array.isArray(perms) && perms.length > 0 ? perms : grantedPerms)];
+              
+
+              let revokedCount = 0;
+              for (const perm of targetPerms) {
+                  try {
+                      await client.shell(serial, `pm revoke ${packageName} ${perm}`);
+                      revokedCount++;
+                  } catch (e) { }
+              }
+              // 강제 종료
+              await client.shell(serial, `am force-stop ${packageName}`);
+              return { success: true, count: revokedCount };
+          } catch (err) {
+              return { success: false, error: err.message };
+          }
+      },
 
         // 설치된 앱 목록 (시스템 앱 필터링 강화 버전)
         async getInstalledApps(serial) {
