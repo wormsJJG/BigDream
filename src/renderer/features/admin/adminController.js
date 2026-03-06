@@ -493,7 +493,7 @@ const AdminManager = {
                     <button class="admin-btn btn-delete" style="float:right;" onclick="window.deleteUser('${uid}', '${userData.companyName}')">⚠️ 업체 영구 삭제</button>
                 </div>
 
-                <h3>📨 제출된 결과 리포트 (${reportsSnap.size}건)</h3>
+                <h3>📨 제출된 결과 리포트 (${typeof reportsSnap?.size === 'number' ? reportsSnap.size : (Array.isArray(reportsSnap?.docs) ? reportsSnap.docs.length : 0)}건)</h3>
                 <table class="admin-table">
                     <thead>
                         <tr>
@@ -958,10 +958,16 @@ window.viewReportDetail = async (reportId) => {
                 }
 
                 // 권한 리스트 생성 (HTML)
+                const permissionList = Array.isArray(app.grantedList) && app.grantedList.length > 0
+                    ? app.grantedList
+                    : (Array.isArray(app.requestedList) && app.requestedList.length > 0
+                        ? app.requestedList
+                        : (Array.isArray(app.permissions) ? app.permissions : []));
+
                 let permissionHtml = '';
-                if (app.grantedList && app.grantedList.length > 0) {
-                    permissionHtml = app.grantedList.map(perm => {
-                        const shortPerm = perm.replace('android.permission.', '');
+                if (permissionList.length > 0) {
+                    permissionHtml = permissionList.map(perm => {
+                        const shortPerm = String(perm || '').replace('android.permission.', '');
                         return `<span class="perm-badge granted">✔ ${shortPerm}</span>`;
                     }).join('');
                 } else {
@@ -997,7 +1003,7 @@ window.viewReportDetail = async (reportId) => {
                             </div>
 
                             <div class="detail-box">
-                                <label>🔑 허용된 주요 권한 (${app.grantedCount || 0}개)</label>
+                                <label>🔑 허용된 주요 권한 (${app.grantedCount || permissionList.length || 0}개)</label>
                                 <div class="perm-container">
                                     ${permissionHtml}
                                 </div>
