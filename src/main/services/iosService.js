@@ -218,10 +218,12 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         // 메타가 없지만 백업 산출물이 존재하면, 실제 완료 가능성이 높으므로 메타를 재구성해 저장
                         try {
                             const stat = getDirectoryStats(fs, path, specificBackupPath);
+                            const finalBytes = Math.max(maxBytesSeen || 0, stat.bytes || 0);
+                            const finalFiles = Math.max(maxFilesSeen || 0, stat.files || 0);
                             fs.writeFileSync(backupMetaPath, JSON.stringify({
                                 complete: true,
-                                totalBytes: stat.bytes,
-                                totalFiles: stat.files,
+                                totalBytes: finalBytes,
+                                totalFiles: finalFiles,
                                 reconstructedAt: Date.now()
                             }, null, 2));
                             meta = { complete: true, totalBytes: stat.bytes, totalFiles: stat.files };
@@ -270,6 +272,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     // ✅ Progress 우선순위:
                     // 1) idevicebackup2 출력에서 (cur/total) 파싱 가능하면 -> 진짜 비율
                     // 2) 출력이 없으면 -> 백업 폴더 증가(파일/바이트) 기반으로 '튀지 않게' 상승
+                    let lastPctF = 0;
                     let lastPct = 0;
                     let lastCount = null;
                     let lastStat = { bytes: 0, files: 0 };
@@ -287,15 +290,53 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     let estTotalBytes = 0;
                     let estTotalFiles = 0;
 
+                    // ✅ used storage(사용중 용량) 기반 total 추정 (best-effort)
+                    const getUsedBytes = async () => {
+                        const info = CONFIG.PATHS.IOS_INFO; // ideviceinfo
+                        const keyTry = async (key) => {
+                            try {
+                                const out = await Utils.runCommand(`"${info}" -u ${udid} -k ${key}`);
+                                const v = String(out || '').trim();
+                                const n = parseInt(v, 10);
+                                return Number.isFinite(n) ? n : 0;
+                            } catch (_e) { return 0; }
+                        };
+
+                        const cap = await keyTry('TotalDiskCapacity') || await keyTry('TotalDataCapacity');
+                        const avail = await keyTry('TotalDiskAvailable') || await keyTry('TotalDataAvailable');
+                        if (cap > 0 && avail >= 0 && cap >= avail) return cap - avail;
+                        return 0;
+                    };
+
+                    const scanStartAt = Date.now();
+                    const usedBytes = await getUsedBytes().catch(() => 0);
+
+                    // 추정치(너무 높으면 60%대 고정이 생기고, 너무 낮으면 초반 과속이 생김)
+                    // => "시간 기반"으로 먼저 움직이고, 폴더 바이트가 나오면 그쪽을 따라가게 합니다.
+                    const WORK_RATIO_INIT = 0.35; // usedBytes 대비 백업 산출물 경험치(기기별 편차 큼)
+                    const MIN_TOTAL_BYTES = 1 * 1024 * 1024 * 1024; // 1GB 최소
+                    const BASELINE_BPS = 7 * 1024 * 1024; // 10MB/s (폴더 바이트가 늦게 보이는 기기 대비)
+                    estTotalBytes = usedBytes > 0 ? Math.max(usedBytes * WORK_RATIO_INIT, MIN_TOTAL_BYTES) : (8 * 1024 * 1024 * 1024);
+
+                    // 폴더 크기/파일 수가 줄어드는 것처럼 보이는 현상 방지(최대값 유지)
+                    let maxBytesSeen = 0;
+                    let maxFilesSeen = 0;
                     const startTicker = () => {
                         ticker = setInterval(() => {
                             try {
                                 if (!fs.existsSync(specificBackupPath)) {
+                                    const elapsedSec = Math.max(1, (Date.now() - scanStartAt) / 1000);
+                                    const virtualBytes = elapsedSec * BASELINE_BPS;
+                                    const pct = Math.min(99, Math.floor((virtualBytes / Math.max(1, estTotalBytes)) * 100));
+                                    // 단조 증가(내려가지 않음) + 0에 고착 방지
+                                    lastPctF = Math.max(lastPctF, pct, Math.min(20, Math.floor(elapsedSec / 3)));
+                                    lastPct = Math.floor(lastPctF);
+
                                     safeEmit(onProgress, {
                                         step: 1,
                                         totalSteps: 2,
                                         stage: 'backup',
-                                        percent: Math.max(0, lastPct),
+                                        percent: lastPct,
                                         message: '아이폰 백업 진행 중...'
                                     });
                                     return;
@@ -304,6 +345,19 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 const stat = getDirectoryStats(fs, path, specificBackupPath);
                                 lastStat = stat;
 
+                                // ✅ 일부 기기에서 백업 중간에 임시파일 정리/하드링크 처리로 bytes/files가 줄어드는 것처럼 보일 수 있음
+                                // UI/percent는 최대값 기준으로 계산/표시(사용자 혼란 방지)
+                                if (stat && Number.isFinite(stat.bytes)) maxBytesSeen = Math.max(maxBytesSeen, stat.bytes);
+                                if (stat && Number.isFinite(stat.files)) maxFilesSeen = Math.max(maxFilesSeen, stat.files);
+
+                                const elapsedSec = Math.max(1, (Date.now() - scanStartAt) / 1000);
+                                const virtualBytes = elapsedSec * BASELINE_BPS;
+
+                                const displayBytes = Math.max(maxBytesSeen, stat.bytes || 0);
+                                const displayFiles = Math.max(maxFilesSeen, stat.files || 0);
+
+                                // percent 계산에는 "가상 진행"도 포함(폴더 반영이 늦는 기기에서도 0% 고착 방지)
+                                const bytesForPct = Math.max(displayBytes, virtualBytes);
                                 // meta 기반 total이 있으면 최대한 비례로 계산
                                 let metaNow = null;
                                 try {
@@ -321,30 +375,41 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
 
                                 estTotalBytes = knownTotalBytes > 0
                                     ? knownTotalBytes
-                                    : estimateTotalFromGrowth(stat.bytes, estTotalBytes, { base: BASE_BYTES, ratio: 1.3 });
+                                    : (usedBytes > 0
+                                        ? Math.max(estTotalBytes, bytesForPct + BASE_BYTES)
+                                        : estimateTotalFromGrowth(bytesForPct, estTotalBytes, { base: BASE_BYTES, ratio: 1.3 }));
 
                                 estTotalFiles = knownTotalFiles > 0
                                     ? knownTotalFiles
                                     : estimateTotalFromGrowth(stat.files, estTotalFiles, { base: BASE_FILES, ratio: 1.3 });
 
-                                const pctByBytes = estTotalBytes > 0 ? (stat.bytes / estTotalBytes) * 90 : 0;
-                                const pctByFiles = estTotalFiles > 0 ? (stat.files / estTotalFiles) * 90 : 0;
+                                const pctByBytes = estTotalBytes > 0 ? (bytesForPct / estTotalBytes) * 98 : 0;
+                                const pctByFiles = estTotalFiles > 0 ? (displayFiles / estTotalFiles) * 98 : 0;
 
-                                // 둘 중 더 "느리게" 가는 걸 택해 과속(튀는 %) 방지
-                                const pct = Math.min(90, clampPercent(Math.min(pctByBytes, pctByFiles)));
+                                // bytes 기반이 없거나(files/bytes가 늦게 나타나는 기기) 0% 고착을 피하기 위해 time/bytesForPct를 우선
+                                const pct = Math.min(98, clampPercent(Math.max(pctByBytes, Math.min(pctByFiles, pctByBytes + 3))));
 
                                 if (pct > lastPct) {
-                                    lastPct = pct;
+                                    lastPctF = Math.max(lastPctF, pct);
+                                } else {
+                                    // ✅ 정체 구간 tail easing:
+                                    // - bytes/files가 느리게 반영되는 구간에서도 95%까지 '자연스럽게' 전진
+                                    // - 단, 98% 이상은 백업 완료 이벤트에서만 100%로 점프
+                                    const elapsedSec = Math.max(1, (Date.now() - scanStartAt) / 1000);
+                                    // 시간이 길수록 아주 조금 더 빨라지되 과속 방지(초당 최대 0.25%)
+                                    const drift = Math.min(0.25, 0.03 + (elapsedSec * 0.0002));
+                                    lastPctF = Math.min(98, lastPctF + drift);
                                 }
+                                lastPct = Math.floor(lastPctF);
 
                                 safeEmit(onProgress, {
                                     step: 1,
                                     totalSteps: 2,
                                     stage: 'backup',
                                     percent: lastPct,
-                                    bytes: stat.bytes,
-                                    files: stat.files,
-                                    message: `아이폰 백업 진행 중... (${formatBytes(stat.bytes)} / 파일 ${stat.files.toLocaleString('en-US')}개)`
+                                    bytes: displayBytes,
+                                    files: displayFiles,
+                                    message: `아이폰 백업 진행 중... (${formatBytes(displayBytes)} / 파일 ${displayFiles.toLocaleString('en-US')}개)`
                                 });
                             } catch (_e) { }
                         }, 1000);
@@ -405,9 +470,8 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 lastCount = parsed;
 
                                 // 출력 기반 percent는 가장 신뢰도가 높으므로 lastPct를 갱신
-                                if (pct > lastPct) {
-                                    lastPct = pct;
-                                }
+                                lastPctF = Math.max(lastPctF, pct);
+                                lastPct = Math.floor(lastPctF);
 
                                 safeEmit(onProgress, {
                                     step: 1,
@@ -416,7 +480,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                     percent: lastPct,
                                     current: parsed.cur,
                                     total: parsed.total,
-                                    message: `) 아이폰 백업 진행 중... (${parsed.cur}/${parsed.total})`
+                                    message: `아이폰 백업 진행 중... (${parsed.cur}/${parsed.total})`
                                 });
                             }
                         });
@@ -462,6 +526,9 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     message: '아이폰 백업 완료 ✅'
                 });
 
+
+                // UI가 100%를 잠깐이라도 보여줄 수 있게 짧게 대기
+                try { await Utils.sleep(600); } catch (_e) { }
                 console.log('[iOS] 🚀 데이터 확보 확인! 즉시 정밀 분석 단계로 전환합니다.');
 
                 let deviceInfo = { model: 'iPhone', serial: udid, phoneNumber: '-', os: 'iOS' };
