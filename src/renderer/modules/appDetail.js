@@ -84,16 +84,16 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                 if (app.isApkFile) {
     
                     if (bgLabel) bgLabel.textContent = "저장 일시";
-                    if (netLabel) netLabel.textContent = "설치 유무";
+                    if (netLabel) netLabel.textContent = "파일 크기";
     
                     if (sideloadEl) {
-                        setMainSubText(sideloadEl, '외부 설치', app.apkPath || '-', 'bd-detail-sub bd-detail-sub--mono bd-break-all');
+                        setMainSubText(sideloadEl, '외부 설치 (미설치 파일)', app.apkPath || '-', 'bd-detail-sub bd-detail-sub--mono bd-break-all');
                     }
                     if (bgStatusEl) {
                         setMainSubText(bgStatusEl, app.installDate || '-', '(기기 내 파일 저장 시점)', 'bd-detail-sub bd-detail-sub--danger');
                     }
                     if (networkEl) {
-                        setMainSubText(networkEl, app.installStatus || (app.isInstalled ? '설치된 파일' : '미설치 파일'), '', 'bd-detail-sub');
+                        setMainSubText(networkEl, app.fileSize || '분석 중', '(APK 패키지 용량)', 'bd-detail-sub');
                     }
     
                     if (neutralizeBtnEl) neutralizeBtnEl.style.setProperty('display', 'none', 'important');
@@ -112,7 +112,17 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
     
                     if (sideloadEl) {
                         const originValue = app.origin || (app.isSideloaded ? '외부 설치' : '공식 스토어');
-                        if (sideloadEl) { sideloadEl.textContent = originValue; sideloadEl.classList.add('bd-fw-bold'); }
+                        const installDateSub = (originValue === '시스템 앱' || app.isSystemApp)
+                            ? ''
+                            : `설치 일시: ${app.installDate || '-'}`;
+
+                        setMainSubText(
+                            sideloadEl,
+                            originValue,
+                            installDateSub,
+                            'bd-detail-sub bd-detail-sub--sm'
+                        );
+                        sideloadEl.classList.add('bd-fw-bold');
                     }
                     if (bgStatusEl) {
                         bgStatusEl.textContent = app.isRunningBg ? '실행 중' : '중지됨';
@@ -198,34 +208,20 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                     list.replaceChildren();
                     const perms = app.requestedList || app.permissions || [];
                     if (perms.length > 0) {
-                        // perms.forEach(perm => {
-                        //     const spanElem = document.createElement('span');
-                        //     if (app.isApkFile) {
-                        //         // APK용 분석 모드 스타일
-                        //         spanElem.className = 'perm-item perm-apk';
-                        //         spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
-                        //     } else {
-                        //         // 일반 앱용 설치 모드 스타일
-                        //         const isGranted = app.grantedList && app.grantedList.includes(perm);
-                        //         spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
-                        //         spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
-                        //     }
-                        //     list.appendChild(spanElem);
-                        // });
-                        const grantedSet = new Set(app.grantedList || []);
-
-                        if (app.isApkFile) {
-                            Utils.renderPermissionCategoriesReadOnly(perms, list, {
-                                mode: 'apk',
-                                getLabel: (p) => Utils.getKoreanPermission(p),
-                            });
-                        } else {
-                            Utils.renderPermissionCategoriesReadOnly(perms, list, {
-                                mode: 'installed',
-                                grantedSet,
-                                getLabel: (p) => Utils.getKoreanPermission(p),
-                            });
-                        }
+                        perms.forEach(perm => {
+                            const spanElem = document.createElement('span');
+                            if (app.isApkFile) {
+                                // APK용 분석 모드 스타일
+                                spanElem.className = 'perm-item perm-apk';
+                                spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
+                            } else {
+                                // 일반 앱용 설치 모드 스타일
+                                const isGranted = app.grantedList && app.grantedList.includes(perm);
+                                spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
+                                spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
+                            }
+                            list.appendChild(spanElem);
+                        });
                     } else {
                         const p=document.createElement('p'); p.className='bd-muted bd-pad-5'; p.textContent='분석된 권한 정보가 없습니다.'; list.appendChild(p);
                     }

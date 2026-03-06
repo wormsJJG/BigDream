@@ -81,6 +81,7 @@ export function createViewManager(State) {
                 screenId === 'scan-info-screen' ||
                 screenId === 'app-detail-view' ||
                 screenId === 'res-privacy' ||
+                screenId === 'admin-report-detail-screen' ||
                 (window.lastScanData && screenId === 'admin-screen')
             );
 
@@ -124,8 +125,7 @@ export function createViewManager(State) {
                                 } 
                                 else {
                                     if (isScanComplete) {
-                                        // 네트워크 패킷 분석은 현재 숨김(기능 비활성)
-                                        if (target === 'res-network') {
+                                        if (target === 'res-network' || target === 'res-threats') {
                                             tab.style.display = 'none';
                                         } else {
                                             tab.style.display = 'block';

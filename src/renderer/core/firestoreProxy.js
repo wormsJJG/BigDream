@@ -103,9 +103,12 @@ export async function addDoc(collectionRef, data) {
 export async function getDocs(q) {
   if (!q || q.__type !== 'query') throw new Error('getDocs() expects a query ref');
   const res = await callMain({ op: 'query', path: q.path, constraints: q.constraints });
+  const docs = (res?.docs || []).map(d => ({ id: d.id, data: () => d.data }));
   return {
-    forEach: (fn) => (res?.docs || []).forEach(d => fn({ id: d.id, data: () => d.data })),
-    docs: (res?.docs || []).map(d => ({ id: d.id, data: () => d.data }))
+    size: docs.length,
+    empty: docs.length === 0,
+    forEach: (fn) => docs.forEach(fn),
+    docs
   };
 }
 

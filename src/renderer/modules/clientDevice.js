@@ -330,6 +330,16 @@ export function initClientDevice(ctx) {
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'create-scan-screen');
 
+                // ✅ 결과 화면에서 연결 끊기 후 검사 생성 화면으로 돌아갈 때
+                // 좌측 사이드바 하이라이트도 함께 복구
+                try {
+                    document.querySelectorAll('#logged-in-view .nav-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    const navCreate = document.getElementById('nav-create');
+                    if (navCreate) navCreate.classList.add('active');
+                } catch (_e) { }
+
                 // 3. 버튼 상태 복구 및 입력폼 초기화
                 const realStartScanBtn = document.getElementById('real-start-scan-btn');
                 if (realStartScanBtn) {

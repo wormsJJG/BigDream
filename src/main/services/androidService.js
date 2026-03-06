@@ -122,9 +122,10 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                     const chunk = allApps.slice(i, i + 20);
                     const results = await Promise.all(chunk.map(async (app) => {
                         try {
-                            const [isRunningBg, permData] = await Promise.all([
+                            const [isRunningBg, permData, installDate] = await Promise.all([
                                 service.checkIsRunningBackground(serial, app.packageName),
-                                service.getAppPermissions(serial, app.packageName)
+                                service.getAppPermissions(serial, app.packageName),
+                                service.getAppInstallTime(serial, app.packageName)
                             ]);
 
                             const permissions = [...new Set([
@@ -174,6 +175,7 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                                 dataUsage: netStats,
                                 aiScore: aiResult.score,
                                 aiGrade: aiResult.grade,
+                                installDate,
                                 reason: aiResult.reason,
                                 servicesCount: permData.servicesCount,
                                 receiversCount: permData.receiversCount
@@ -895,9 +897,31 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                     isSystemApp,      // AI 학습용 핵심 필드
                     isMasquerading,   // AI 학습용 핵심 필드
                     uid,
-                    origin
+                    origin,
+                    installDate: '-'
                 };
             }).filter(item => item !== null);
+        },
+
+
+        // 앱 설치 일시 조회 (firstInstallTime)
+        async getAppInstallTime(serial, packageName) {
+            try {
+                const output = await client.shell(serial, `dumpsys package ${packageName}`);
+                const dumpsys = (await adb.util.readAll(output)).toString();
+
+                // 예: firstInstallTime=2024-03-01 12:34:56
+                let m = dumpsys.match(/firstInstallTime=([^\r\n]+)/);
+                if (m && m[1]) return String(m[1]).trim();
+
+                // 다른 포맷 대응
+                m = dumpsys.match(/firstInstallTime:\s*([^\r\n]+)/i);
+                if (m && m[1]) return String(m[1]).trim();
+
+                return '-';
+            } catch (_e) {
+                return '-';
+            }
         },
 
         // 백그라운드 실행 여부 확인
