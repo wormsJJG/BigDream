@@ -329,7 +329,7 @@ const AdminManager = {
             // 폼 초기화
             document.getElementById('admin-create-user-form').reset();
             // 초기화 후 기본값 40 다시 세팅
-            if (quotaInput) quotaInput.value = 40;
+            if (quotaInput) quotaInput.value = 0;
 
             this.loadUsers(); // 목록 새로고침
         } catch (error) {
