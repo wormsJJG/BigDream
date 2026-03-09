@@ -208,20 +208,20 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                     list.replaceChildren();
                     const perms = app.requestedList || app.permissions || [];
                     if (perms.length > 0) {
-                        perms.forEach(perm => {
-                            const spanElem = document.createElement('span');
-                            if (app.isApkFile) {
-                                // APK용 분석 모드 스타일
-                                spanElem.className = 'perm-item perm-apk';
-                                spanElem.textContent = "🔍 " + Utils.getKoreanPermission(perm);
-                            } else {
-                                // 일반 앱용 설치 모드 스타일
-                                const isGranted = app.grantedList && app.grantedList.includes(perm);
-                                spanElem.className = `perm-item ${isGranted ? 'perm-granted' : 'perm-denied'}`;
-                                spanElem.textContent = (isGranted ? '✅ ' : '🚫 ') + Utils.getKoreanPermission(perm);
-                            }
-                            list.appendChild(spanElem);
-                        });
+                        const grantedSet = new Set(app.grantedList || []);
+
+                        if (app.isApkFile) {
+                            Utils.renderPermissionCategoriesReadOnly(perms, list, {
+                                mode: 'apk',
+                                getLabel: (perm) => Utils.getKoreanPermission(perm),
+                            });
+                        } else {
+                            Utils.renderPermissionCategoriesReadOnly(perms, list, {
+                                mode: 'installed',
+                                grantedSet,
+                                getLabel: (perm) => Utils.getKoreanPermission(perm),
+                            });
+                        }
                     } else {
                         const p=document.createElement('p'); p.className='bd-muted bd-pad-5'; p.textContent='분석된 권한 정보가 없습니다.'; list.appendChild(p);
                     }
