@@ -78,12 +78,61 @@ export function initScanController(ctx) {
         const meta = payload.meta || {};
         const deviceInfo = payload.deviceInfo || {};
 
-        setText('scan-info-examiner-name', meta.clientName || '-');
-        setText('scan-info-examiner-phone', meta.clientPhone || deviceInfo.phoneNumber || '-');
+        const pick = (...candidates) => {
+            for (const v of candidates) {
+                if (v === null || v === undefined) continue;
+                const s = String(v).trim();
+                if (!s) continue;
+                if (s.includes('익명')) continue;
+                if (s === '000-0000-0000' || s === '0000-00-00' || s === '0001-01-01') continue;
+                return s;
+            }
+            return '-';
+        };
 
-        setText('scan-info-model', deviceInfo.model || '-');
-        setText('scan-info-os', deviceInfo.os || '-');
-        setText('scan-info-serial', deviceInfo.serial || '-');
+        const examinerName = pick(
+            meta.targetName,
+            meta.targetUserName,
+            meta.subjectName,
+            meta.personName,
+            meta.clientName,
+            payload.targetInfo?.name,
+            payload.target?.name,
+            payload.subject?.name,
+            payload.clientInfo?.name,
+            payload.client?.name,
+            payload.clientName,
+            payload.examinerName,
+            payload.examiner?.name,
+            meta.examinerName
+        );
+        const examinerPhone = pick(
+            meta.targetPhone,
+            meta.targetMobile,
+            meta.subjectPhone,
+            meta.subjectMobile,
+            meta.personPhone,
+            meta.clientPhone,
+            payload.targetInfo?.phone,
+            payload.targetInfo?.mobile,
+            payload.target?.phone,
+            payload.target?.mobile,
+            payload.subject?.phone,
+            payload.subject?.mobile,
+            payload.clientInfo?.phone,
+            payload.client?.phone,
+            payload.clientPhone,
+            payload.examinerPhone,
+            payload.examiner?.phone,
+            meta.examinerPhone
+        );
+
+        setText('scan-info-examiner-name', examinerName);
+        setText('scan-info-examiner-phone', examinerPhone);
+
+        setText('scan-info-model', pick(deviceInfo.model));
+        setText('scan-info-os', pick(deviceInfo.os, deviceInfo.osVersion, deviceInfo.version));
+        setText('scan-info-serial', pick(deviceInfo.serial));
         setText('scan-info-root', formatRootStatus(deviceInfo));
 
         const savedAt = meta.savedAt || fileMeta?.savedAt || fileMeta?.mtimeMs;

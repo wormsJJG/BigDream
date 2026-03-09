@@ -430,18 +430,59 @@ export function initActionHandlers(ctx) {
             document.getElementById('print-agency-name').textContent = State.agencyName;
 
             // 💡 [추가] 검사자 정보 테이블 바인딩
+            const pickExaminer = (...candidates) => {
+                for (const v of candidates) {
+                    if (v === null || v === undefined) continue;
+                    const s = String(v).trim();
+                    if (!s) continue;
+                    if (s.includes('익명')) continue;
+                    if (s === '000-0000-0000' || s === '0000-00-00' || s === '0001-01-01') continue;
+                    return s;
+                }
+                return '-';
+            };
+
+            const resolvedExaminerName = pickExaminer(
+                data.meta?.targetName,
+                data.meta?.targetUserName,
+                data.meta?.subjectName,
+                data.meta?.personName,
+                data.meta?.clientName,
+                data.targetInfo?.name,
+                data.target?.name,
+                data.subject?.name,
+                data.clientInfo?.name,
+                data.client?.name,
+                data.clientName,
+                isAnonName ? null : clientName
+            );
+            const resolvedExaminerPhone = pickExaminer(
+                data.meta?.targetPhone,
+                data.meta?.targetMobile,
+                data.meta?.subjectPhone,
+                data.meta?.subjectMobile,
+                data.meta?.personPhone,
+                data.meta?.clientPhone,
+                data.targetInfo?.phone,
+                data.targetInfo?.mobile,
+                data.target?.phone,
+                data.target?.mobile,
+                data.subject?.phone,
+                data.subject?.mobile,
+                data.clientInfo?.phone,
+                data.client?.phone,
+                data.clientPhone,
+                isAnonPhone ? null : clientPhone
+            );
+
             const examinerTable = document.getElementById('print-examiner-info');
             if (examinerTable) {
                 examinerTable.innerHTML = `
                     <tr>
                         <th>검사자 이름</th>
-                        <td>${isAnonName ? '익명 처리' : clientName}</td>
-                        <th>생년월일</th>
-                        <td>${isAnonDob ? '익명 처리' : clientDob}</td>
-                    </tr>
-                    <tr>
+                        <td>${resolvedExaminerName}</td>
                         <th>전화번호</th>
-                        <td colspan="3">${isAnonPhone ? '익명 처리' : clientPhone}</td>
+                        <td>${resolvedExaminerPhone}</td>
                     </tr>
                 `;
             }
@@ -451,7 +492,6 @@ export function initActionHandlers(ctx) {
             document.getElementById('print-serial').textContent = data.deviceInfo?.serial || '-';
             // NOTE: print-root는 템플릿 호스트(id="print-root")이므로, 실제 상태 표시는 별도 id를 사용한다.
             document.getElementById('print-root-status').textContent = isIos ? '판단불가 (MVT)' : (data.deviceInfo?.isRooted ? '발견됨 (위험)' : '안전함');
-            document.getElementById('print-phone').textContent = data.deviceInfo?.phoneNumber || '-';
 
             // 4. 종합 판정 및 통계
             const threatCount = suspiciousApps.length;
