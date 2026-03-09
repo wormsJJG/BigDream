@@ -532,6 +532,20 @@ export function initScanController(ctx) {
                     bdSetDashboardScrollLock(false);
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
 
+                    const applyInitialResultTabHighlight = () => {
+                        const resultSubMenu = document.getElementById('result-sub-menu');
+                        if (resultSubMenu) {
+                            resultSubMenu.classList.remove('hidden');
+                            resultSubMenu.style.display = 'block';
+                        }
+
+                        const firstTab = document.querySelector('#result-sub-menu .res-tab[data-target="res-summary"]');
+                        if (firstTab) {
+                            document.querySelectorAll('#result-sub-menu .res-tab').forEach(t => t.classList.remove('active'));
+                            firstTab.classList.add('active');
+                        }
+                    };
+
                     requestAnimationFrame(() => {
                         try {
                             ResultsRenderer.render(data);
@@ -554,11 +568,7 @@ export function initScanController(ctx) {
                         }
 
                         // 탭 하이라이트 강제 적용
-                        const firstTab = document.querySelector('.res-tab[data-target="res-summary"]');
-                        if (firstTab) {
-                            document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
-                            firstTab.classList.add('active');
-                        }
+                        applyInitialResultTabHighlight();
                     });
 
                     // 4) 네비 버튼 표시/숨김 
@@ -590,6 +600,11 @@ export function initScanController(ctx) {
                     }
 
                     await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
+
+                    // 알림 확인 후에도 첫 결과 탭 하이라이트가 유지되도록 한 번 더 보정
+                    setTimeout(() => {
+                        try { applyInitialResultTabHighlight(); } catch (_) {}
+                    }, 0);
 
                 } else if (result.message !== '열기 취소') {
                     await CustomUI.alert(`❌ 파일 열기 실패: ${result.error || result.message}`);
