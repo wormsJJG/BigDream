@@ -213,13 +213,13 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
                         if (app.isApkFile) {
                             Utils.renderPermissionCategoriesReadOnly(perms, list, {
                                 mode: 'apk',
-                                getLabel: (perm) => Utils.getKoreanPermission(perm),
+                                getLabel: (p) => Utils.getKoreanPermission(p),
                             });
                         } else {
                             Utils.renderPermissionCategoriesReadOnly(perms, list, {
                                 mode: 'installed',
                                 grantedSet,
-                                getLabel: (perm) => Utils.getKoreanPermission(perm),
+                                getLabel: (p) => Utils.getKoreanPermission(p),
                             });
                         }
                     } else {

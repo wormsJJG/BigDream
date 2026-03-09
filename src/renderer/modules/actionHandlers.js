@@ -143,35 +143,131 @@ export function initActionHandlers(ctx) {
             }
         });
     }
-    function ensurePermissionModal() {
-        const modal = document.getElementById('perm-modal-overlay');
-        if (!modal) return;
-        modal.classList.remove('hidden');
-    }
 
-    function hidePermissionModal() {
-        const modal = document.getElementById('perm-modal-overlay');
-        if (!modal) return;
-        modal.classList.add('hidden');
-    }
+        function ensurePermissionModal() {
+            const modal = document.getElementById('perm-modal-overlay');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+        }
 
-    // 2. 무력화
-    const neutralizeBtn = document.getElementById('neutralize-btn');
-    if (neutralizeBtn) {
+        function hidePermissionModal() {
+            const modal = document.getElementById('perm-modal-overlay');
+            if (!modal) return;
+            modal.classList.add('hidden');
+        }
+
+        function bindPermissionModalControls() {
+            const modal = document.getElementById('perm-modal-overlay');
+            const box = modal?.querySelector('.bd-perm-modal-box');
+            const cancelBtn = document.getElementById('perm-cancel-btn');
+            const confirmBtn = document.getElementById('perm-confirm-btn');
+
+            if (modal && modal.dataset.overlayBound !== '1') {
+                modal.dataset.overlayBound = '1';
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) hidePermissionModal();
+                });
+            }
+
+            if (box && box.dataset.boxBound !== '1') {
+                box.dataset.boxBound = '1';
+                box.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+            }
+
+            if (cancelBtn && cancelBtn.dataset.bound !== '1') {
+                cancelBtn.dataset.bound = '1';
+                cancelBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    hidePermissionModal();
+                });
+            }
+
+            if (confirmBtn && confirmBtn.dataset.bound !== '1') {
+                confirmBtn.dataset.bound = '1';
+                confirmBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const container = document.getElementById('perm-chip-container');
+                    const packageName = confirmBtn.dataset.package;
+                    const appName = confirmBtn.dataset.appname;
+                    const modalEl = document.getElementById('perm-modal-overlay');
+
+                    if (!container || !packageName) return;
+
+                    const selectedPerms = Array.from(container.querySelectorAll('.bd-perm-chip'))
+                        .filter(chip => chip.dataset.selected === '1')
+                        .map(chip => chip.dataset.perm)
+                        .filter(Boolean);
+
+                    if (selectedPerms.length === 0) {
+                        hidePermissionModal();
+                        await CustomUI.alert('선택된 권한이 없습니다.');
+                        return;
+                    }
+
+                    hidePermissionModal();
+
+                    const ok = await CustomUI.confirm(
+                        `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
+                    );
+
+                    if (!ok) {
+                        if (modalEl) modalEl.classList.remove('hidden');
+                        return;
+                    }
+
+                    const neutralizeBtnEl = document.getElementById('neutralize-btn');
+                    if (neutralizeBtnEl) {
+                        neutralizeBtnEl.disabled = true;
+                        neutralizeBtnEl.textContent = '무력화 중...';
+                    }
+
+                    try {
+                        const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
+                        if (result.success) {
+                            await CustomUI.alert(`✅ 무력화 성공!
+총 ${result.count}개의 권한을 박탈했습니다.`);
+                            document.getElementById('back-to-dashboard-btn')?.click();
+                        } else {
+                            throw new Error(result.error);
+                        }
+                    } catch (err) {
+                        await CustomUI.alert(`무력화 실패: ${err.message}`);
+                    } finally {
+                        if (neutralizeBtnEl) {
+                            neutralizeBtnEl.disabled = false;
+                            neutralizeBtnEl.textContent = '🛡️ 무력화 (권한 박탈)';
+                        }
+                    }
+                });
+            }
+        }
+
+        // 2. 무력화
+        const neutralizeBtn = document.getElementById('neutralize-btn');
+        if (neutralizeBtn) {
         neutralizeBtn.addEventListener('click', async () => {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
+            // const perms = await window.electronAPI.getGrantedPermissions(packageName);
+            // console.log('권한 목록:', perms);
             const rawPerms = await window.electronAPI.getGrantedPermissions(packageName);
+
             const perms = Array.from(new Set(
-                (rawPerms ?? [])
-                    .map((perm) => String(perm).trim())
-                    .filter((perm) => perm.startsWith('android.permission.'))
+            (rawPerms ?? [])
+                .map(p => String(p).trim())
+                .filter(p => p.startsWith('android.permission.'))
             ));
 
             console.log('권한 목록(raw):', rawPerms?.length, rawPerms);
             console.log('권한 목록(normalized):', perms.length, perms);
 
+            bindPermissionModalControls();
             ensurePermissionModal();
 
             const confirmBtnForData = document.getElementById('perm-confirm-btn');
@@ -192,23 +288,24 @@ export function initActionHandlers(ctx) {
                 if (!btn) return;
 
                 const chips = [...container.querySelectorAll('.bd-perm-chip')];
-                const allOn = chips.length > 0 && chips.every((chip) => chip.dataset.selected === '1');
+                const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
 
                 btn.classList.toggle('is-active', allOn);
                 btn.textContent = allOn ? '전체 해제' : '전체 선택';
             };
 
             window.Utils.renderPermissionCategories(perms, container, updateSelectAll);
-            updateSelectAll();
+
+            updateSelectAll(); // ✅ 초기 상태 반영
 
             const selectAllBtn = document.getElementById('perm-select-all-btn');
             if (selectAllBtn) {
                 selectAllBtn.onclick = () => {
                     const chips = [...container.querySelectorAll('.bd-perm-chip')];
-                    const allOn = chips.length > 0 && chips.every((chip) => chip.dataset.selected === '1');
+                    const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
                     const next = !allOn;
 
-                    chips.forEach((chip) => {
+                    chips.forEach(chip => {
                         chip.dataset.selected = next ? '1' : '0';
                         chip.classList.toggle('is-selected', next);
                     });
@@ -222,29 +319,28 @@ export function initActionHandlers(ctx) {
                 searchInput.value = '';
                 searchInput.oninput = () => {
                     const q = searchInput.value.trim().toLowerCase();
-                    const defaultOpenCats = window.Utils?.DEFAULT_OPEN_CATS || new Set();
 
                     const cats = [...container.querySelectorAll('.bd-perm-cat')];
-                    cats.forEach((catEl) => {
-                        const chips = [...catEl.querySelectorAll('.bd-perm-chip')];
-                        let anyVisible = false;
+                    cats.forEach(catEl => {
+                    const chips = [...catEl.querySelectorAll('.bd-perm-chip')];
+                    let anyVisible = false;
 
-                        chips.forEach((chip) => {
-                            const chipText = (chip.textContent || '').toLowerCase();
-                            const ok = q === '' ? true : chipText.includes(q);
-                            chip.style.display = ok ? '' : 'none';
-                            if (ok) anyVisible = true;
-                        });
+                    chips.forEach(chip => {
+                        const text = (chip.textContent || '').toLowerCase();
+                        const ok = q === '' ? true : text.includes(q);
+                        chip.style.display = ok ? '' : 'none';
+                        if (ok) anyVisible = true;
+                    });
 
-                        if (q !== '') {
-                            catEl.style.display = anyVisible ? '' : 'none';
-                            if (anyVisible) catEl.classList.remove('collapsed');
-                        } else {
-                            catEl.style.display = '';
-                            const catName = catEl.dataset.cat;
-                            if (defaultOpenCats.has(catName)) catEl.classList.remove('collapsed');
-                            else catEl.classList.add('collapsed');
-                        }
+                    if (q !== '') {
+                        catEl.style.display = anyVisible ? '' : 'none';
+                        if (anyVisible) catEl.classList.remove('collapsed');
+                    } else {
+                        catEl.style.display = '';
+                        const catName = catEl.dataset.cat;
+                        if (DEFAULT_OPEN_CATS.has(catName)) catEl.classList.remove('collapsed');
+                        else catEl.classList.add('collapsed');
+                    }
                     });
                 };
             }
@@ -718,13 +814,6 @@ export function initActionHandlers(ctx) {
     const AdminManager = {
 
         currentUserUid: null, // 현재 보고 있는 상세 페이지의 업체 UID
-    quotaHistoryState: {
-        allRows: [],
-        filteredRows: [],
-        page: 1,
-        pageSize: 10,
-        keyword: ''
-    },
 
         init() {
             console.log("🚀 AdminManager.init() 시작됨!");
@@ -753,103 +842,33 @@ export function initActionHandlers(ctx) {
             });
             navMenu.insertBefore(li, navMenu.firstChild);
 
+            const tabContainer = document.querySelector('.admin-tabs'); // 탭 버튼 감싸는 div 가정
+            if (tabContainer && !document.getElementById('btn-abnormal-logs')) {
+                const abBtn = document.createElement('button');
+                abBtn.className = 'admin-tab-btn';
+                abBtn.id = 'btn-abnormal-logs';
+                abBtn.dataset.target = 'admin-tab-abnormal';
+                abBtn.innerText = '⚠️ 비정상 로그';
+                tabContainer.appendChild(abBtn);
+
+                // 탭 클릭 이벤트 연결
+                abBtn.addEventListener('click', () => this.switchTab('admin-tab-abnormal'));
+            }
+
             // 기존 탭 이벤트 연결
             document.querySelectorAll('.admin-tab-btn').forEach(btn => {
-                if (btn.dataset.boundClick === 'true') return;
-                btn.dataset.boundClick = 'true';
                 btn.addEventListener('click', () => this.switchTab(btn.dataset.target));
             });
 
             // 이벤트 리스너들
             const createUserForm = document.getElementById('admin-create-user-form');
-            if (createUserForm && createUserForm.dataset.boundSubmit !== 'true') {
-                createUserForm.dataset.boundSubmit = 'true';
-                createUserForm.addEventListener('submit', (e) => this.createUser(e));
-            }
+            if (createUserForm) createUserForm.addEventListener('submit', (e) => this.createUser(e));
 
             const refreshBtn = document.getElementById('refresh-users-btn');
-            if (refreshBtn && refreshBtn.dataset.boundClick !== 'true') {
-                refreshBtn.dataset.boundClick = 'true';
-                refreshBtn.addEventListener('click', () => this.loadUsers());
-            }
-
-            const refreshReportsBtn = document.getElementById('refresh-reports-btn');
-            if (refreshReportsBtn && refreshReportsBtn.dataset.boundClick !== 'true') {
-                refreshReportsBtn.dataset.boundClick = 'true';
-                refreshReportsBtn.addEventListener('click', () => this.loadReports());
-            }
-
-            const refreshQuotaHistoryBtn = document.getElementById('refresh-quota-history-btn');
-            if (refreshQuotaHistoryBtn && refreshQuotaHistoryBtn.dataset.boundClick !== 'true') {
-                refreshQuotaHistoryBtn.dataset.boundClick = 'true';
-                refreshQuotaHistoryBtn.addEventListener('click', () => this.loadQuotaHistory());
-            }
-
-            const quotaHistorySearchBtn = document.getElementById('quota-history-search-btn');
-            if (quotaHistorySearchBtn && quotaHistorySearchBtn.dataset.boundClick !== 'true') {
-                quotaHistorySearchBtn.dataset.boundClick = 'true';
-                quotaHistorySearchBtn.addEventListener('click', () => this.applyQuotaHistoryFilter(true));
-            }
-
-            const quotaHistorySearchResetBtn = document.getElementById('quota-history-search-reset-btn');
-            if (quotaHistorySearchResetBtn && quotaHistorySearchResetBtn.dataset.boundClick !== 'true') {
-                quotaHistorySearchResetBtn.dataset.boundClick = 'true';
-                quotaHistorySearchResetBtn.addEventListener('click', () => {
-                    const input = document.getElementById('quota-history-search-input');
-                    if (input) input.value = '';
-                    this.applyQuotaHistoryFilter(true);
-                });
-            }
-
-            const quotaHistorySearchInput = document.getElementById('quota-history-search-input');
-            if (quotaHistorySearchInput && quotaHistorySearchInput.dataset.boundKeydown !== 'true') {
-                quotaHistorySearchInput.dataset.boundKeydown = 'true';
-                quotaHistorySearchInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') this.applyQuotaHistoryFilter(true);
-                });
-            }
-
-            const roleSelect = document.getElementById('user-role-select');
-            if (roleSelect && roleSelect.dataset.boundChange !== 'true') {
-                roleSelect.dataset.boundChange = 'true';
-                roleSelect.addEventListener('change', () => this.updateCreateUserFormByRole());
-            }
-            this.updateCreateUserFormByRole();
+            if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
 
             // 상세페이지 닫기(뒤로가기) 버튼용 컨테이너 생성
             this.createDetailViewContainer();
-        },
-
-        updateCreateUserFormByRole() {
-            const roleSelect = document.getElementById('user-role-select');
-            const quotaRow = document.getElementById('new-user-quota-row');
-            const quotaReasonRow = document.getElementById('new-user-quota-reason-row');
-            const quotaInput = document.getElementById('new-user-quota');
-            const quotaReasonInput = document.getElementById('new-user-quota-reason');
-
-            const role = roleSelect?.value || 'user';
-            const isAdmin = role === 'admin';
-
-            if (quotaRow) quotaRow.style.display = isAdmin ? 'none' : '';
-            if (quotaReasonRow) quotaReasonRow.style.display = isAdmin ? 'none' : '';
-
-            if (quotaInput) {
-                if (isAdmin) {
-                    quotaInput.dataset.prevValue = quotaInput.value;
-                    quotaInput.value = 0;
-                } else if (quotaInput.value === '' && quotaInput.dataset.prevValue) {
-                    quotaInput.value = quotaInput.dataset.prevValue;
-                }
-            }
-
-            if (quotaReasonInput) {
-                if (isAdmin) {
-                    quotaReasonInput.dataset.prevValue = quotaReasonInput.value;
-                    quotaReasonInput.value = '';
-                } else if (!quotaReasonInput.value && quotaReasonInput.dataset.prevValue) {
-                    quotaReasonInput.value = quotaReasonInput.dataset.prevValue;
-                }
-            }
         },
 
         // 상세 페이지용 HTML 구조 생성 (최초 1회)
@@ -942,8 +961,40 @@ export function initActionHandlers(ctx) {
                 }
             });
 
-            if (tabId === 'admin-tab-abnormal') this.loadAbnormalLogs();
-            if (tabId === 'admin-tab-quota-history') this.loadQuotaHistory();
+            // 동적으로 생성된 탭(비정상 로그) 처리
+            if (tabId === 'admin-tab-abnormal') {
+                // HTML에 콘텐츠 영역이 없을 수 있으므로 동적 생성
+                let abContent = document.getElementById('admin-tab-abnormal');
+                if (!abContent) {
+                    abContent = document.createElement('div');
+                    abContent.id = 'admin-tab-abnormal';
+                    abContent.className = 'admin-tab-content active';
+                    abContent.innerHTML = `
+                        <h3>⚠️ 비정상/에러 로그 감지</h3>
+                        <div style="margin-bottom:10px; color:#666; font-size:13px;">
+                            * <b>Error:</b> 검사 중 오류 발생 <br>
+                            * <b>Incomplete:</b> 시작은 했으나 종료 기록 없음 (강제종료/튕김)
+                        </div>
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>시간</th>
+                                    <th>업체명</th>
+                                    <th>기기모드</th>
+                                    <th>상태</th>
+                                    <th>내용</th>
+                                </tr>
+                            </thead>
+                            <tbody id="abnormal-log-body"></tbody>
+                        </table>
+                    `;
+                    document.querySelector('.admin-content-area').appendChild(abContent);
+                } else {
+
+                }
+                this.loadAbnormalLogs();
+            }
+
             if (tabId === 'admin-tab-list') this.loadUsers();
             if (tabId === 'admin-tab-reports') this.loadReports();
         },
@@ -958,7 +1009,6 @@ export function initActionHandlers(ctx) {
             const idInput = document.getElementById('new-user-id');
             const pwdInput = document.getElementById('new-user-pwd');
             const quotaInput = document.getElementById('new-user-quota');
-            const quotaReasonInput = document.getElementById('new-user-quota-reason');
             const roleSelect = document.getElementById('user-role-select');
 
             const companyName = nameInput.value.trim(); // 업체명
@@ -966,31 +1016,15 @@ export function initActionHandlers(ctx) {
             const password = pwdInput.value;
             const selectedRole = roleSelect.value; // 'user', 'distributor', 'admin'
 
-            // 횟수값 확실하게 숫자(Integer)로 변환
-            let quota = parseInt(quotaInput?.value, 10);
-            if (isNaN(quota)) quota = 0;
-            if (selectedRole === 'admin') quota = 0;
-
-            const quotaReason = selectedRole === 'admin'
-                ? ''
-                : (quotaReasonInput?.value || '').trim();
+            // 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
+            let quota = parseInt(quotaInput.value, 10);
+            if (isNaN(quota)) quota = 40;
 
             const fullEmail = inputId + ID_DOMAIN;
 
             // 생성 확인 메시지
             const roleText = roleSelect.options[roleSelect.selectedIndex]?.text || selectedRole;
-            const confirmLines = [
-                `[생성 확인]`,
-                ``,
-                `업체명: ${companyName}`,
-                `ID: ${inputId}`,
-                `유형: ${roleText}`,
-                `기본 횟수: ${quota}회`
-            ];
-            if (selectedRole !== 'admin' && quota > 0) {
-                confirmLines.push(`초기 지급 사유: ${quotaReason || '업체 등록 초기 지급'}`);
-            }
-            if (!await CustomUI.confirm(confirmLines.join('\n'))) return;
+            if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n유형: ${roleText}\n기본 횟수: ${quota}회`)) return;
 
             try {
                 // ✅ Renderer에서는 Firebase SDK로 계정 생성 금지. Main(IPC)에서 생성한다.
@@ -1011,28 +1045,12 @@ export function initActionHandlers(ctx) {
                     lastScanDate: null
                 });
 
-                if (selectedRole !== 'admin' && quota !== 0) {
-                    const actor = authService?.getCurrentUser?.() || null;
-                    await addDoc(collection(null, "users", newUid, "quotaHistory"), {
-                        change: quota,
-                        beforeQuota: 0,
-                        afterQuota: quota,
-                        reason: quotaReason || '업체 등록 초기 지급',
-                        actorUid: actor?.uid || null,
-                        actorEmail: actor?.email || 'unknown',
-                        companyName: companyName,
-                        createdAt: serverTimestamp(),
-                        actionType: 'create'
-                    });
-                }
-
                 await CustomUI.alert(`✅ 생성 완료!\n업체명: ${companyName}\n아이디: ${inputId}`);
 
                 // 폼 초기화
                 document.getElementById('admin-create-user-form').reset();
-                if (quotaInput) quotaInput.value = 0;
-                if (quotaReasonInput) quotaReasonInput.value = '';
-                this.updateCreateUserFormByRole();
+                // 초기화 후 기본값 40 다시 세팅
+                if (quotaInput) quotaInput.value = 40;
 
                 this.loadUsers(); // 목록 새로고침
             } catch (error) {
@@ -1465,189 +1483,7 @@ export function initActionHandlers(ctx) {
                 tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로그 로드 실패: ${e.message}</td></tr>`;
             }
         },
-        async loadQuotaHistory() {
-        const tbody = document.getElementById('admin-quota-history-body');
-        if (!tbody) return;
-
-        const paginationEl = document.getElementById('admin-quota-history-pagination');
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">변경 이력을 불러오는 중...</td></tr>';
-        if (paginationEl) paginationEl.innerHTML = '';
-
-        try {
-            const usersSnap = await getDocs(query(collection(null, "users"), orderBy("createdAt", "desc")));
-            const historyRows = [];
-
-            for (const userDoc of usersSnap.docs) {
-                const userData = userDoc.data() || {};
-                if (userData.role === 'admin') continue;
-
-                const historySnap = await getDocs(
-                    query(
-                        collection(null, "users", userDoc.id, "quotaHistory"),
-                        orderBy("createdAt", "desc"),
-                        limit(200)
-                    )
-                );
-
-                historySnap.forEach((historyDoc) => {
-                    const item = historyDoc.data() || {};
-                    historyRows.push({
-                        uid: userDoc.id,
-                        companyName: item.companyName || userData.companyName || '미등록 업체',
-                        userId: userData.userId || userData.email || userDoc.id,
-                        change: Number(item.change || 0),
-                        beforeQuota: Number(item.beforeQuota || 0),
-                        afterQuota: Number(item.afterQuota || 0),
-                        reason: item.reason || '-',
-                        actorEmail: item.actorEmail || '-',
-                        createdAt: item.createdAt || null,
-                        actionType: item.actionType || 'adjust'
-                    });
-                });
-            }
-
-            historyRows.sort((a, b) => {
-                const aTime = toDateSafe(a.createdAt)?.getTime() || 0;
-                const bTime = toDateSafe(b.createdAt)?.getTime() || 0;
-                return bTime - aTime;
-            });
-
-            this.quotaHistoryState = {
-                ...(this.quotaHistoryState || {}),
-                allRows: historyRows,
-                filteredRows: historyRows,
-                page: 1,
-                pageSize: 10,
-                keyword: ''
-            };
-
-            this.applyQuotaHistoryFilter(true);
-        } catch (e) {
-            console.error(e);
-            tbody.innerHTML = `<tr><td colspan="6" style="color:red;">이력 로드 실패: ${e.message}</td></tr>`;
-            if (paginationEl) paginationEl.innerHTML = '';
-        }
-    },
-
-    applyQuotaHistoryFilter(resetPage = false) {
-        const state = this.quotaHistoryState || { allRows: [], filteredRows: [], page: 1, pageSize: 10, keyword: '' };
-        const input = document.getElementById('quota-history-search-input');
-        const keyword = String(input?.value || '').trim().toLowerCase();
-
-        const filteredRows = (state.allRows || []).filter((item) => {
-            if (!keyword) return true;
-            const companyName = String(item.companyName || '').toLowerCase();
-            const userId = String(item.userId || '').toLowerCase();
-            return companyName.includes(keyword) || userId.includes(keyword);
-        });
-
-        this.quotaHistoryState = {
-            ...state,
-            filteredRows,
-            keyword,
-            page: resetPage ? 1 : Math.max(1, state.page || 1),
-            pageSize: state.pageSize || 10
-        };
-
-        this.renderQuotaHistoryTable();
-        this.renderQuotaHistoryPagination();
-    },
-
-    renderQuotaHistoryTable() {
-        const tbody = document.getElementById('admin-quota-history-body');
-        if (!tbody) return;
-
-        const state = this.quotaHistoryState || {};
-        const rows = state.filteredRows || [];
-        const pageSize = Number(state.pageSize || 10);
-        const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-        const currentPage = Math.min(Math.max(1, Number(state.page || 1)), totalPages);
-        this.quotaHistoryState.page = currentPage;
-
-        if (rows.length === 0) {
-            const emptyMessage = state.keyword
-                ? `<b>${state.keyword}</b> 검색 결과가 없습니다.`
-                : '등록된 횟수 변경 이력이 없습니다.';
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#888; padding:20px;">${emptyMessage}</td></tr>`;
-            return;
-        }
-
-        const startIndex = (currentPage - 1) * pageSize;
-        const pageRows = rows.slice(startIndex, startIndex + pageSize);
-
-        tbody.innerHTML = pageRows.map((item) => {
-            const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
-            const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
-            const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
-            return `
-                <tr>
-                    <td>${formatDateTimeKR(item.createdAt)}</td>
-                    <td>
-                        <div style="font-weight:700;">${item.companyName}</div>
-                        <div style="font-size:12px; color:#888;">${item.userId}</div>
-                    </td>
-                    <td style="font-weight:700; color:${changeColor};">${changeText}</td>
-                    <td>${item.beforeQuota} → ${item.afterQuota}</td>
-                    <td>${reasonPrefix}: ${item.reason}</td>
-                    <td>${item.actorEmail}</td>
-                </tr>
-            `;
-        }).join('');
-    },
-
-    renderQuotaHistoryPagination() {
-        const paginationEl = document.getElementById('admin-quota-history-pagination');
-        if (!paginationEl) return;
-
-        const state = this.quotaHistoryState || {};
-        const rows = state.filteredRows || [];
-        const pageSize = Number(state.pageSize || 10);
-        const totalPages = Math.ceil(rows.length / pageSize);
-
-        if (!rows.length || totalPages <= 1) {
-            paginationEl.innerHTML = '';
-            return;
-        }
-
-        const currentPage = Math.min(Math.max(1, Number(state.page || 1)), totalPages);
-        const startPage = Math.max(1, currentPage - 4);
-        const endPage = Math.min(totalPages, startPage + 9);
-        const finalStartPage = Math.max(1, endPage - 9);
-
-        const makeBtn = (label, page, isActive = false, disabled = false) => {
-            const button = document.createElement('button');
-            button.className = isActive ? 'admin-btn btn-quota active' : 'secondary-button';
-            button.textContent = label;
-            button.disabled = disabled;
-            button.style.minWidth = '36px';
-            button.style.padding = '6px 10px';
-            if (isActive) {
-                button.style.background = '#3A539B';
-                button.style.color = '#fff';
-            }
-            if (!disabled) {
-                button.addEventListener('click', () => {
-                    this.quotaHistoryState.page = page;
-                    this.renderQuotaHistoryTable();
-                    this.renderQuotaHistoryPagination();
-                });
-            }
-            return button;
-        };
-
-        paginationEl.innerHTML = '';
-        paginationEl.appendChild(makeBtn('«', 1, false, currentPage === 1));
-        paginationEl.appendChild(makeBtn('‹', currentPage - 1, false, currentPage === 1));
-
-        for (let page = finalStartPage; page <= endPage; page++) {
-            paginationEl.appendChild(makeBtn(String(page), page, page === currentPage, false));
-        }
-
-        paginationEl.appendChild(makeBtn('›', currentPage + 1, false, currentPage === totalPages));
-        paginationEl.appendChild(makeBtn('»', totalPages, false, currentPage === totalPages));
-    },
-
-    // [탭 3] 전송된 리포트 로딩 (신규 기능)
+        // [탭 3] 전송된 리포트 로딩 (신규 기능)
         async loadReports() {
             const tbody = document.getElementById('admin-reports-body');
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">데이터 조회 중...</td></tr>';
@@ -1706,12 +1542,6 @@ export function initActionHandlers(ctx) {
     //        detail-screen이 logged-in-view 바깥에 있는 현재 레이아웃에서는 화면이 하얗게 비는 문제가 발생.
     //        -> ViewManager.showScreen으로 스크린 전환을 통일하고, 템플릿/DOM 준비 후 바인딩.
     window.viewReportDetail = async (reportId) => {
-        try {
-            document.querySelectorAll('#logged-in-view .nav-item').forEach(item => item.classList.remove('active'));
-            const navAdmin = document.getElementById('nav-admin');
-            if (navAdmin) navAdmin.classList.add('active');
-        } catch (_e) { }
-
         const loggedInView = document.getElementById('logged-in-view');
         const detailScreen = document.getElementById('admin-report-detail-screen');
         if (!loggedInView || !detailScreen) return;
@@ -1827,16 +1657,10 @@ export function initActionHandlers(ctx) {
                     }
 
                     // 권한 리스트 생성 (HTML)
-                    const permissionList = Array.isArray(app.grantedList) && app.grantedList.length > 0
-                        ? app.grantedList
-                        : (Array.isArray(app.requestedList) && app.requestedList.length > 0
-                            ? app.requestedList
-                            : (Array.isArray(app.permissions) ? app.permissions : []));
-
                     let permissionHtml = '';
-                    if (permissionList.length > 0) {
-                        permissionHtml = permissionList.map(perm => {
-                            const shortPerm = String(perm || '').replace('android.permission.', '');
+                    if (app.grantedList && app.grantedList.length > 0) {
+                        permissionHtml = app.grantedList.map(perm => {
+                            const shortPerm = perm.replace('android.permission.', '');
                             return `<span class="perm-badge granted">✔ ${shortPerm}</span>`;
                         }).join('');
                     } else {
@@ -1872,7 +1696,7 @@ export function initActionHandlers(ctx) {
                                 </div>
     
                                 <div class="detail-box">
-                                    <label>🔑 허용된 주요 권한 (${app.grantedCount || permissionList.length || 0}개)</label>
+                                    <label>🔑 허용된 주요 권한 (${app.grantedCount || 0}개)</label>
                                     <div class="perm-container">
                                         ${permissionHtml}
                                     </div>
@@ -1935,153 +1759,264 @@ export function initActionHandlers(ctx) {
     };
 
     window.changeQuota = async (uid, currentQuota) => {
-    console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`);
+        console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`); // 디버깅용 로그
 
-    if (typeof CustomUI === 'undefined') {
-        alert("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.");
-        return;
-    }
-
-    const input = await CustomUI.prompt(`[횟수 조정]\n현재 횟수: ${currentQuota}회\n\n추가(+)하거나 차감(-)할 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
-
-    if (input === null) return;
-    const change = parseInt(input, 10);
-
-    if (isNaN(change)) {
-        await CustomUI.alert("❌ 숫자만 입력해주세요.");
-        return;
-    }
-    if (change === 0) return;
-
-    const reason = await CustomUI.prompt(`[사유 입력]\n${change > 0 ? '추가' : '차감'} 사유를 입력하세요.`, "");
-    if (reason === null) return;
-
-    const trimmedReason = String(reason || '').trim();
-    if (!trimmedReason) {
-        await CustomUI.alert("❌ 횟수 변경 사유를 입력해주세요.");
-        return;
-    }
-
-    try {
-        const userRef = doc(null, "users", uid);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) throw new Error("업체 정보를 찾을 수 없습니다.");
-
-        const userData = userSnap.data() || {};
-        const safeCurrentQuota = Number(userData.quota ?? currentQuota ?? 0);
-        const newQuota = safeCurrentQuota + change;
-
-        if (newQuota < 0) {
-            await CustomUI.alert("❌ 횟수는 0보다 작을 수 없습니다.");
+        // CustomUI가 아직 로드되지 않았을 경우를 대비한 안전장치
+        if (typeof CustomUI === 'undefined') {
+            alert("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.");
             return;
         }
 
-        await updateDoc(userRef, {
-            quota: newQuota
-        });
+        const input = await CustomUI.prompt(`[횟수 조정]\n현재 횟수: ${currentQuota}회\n\n추가(+)하거나 차감(-)할 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
 
-        const actor = authService?.getCurrentUser?.() || null;
-        await addDoc(collection(null, "users", uid, "quotaHistory"), {
-            change,
-            beforeQuota: safeCurrentQuota,
-            afterQuota: newQuota,
-            reason: trimmedReason,
-            actorUid: actor?.uid || null,
-            actorEmail: actor?.email || 'unknown',
-            companyName: userData.companyName || '미등록 업체',
-            createdAt: serverTimestamp(),
-            actionType: 'adjust'
-        });
+        if (!input) return; // 취소 누름
+        const change = parseInt(input, 10);
 
-        await CustomUI.alert(`✅ 변경 완료!\n${safeCurrentQuota}회 -> ${newQuota}회\n사유: ${trimmedReason}`);
+        if (isNaN(change)) {
+            await CustomUI.alert("❌ 숫자만 입력해주세요.");
+            return;
+        }
+        if (change === 0) return;
 
-        if (AdminManager.currentUserUid === uid) {
-            AdminManager.viewUserDetail(uid);
-        } else {
+        try {
+            // 결과값 미리 계산
+            const newQuota = parseInt(currentQuota) + change;
+            if (newQuota < 0) {
+                await CustomUI.alert("❌ 횟수는 0보다 작을 수 없습니다.");
+                return;
+            }
+
+            // DB 업데이트 (increment 사용)
+            const userRef = doc(null, "users", uid);
+            await updateDoc(userRef, {
+                quota: increment(change)
+            });
+
+            await CustomUI.alert(`✅ 변경 완료!\n${currentQuota}회 -> ${newQuota}회`);
+
+            // 화면 새로고침 (상세페이지 보고 있으면 상세페이지 갱신, 아니면 목록 갱신)
+            if (AdminManager.currentUserUid === uid) {
+                AdminManager.viewUserDetail(uid);
+            } else {
+                AdminManager.loadUsers();
+            }
+
+        } catch (e) {
+            console.error(e);
+            await CustomUI.alert("변경 실패: " + e.message);
+        }
+    };
+
+    window.electronAPI.onUpdateStart((version) => {
+        const modal = document.getElementById('update-modal');
+        const verText = document.getElementById('update-ver-text');
+        verText.textContent = `V${version}으로 업데이트를 시작합니다.`;
+        modal.classList.remove('hidden');
+    });
+
+    // 업데이트 진행 중
+    window.electronAPI.onUpdateProgress((data) => {
+        const fill = document.getElementById('update-progress-fill');
+        const percentText = document.getElementById('update-percent');
+        const speedText = document.getElementById('update-speed');
+        const sizeText = document.getElementById('update-size-info');
+
+        fill.style.width = `${data.percent}%`;
+        percentText.textContent = `${data.percent}%`;
+        speedText.textContent = data.bytesPerSecond;
+        sizeText.textContent = `${data.transferred} / ${data.total}`;
+    });
+
+    // 에러 발생 시
+    window.electronAPI.onUpdateError(async (msg) => {
+        await CustomUI.alert("업데이트 중 오류가 발생했습니다: " + msg);
+        document.getElementById('update-modal').classList.add('hidden');
+    });
+
+    window.viewHistory = async (uid) => {
+        const modal = document.getElementById('admin-result-modal');
+        const content = document.getElementById('admin-result-content');
+        modal.classList.remove('hidden');
+        content.innerHTML = "데이터 조회 중...";
+
+        try {
+            // users -> uid -> scanResults 서브컬렉션 조회
+            const historyRef = collection(null, "users", uid, "scanResults");
+            const q = query(historyRef, orderBy("date", "desc"));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                content.innerHTML = "<p>📭 제출된 검사 결과가 없습니다.</p>";
+                return;
+            }
+
+            let html = `<ul class="file-list" style="max-height:400px;">`;
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const date = data.date ? formatDateTimeKR(data.date) : '날짜 없음';
+                const threatCount = data.threatCount || 0;
+                const style = threatCount > 0 ? 'color:red; font-weight:bold;' : 'color:green;';
+
+                html += `
+                        <li style="padding:10px; border-bottom:1px solid #eee;">
+                            <div>🕒 <b>${date}</b></div>
+                            <div style="${style}">결과: 스파이앱 ${threatCount}개 발견</div>
+                            <div style="font-size:12px; color:#666;">모델: ${data.model} (Serial: ${data.serial})</div>
+                        </li>
+                    `;
+            });
+            html += "</ul>";
+            content.innerHTML = html;
+
+        } catch (e) {
+            content.innerHTML = `<p style="color:red;">기록 조회 실패: ${e.message}</p>`;
+        }
+    };
+
+    window.deleteUser = async (uid, name) => {
+        const msg = `⚠️ [삭제 경고]\n\n업체명: ${name}\n\n정말로 삭제하시겠습니까?\n삭제된 업체는 더 이상 로그인할 수 없으며, 모든 데이터가 제거됩니다.`;
+
+        // confirm 창 띄우기
+        if (!await CustomUI.confirm(msg)) return;
+
+        try {
+            // 1. Firestore 문서 삭제
+            // Firestore는 IPC 프록시를 사용하므로 db 인자는 null로 전달
+            await deleteDoc(doc(null, "users", uid));
+
+            // 2. 알림 및 새로고침
+            await CustomUI.alert("🗑️ 업체가 삭제되었습니다.");
+            // 상세페이지 보고 있었다면 목록으로 강제 이동
+            document.getElementById('admin-user-detail-view').classList.add('hidden');
+            document.getElementById('admin-tab-list').classList.remove('hidden');
             AdminManager.loadUsers();
+
+        } catch (e) {
+            console.error("삭제 실패:", e);
+            await CustomUI.alert("삭제 실패: " + e.message);
         }
+    };
 
-        const quotaTab = document.getElementById('admin-tab-quota-history');
-        if (quotaTab && quotaTab.classList.contains('active')) {
-            AdminManager.loadQuotaHistory();
-        }
+    // =========================================================
+    // [결과 전송] 서버로 검사 결과 데이터 전송
+    // =========================================================
+    const reportResultsBtn = document.getElementById('report-results-btn');
+    if (reportResultsBtn) {
+        reportResultsBtn.addEventListener('click', async () => {
 
-    } catch (e) {
-        console.error(e);
-        await CustomUI.alert("변경 실패: " + e.message);
-    }
-
-    if (!window.__permModalDelegationBound) {
-        window.__permModalDelegationBound = true;
-
-        document.addEventListener('click', async (e) => {
-            const confirmBtn = e.target.closest('#perm-confirm-btn');
-            const cancelBtn = e.target.closest('#perm-cancel-btn');
-            const modalEl = document.getElementById('perm-modal-overlay');
-
-            if (cancelBtn) {
-                hidePermissionModal();
+            // 1. 데이터 유효성 검사
+            if (!State.lastScanData) {
+                await CustomUI.alert("전송할 검사 결과 데이터가 없습니다.");
                 return;
             }
 
-            if (!confirmBtn) return;
+            // 2. 전송 여부 확인 (메시지 입력 받기)
+            // (입력창이 없으면 그냥 confirm으로 대체 가능, 여기선 prompt 사용)
+            const message = await CustomUI.prompt("서버로 결과를 전송하시겠습니까?\n관리자에게 남길 메모가 있다면 적어주세요.", "특이사항 없음");
+            if (message === null) return; // 취소 누름
 
-            e.preventDefault();
-            e.stopPropagation();
-
-            const container = document.getElementById('perm-chip-container');
-            const packageName = confirmBtn.dataset.package;
-            const appName = confirmBtn.dataset.appname;
-
-            if (!container || !packageName) return;
-
-            const selectedPerms = Array.from(container.querySelectorAll('button, .bd-perm-chip'))
-                .filter((btn) => btn.dataset.selected === '1')
-                .map((btn) => btn.dataset.perm)
-                .filter(Boolean);
-
-            if (selectedPerms.length === 0) {
-                hidePermissionModal();
-                await CustomUI.alert('선택된 권한이 없습니다.');
-                ensurePermissionModal();
-                return;
-            }
-
-            hidePermissionModal();
-
-            const ok = await CustomUI.confirm(
-                `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
-            );
-
-            if (!ok) {
-                if (modalEl) modalEl.classList.remove('hidden');
-                return;
-            }
-
-            const neutralizeBtn = document.getElementById('neutralize-btn');
-            if (neutralizeBtn) {
-                neutralizeBtn.disabled = true;
-                neutralizeBtn.textContent = '무력화 중...';
-            }
+            reportResultsBtn.disabled = true;
+            reportResultsBtn.textContent = "전송 중...";
 
             try {
-                const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
-                if (result.success) {
-                    await CustomUI.alert(`✅ 무력화 성공!
-총 ${result.count}개의 권한을 박탈했습니다.`);
-                    document.getElementById('back-to-dashboard-btn')?.click();
-                } else {
-                    throw new Error(result.error);
+                // 3. 데이터 수집
+                // Auth는 renderer SDK/프록시 환경에 따라 currentUser가 없을 수 있으므로
+                // 서비스가 제공하는 현재 사용자 정보를 우선 사용
+                const user = (services?.auth?.getCurrentUser && services.auth.getCurrentUser()) || auth?.currentUser || null;
+                const scanData = State.lastScanData;
+
+                // ★★★ [추가] 업체명 가져오기 (DB에서 조회) ★★★
+                let currentCompanyName = "알 수 없는 업체";
+                let currentAgencyEmail = "-";
+
+                if (user && user.uid) {
+                    currentAgencyEmail = user.email;
+                    try {
+                        const uSnap = await getDoc(doc(null, "users", user.uid));
+                        if (uSnap.exists()) {
+                            currentCompanyName = uSnap.data().companyName || user.email;
+                        }
+                    } catch (e) {
+                        console.error("업체명 조회 실패:", e);
+                    }
                 }
-            } catch (err) {
-                await CustomUI.alert(`무력화 실패: ${err.message}`);
+
+                // (1) 고객 정보 (입력폼에서 가져옴)
+                // 익명일 경우 값 처리는 client-info-form 로직을 따름
+                const clientName = document.getElementById('client-name').value || "익명";
+                const clientDob = document.getElementById('client-dob').value || "0000-00-00";
+                const clientPhone = document.getElementById('client-phone').value || "000-0000-0000";
+
+                // 발견앱 목록
+                const detectedApps = scanData.suspiciousApps
+
+                // (2) 기기 정보
+                const deviceInfo = {
+                    model: scanData.deviceInfo.model,
+                    serial: scanData.deviceInfo.serial,
+                    os: State.currentDeviceMode // 'android' or 'ios'
+                };
+
+                // 4. Firestore 전송
+                await addDoc(collection(null, "reported_logs"), {
+                    agencyId: user?.uid || 'anonymous_agent', // 보낸 업체 ID
+                    agencyName: currentCompanyName,
+                    agencyEmail: user?.email || '-',          // 보낸 업체 이메일
+
+                    // --- 요청하신 핵심 데이터 ---
+                    clientInfo: {
+                        name: clientName,
+                        dob: clientDob,
+                        phone: clientPhone
+                    },
+                    deviceInfo: deviceInfo,
+                    suspiciousApps: detectedApps,
+
+                    // --- 관리용 메타 데이터 ---
+                    threatCount: detectedApps.length,
+                    message: message, // 아까 입력받은 메모
+                    reportedAt: serverTimestamp() // 서버 시간
+                });
+
+                await CustomUI.alert("✅ 결과가 서버로 성공적으로 전송되었습니다.");
+
+            } catch (error) {
+                console.error("전송 실패:", error);
+                await CustomUI.alert("전송 실패: " + error.message);
             } finally {
-                if (neutralizeBtn) {
-                    neutralizeBtn.disabled = false;
-                    neutralizeBtn.textContent = '🛡️ 무력화 (권한 박탈)';
-                }
+                reportResultsBtn.disabled = false;
+                reportResultsBtn.textContent = "📡 서버 전송";
             }
         });
     }
 
-};}
+    // renderer.js 파일 내 (주요 함수 영역에 추가)
+
+    /**
+     * SemVer(Semantic Versioning) 규칙에 따라 두 버전 문자열을 비교합니다.
+     * @param {string} a - 비교할 첫 번째 버전 (예: '1.0.10')
+     * @param {string} b - 비교할 두 번째 버전 (예: '1.1.0')
+     * @returns {number} 1: a가 더 큼, -1: b가 더 큼, 0: 두 버전이 같음
+     */
+    function compareVersions(a, b) {
+        // 버전을 점(.) 기준으로 나눕니다.
+        const partsA = a.split('.').map(Number);
+        const partsB = b.split('.').map(Number);
+
+        // Major, Minor, Patch 순서로 각 부분을 비교합니다.
+        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const numA = partsA[i] || 0;
+            const numB = partsB[i] || 0;
+
+            if (numA > numB) {
+                return 1; // A가 B보다 큼
+            }
+            if (numA < numB) {
+                return -1; // B가 A보다 큼
+            }
+        }
+
+        return 0; // 두 버전이 같음
+    }
+
+}
