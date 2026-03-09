@@ -130,13 +130,14 @@ function createFirestoreService() {
   }
 
   function applyConstraints(baseQuery, constraints) {
-    const { where, orderBy, limit, query } = require('firebase/firestore');
+    const { where, orderBy, limit, startAfter, query } = require('firebase/firestore');
     const clauses = [];
     for (const c of (constraints || [])) {
       if (!c || !c.__type) continue;
       if (c.__type === 'where') clauses.push(where(c.field, c.op, c.value));
       if (c.__type === 'orderBy') clauses.push(orderBy(c.field, c.direction || 'asc'));
       if (c.__type === 'limit') clauses.push(limit(Number(c.n || 0)));
+      if (c.__type === 'startAfter') clauses.push(startAfter(c.value));
     }
     return query(baseQuery, ...clauses);
   }

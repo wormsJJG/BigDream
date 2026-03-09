@@ -6,6 +6,8 @@
 <button class="admin-tab-btn active" data-target="admin-tab-register">➕ 업체 등록</button>
 <button class="admin-tab-btn" data-target="admin-tab-list">🏢 업체 목록</button>
 <button class="admin-tab-btn" data-target="admin-tab-reports">📩 전송된 기록</button>
+<button class="admin-tab-btn" data-target="admin-tab-abnormal">⚠️ 비정상 로그</button>
+<button class="admin-tab-btn" data-target="admin-tab-quota-history">🕘 횟수 변경 이력</button>
 </div>
 <div class="admin-content-area">
 <div class="admin-tab-content active" id="admin-tab-register">
@@ -23,12 +25,13 @@
 <div class="form-group"><label>업체명</label><input id="new-user-name" required="" type="text"/></div>
 <div class="form-group"><label>업체 아이디</label><input id="new-user-id" required="" type="text"/></div>
 <div class="form-group"><label>비밀번호</label><input id="new-user-pwd" required="" type="text"/></div>
-<div class="form-group"><label>검사 횟수</label><input id="new-user-quota" type="number" value="0"/></div>
+<div class="form-group" id="new-user-quota-row"><label>검사 횟수</label><input id="new-user-quota" type="number" value="0"/></div>
+<div class="form-group" id="new-user-quota-reason-row"><label>초기 지급 사유</label><input id="new-user-quota-reason" type="text"/></div>
 <button class="primary-button" type="submit">계정 생성하기</button>
 </form>
 </div>
 </div>
-<div class="admin-tab-content" id="admin-tab-list">
+<div class="admin-tab-content hidden" id="admin-tab-list">
 <div class="content-card">
 <h3>등록된 업체 현황 <button class="secondary-button" id="refresh-users-btn">🔄 새로고침</button></h3>
 <table class="admin-table">
@@ -45,7 +48,7 @@
 </table>
 </div>
 </div>
-<div class="admin-tab-content" id="admin-tab-reports">
+<div class="admin-tab-content hidden" id="admin-tab-reports">
 <div class="content-card">
 <h3>전송된 리포트 목록 <button class="secondary-button" id="refresh-reports-btn">🔄 새로고침</button>
 </h3>
@@ -61,6 +64,52 @@
 </thead>
 <tbody id="admin-reports-body"></tbody>
 </table>
+</div>
+</div>
+<div class="admin-tab-content hidden" id="admin-tab-abnormal">
+<div class="content-card">
+<h3>⚠️ 비정상/에러 로그 감지</h3>
+<div style="margin-bottom:10px; color:#666; font-size:13px;">
+* <b>Error:</b> 검사 중 오류 발생 <br/>
+* <b>Incomplete:</b> 시작은 했으나 종료 기록 없음 (강제종료/튕김)
+</div>
+<table class="admin-table">
+<thead>
+<tr>
+<th>시간</th>
+<th>업체명</th>
+<th>기기모드</th>
+<th>상태</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody id="abnormal-log-body"></tbody>
+</table>
+</div>
+</div>
+<div class="admin-tab-content hidden" id="admin-tab-quota-history">
+<div class="content-card">
+<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+<h3 style="margin:0;">🕘 횟수 변경 이력 <button class="secondary-button" id="refresh-quota-history-btn">🔄 새로고침</button></h3>
+<div style="display:flex; gap:8px; align-items:center;">
+<input id="quota-history-search-input" type="text" placeholder="업체명 검색" style="min-width:220px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px;" />
+<button class="secondary-button" id="quota-history-search-btn">검색</button>
+</div>
+</div>
+<table class="admin-table">
+<thead>
+<tr>
+<th>변경 시간</th>
+<th>업체</th>
+<th>변경 수량</th>
+<th>변경 전 → 후</th>
+<th>사유</th>
+<th>관리자 이메일</th>
+</tr>
+</thead>
+<tbody id="admin-quota-history-body"></tbody>
+</table>
+<div id="quota-history-pagination"></div>
 </div>
 </div>
 </div>

@@ -18,6 +18,7 @@ export function createFirestoreService(proxy) {
     serverTimestamp: proxy.serverTimestamp,
     deleteDoc: proxy.deleteDoc,
     increment: proxy.increment,
-    limit: proxy.limit
+    limit: proxy.limit,
+    startAfter: proxy.startAfter
   };
 }
