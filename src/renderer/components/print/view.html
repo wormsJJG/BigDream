@@ -1,4 +1,23 @@
     <div id="printable-report" style="display: none;">
+        <style>
+            #printable-report .print-page .report-section:nth-of-type(-n+3) .section-heading{
+                margin:0 0 12px 0;
+                line-height:1.2;
+                white-space:nowrap;
+            }
+            #printable-report .print-page .report-section:nth-of-type(-n+3) .info-table{
+                width:100%;
+                table-layout:fixed;
+            }
+            #printable-report .print-page .report-section:nth-of-type(-n+3) .info-table th,
+            #printable-report .print-page .report-section:nth-of-type(-n+3) .info-table td{
+                text-align:center;
+                vertical-align:middle;
+                line-height:1.35;
+                padding:12px 10px;
+                word-break:keep-all;
+            }
+        </style>
         <div class="print-page">
             <header class="report-header">
                 <div class="header-logo">
@@ -23,7 +42,7 @@
                     </tr>
                     <tr>
                         <th>검사 도구</th>
-                        <td>BD-Scanner Pro v1.0</td>
+                        <td>BD-Scanner</td>
                         <th>검사 업체</th>
                         <td id="print-agency-name">Administrator</td>
                     </tr>
@@ -44,10 +63,8 @@
                         <td id="print-serial">-</td>
                     </tr>
                     <tr>
-                        <th>전화번호</th>
-                        <td id="print-phone">-</td>
                         <th>루팅 / 탈옥</th>
-                        <td id="print-root-status">-</td>
+                        <td colspan="3" id="print-root-status">-</td>
                     </tr>
                 </table>
             </div>

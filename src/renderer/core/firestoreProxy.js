@@ -46,6 +46,10 @@ export function limit(n) {
   return { __type: 'limit', n };
 }
 
+export function startAfter(value) {
+  return { __type: 'startAfter', value };
+}
+
 export function query(collectionRef, ...constraints) {
   if (!collectionRef || collectionRef.__type !== 'collection') throw new Error('query() expects a collectionRef');
   return {

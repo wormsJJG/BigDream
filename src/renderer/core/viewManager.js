@@ -125,7 +125,7 @@ export function createViewManager(State) {
                                 } 
                                 else {
                                     if (isScanComplete) {
-                                        if (target === 'res-network' || target === 'res-threats') {
+                                        if (target === 'res-network') {
                                             tab.style.display = 'none';
                                         } else {
                                             tab.style.display = 'block';

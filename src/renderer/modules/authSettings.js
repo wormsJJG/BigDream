@@ -392,7 +392,14 @@ export function initAuthSettings(ctx) {
 
                 // Examiner/client info (best-effort, supports multiple legacy schemas)
                 const examinerName = pick(
+                    data.meta?.targetName,
+                    data.meta?.targetUserName,
+                    data.meta?.subjectName,
+                    data.meta?.personName,
                     data.meta?.clientName,
+                    data.targetInfo?.name,
+                    data.target?.name,
+                    data.subject?.name,
                     data.clientInfo?.name,
                     data.client?.name,
                     data.clientName,
@@ -401,7 +408,18 @@ export function initAuthSettings(ctx) {
                     data.meta?.examinerName
                 );
                 const examinerPhone = pick(
+                    data.meta?.targetPhone,
+                    data.meta?.targetMobile,
+                    data.meta?.subjectPhone,
+                    data.meta?.subjectMobile,
+                    data.meta?.personPhone,
                     data.meta?.clientPhone,
+                    data.targetInfo?.phone,
+                    data.targetInfo?.mobile,
+                    data.target?.phone,
+                    data.target?.mobile,
+                    data.subject?.phone,
+                    data.subject?.mobile,
                     data.clientInfo?.phone,
                     data.client?.phone,
                     data.clientPhone,

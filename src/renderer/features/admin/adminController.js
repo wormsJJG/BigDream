@@ -146,6 +146,15 @@ const AdminManager = {
         const refreshBtn = document.getElementById('refresh-users-btn');
         if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
 
+        const refreshQuotaHistoryBtn = document.getElementById('refresh-quota-history-btn');
+        if (refreshQuotaHistoryBtn) refreshQuotaHistoryBtn.addEventListener('click', () => this.loadQuotaHistory());
+
+        const roleSelect = document.getElementById('user-role-select');
+        if (roleSelect) {
+            roleSelect.addEventListener('change', () => this.updateCreateUserRoleFields());
+        }
+        this.updateCreateUserRoleFields();
+
         // 상세페이지 닫기(뒤로가기) 버튼용 컨테이너 생성
         this.createDetailViewContainer();
     },
@@ -276,6 +285,7 @@ const AdminManager = {
 
         if (tabId === 'admin-tab-list') this.loadUsers();
         if (tabId === 'admin-tab-reports') this.loadReports();
+        if (tabId === 'admin-tab-quota-history') this.loadQuotaHistory();
     },
 
 
@@ -283,55 +293,83 @@ const AdminManager = {
     async createUser(e) {
         e.preventDefault();
 
-        // 1. 입력값 가져오기
         const nameInput = document.getElementById('new-user-name');
         const idInput = document.getElementById('new-user-id');
         const pwdInput = document.getElementById('new-user-pwd');
         const quotaInput = document.getElementById('new-user-quota');
+        const quotaReasonInput = document.getElementById('new-user-quota-reason');
         const roleSelect = document.getElementById('user-role-select');
 
-        const companyName = nameInput.value.trim(); // 업체명
+        const companyName = nameInput.value.trim();
         const inputId = idInput.value.trim();
         const password = pwdInput.value;
-        const selectedRole = roleSelect.value; // 'user', 'distributor', 'admin'
+        const selectedRole = roleSelect.value;
+        const isAdminRole = selectedRole === 'admin';
 
-        // 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
-        let quota = parseInt(quotaInput.value, 10);
-        if (isNaN(quota)) quota = 40;
+        let quota = parseInt(quotaInput?.value, 10);
+        if (isNaN(quota)) quota = 0;
+        if (isAdminRole) quota = 0;
+
+        const quotaReason = String(quotaReasonInput?.value || '').trim();
+        if (!isAdminRole && quota !== 0 && !quotaReason) {
+            await CustomUI.alert('초기 지급 사유를 입력해주세요.');
+            quotaReasonInput?.focus();
+            return;
+        }
 
         const fullEmail = inputId + ID_DOMAIN;
-
-        // 생성 확인 메시지
         const roleText = roleSelect.options[roleSelect.selectedIndex]?.text || selectedRole;
-        if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n유형: ${roleText}\n기본 횟수: ${quota}회`)) return;
+        const extraLine = (!isAdminRole && quota !== 0) ? `
+초기 지급 사유: ${quotaReason}` : '';
+        if (!await CustomUI.confirm(`[생성 확인]
+
+업체명: ${companyName}
+ID: ${inputId}
+유형: ${roleText}
+기본 횟수: ${quota}회${extraLine}`)) return;
 
         try {
-            // ✅ Renderer에서는 Firebase SDK로 계정 생성 금지. Main(IPC)에서 생성한다.
             const created = await services.auth.createUser(fullEmail, password);
             const newUid = created?.uid;
             if (!newUid) throw new Error('계정 생성에 실패했습니다(uid 없음)');
 
-            // Firestore에 업체명과 횟수 저장
             await setDoc(doc(null, "users", newUid), {
-                companyName: companyName,   // 업체명
-                userId: inputId,            // 아이디
-                email: fullEmail,           // 이메일(풀버전)
-                role: selectedRole,         // 권한
-                isLocked: false,            // 잠금여부
-                quota: quota,               // 검사 횟수 저장
+                companyName: companyName,
+                userId: inputId,
+                email: fullEmail,
+                role: selectedRole,
+                isLocked: false,
+                quota: quota,
                 android_scan_duration: 0,
-                createdAt: serverTimestamp(), // 생성일(서버 시간)
+                createdAt: serverTimestamp(),
                 lastScanDate: null
             });
 
-            await CustomUI.alert(`✅ 생성 완료!\n업체명: ${companyName}\n아이디: ${inputId}`);
+            if (!isAdminRole && quota !== 0) {
+                const actor = authService?.getCurrentUser?.() || null;
+                await addDoc(collection(null, 'users', newUid, 'quotaHistory'), {
+                    change: quota,
+                    beforeQuota: 0,
+                    afterQuota: quota,
+                    reason: quotaReason,
+                    actorUid: actor?.uid || null,
+                    actorEmail: actor?.email || 'unknown',
+                    companyName: companyName,
+                    createdAt: serverTimestamp(),
+                    actionType: 'create'
+                });
+            }
 
-            // 폼 초기화
+            await CustomUI.alert(`✅ 생성 완료!
+업체명: ${companyName}
+아이디: ${inputId}`);
+
             document.getElementById('admin-create-user-form').reset();
-            // 초기화 후 기본값 40 다시 세팅
-            if (quotaInput) quotaInput.value = 40;
+            if (quotaInput) quotaInput.value = 0;
+            if (quotaReasonInput) quotaReasonInput.value = '';
+            this.updateCreateUserRoleFields();
 
-            this.loadUsers(); // 목록 새로고침
+            this.loadUsers();
         } catch (error) {
             console.error(error);
             await CustomUI.alert("생성 실패: " + (error?.message || error));
@@ -493,6 +531,22 @@ const AdminManager = {
                     <button class="admin-btn btn-delete" style="float:right;" onclick="window.deleteUser('${uid}', '${userData.companyName}')">⚠️ 업체 영구 삭제</button>
                 </div>
 
+                <h3>🕘 최근 횟수 변경 이력</h3>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>변경 시간</th>
+                            <th>변경 수량</th>
+                            <th>변경 전 → 후</th>
+                            <th>사유</th>
+                            <th>관리자 이메일</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-quota-history-body">
+                        <tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">변경 이력을 불러오는 중...</td></tr>
+                    </tbody>
+                </table>
+
                 <h3>📨 제출된 결과 리포트 (${typeof reportsSnap?.size === 'number' ? reportsSnap.size : (Array.isArray(reportsSnap?.docs) ? reportsSnap.docs.length : 0)}건)</h3>
                 <table class="admin-table">
                     <thead>
@@ -508,6 +562,7 @@ const AdminManager = {
                     </tbody>
                 </table>
             `;
+            await this.loadUserDetailQuotaHistory(uid);
             const now = new Date();
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(now.getDate() - 7); // 현재 날짜에서 7일 전으로 설정
@@ -762,6 +817,168 @@ const AdminManager = {
             tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로그 로드 실패: ${e.message}</td></tr>`;
         }
     },
+    async loadQuotaHistory() {
+        const tbody = document.getElementById('admin-quota-history-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">변경 이력을 불러오는 중...</td></tr>';
+
+        try {
+            const usersSnap = await getDocs(query(collection(null, "users"), orderBy("createdAt", "desc")));
+            const historyRows = [];
+
+            for (const userDoc of usersSnap.docs) {
+                const userData = userDoc.data() || {};
+                if (userData.role === 'admin') continue;
+
+                const historySnap = await getDocs(
+                    query(
+                        collection(null, "users", userDoc.id, "quotaHistory"),
+                        orderBy("createdAt", "desc"),
+                        limit(50)
+                    )
+                );
+
+                historySnap.forEach((historyDoc) => {
+                    const item = historyDoc.data() || {};
+                    historyRows.push({
+                        uid: userDoc.id,
+                        companyName: item.companyName || userData.companyName || '미등록 업체',
+                        userId: userData.userId || userData.email || userDoc.id,
+                        change: Number(item.change || 0),
+                        beforeQuota: Number(item.beforeQuota || 0),
+                        afterQuota: Number(item.afterQuota || 0),
+                        reason: item.reason || '-',
+                        actorEmail: item.actorEmail || '-',
+                        createdAt: item.createdAt || null,
+                        actionType: item.actionType || 'adjust'
+                    });
+                });
+            }
+
+            historyRows.sort((a, b) => {
+                const aTime = toDateSafe(a.createdAt)?.getTime() || 0;
+                const bTime = toDateSafe(b.createdAt)?.getTime() || 0;
+                return bTime - aTime;
+            });
+
+            if (historyRows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888; padding:20px;">등록된 횟수 변경 이력이 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = historyRows.slice(0, 300).map((item) => {
+                const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
+                const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
+                const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
+                return `
+                    <tr>
+                        <td>${formatDateTimeKR(item.createdAt)}</td>
+                        <td>
+                            <div style="font-weight:700;">${item.companyName}</div>
+                            <div style="font-size:12px; color:#888;">${item.userId}</div>
+                        </td>
+                        <td style="font-weight:700; color:${changeColor};">${changeText}</td>
+                        <td>${item.beforeQuota} → ${item.afterQuota}</td>
+                        <td>${reasonPrefix}: ${item.reason}</td>
+                        <td>${item.actorEmail}</td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="6" style="color:red;">이력 로드 실패: ${e.message}</td></tr>`;
+        }
+    },
+
+
+    async loadUserDetailQuotaHistory(uid) {
+        const tbody = document.getElementById('detail-quota-history-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">변경 이력을 불러오는 중...</td></tr>';
+
+        try {
+            let rows = [];
+
+            try {
+                const globalSnap = await getDocs(
+                    query(
+                        collection(null, 'quotaHistoryGlobal'),
+                        where('uid', '==', uid),
+                        orderBy('createdAtMs', 'desc'),
+                        limit(10)
+                    )
+                );
+
+                rows = globalSnap.docs.map((docSnap) => {
+                    const item = docSnap.data() || {};
+                    return {
+                        change: Number(item.change || 0),
+                        beforeQuota: Number(item.beforeQuota || 0),
+                        afterQuota: Number(item.afterQuota || 0),
+                        reason: item.reason || '-',
+                        actorEmail: item.actorEmail || '-',
+                        createdAt: item.createdAt || null,
+                        createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0),
+                        actionType: item.actionType || 'adjust'
+                    };
+                });
+            } catch (globalError) {
+                console.warn('detail quotaHistoryGlobal load fallback:', globalError);
+            }
+
+            if (!rows.length) {
+                const legacySnap = await getDocs(
+                    query(
+                        collection(null, 'users', uid, 'quotaHistory'),
+                        orderBy('createdAt', 'desc'),
+                        limit(10)
+                    )
+                );
+
+                rows = legacySnap.docs.map((docSnap) => {
+                    const item = docSnap.data() || {};
+                    return {
+                        change: Number(item.change || 0),
+                        beforeQuota: Number(item.beforeQuota || 0),
+                        afterQuota: Number(item.afterQuota || 0),
+                        reason: item.reason || '-',
+                        actorEmail: item.actorEmail || '-',
+                        createdAt: item.createdAt || null,
+                        createdAtMs: Number(toDateSafe(item.createdAt)?.getTime() || 0),
+                        actionType: item.actionType || 'adjust'
+                    };
+                });
+
+                rows.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+            }
+
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">등록된 횟수 변경 이력이 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.slice(0, 10).map((item) => {
+                const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
+                const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
+                const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
+                return `
+                    <tr>
+                        <td>${formatDateTimeKR(item.createdAt)}</td>
+                        <td style="font-weight:700; color:${changeColor};">${changeText}</td>
+                        <td>${item.beforeQuota} → ${item.afterQuota}</td>
+                        <td>${reasonPrefix}: ${item.reason}</td>
+                        <td>${item.actorEmail}</td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red; padding:20px;">이력 로드 실패: ${e.message}</td></tr>`;
+        }
+    },
+
     // [탭 3] 전송된 리포트 로딩 (신규 기능)
     async loadReports() {
         const tbody = document.getElementById('admin-reports-body');
@@ -1066,48 +1283,80 @@ window.toggleLock = async (uid, shouldLock) => {
 };
 
 window.changeQuota = async (uid, currentQuota) => {
-    console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`); // 디버깅용 로그
+    console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`);
 
-    // CustomUI가 아직 로드되지 않았을 경우를 대비한 안전장치
     if (typeof CustomUI === 'undefined') {
         alert("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.");
         return;
     }
 
-    const input = await CustomUI.prompt(`[횟수 조정]\n현재 횟수: ${currentQuota}회\n\n추가(+)하거나 차감(-)할 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
+    const input = await CustomUI.prompt(`[횟수 조정]
+현재 횟수: ${currentQuota}회
 
-    if (!input) return; // 취소 누름
+추가(+)하거나 차감(-)할 수량을 입력하세요.
+(예: 10 또는 -5)`, "0");
+    if (input === null) return;
+
     const change = parseInt(input, 10);
-
     if (isNaN(change)) {
-        await CustomUI.alert("❌ 숫자만 입력해주세요.");
+        await CustomUI.alert("❌ 숫자만 입력하세요.
+예: 10 또는 -5");
         return;
     }
     if (change === 0) return;
 
+    const reason = await CustomUI.prompt(`[사유 입력]
+${change > 0 ? '추가' : '차감'} 사유를 입력하세요.`, "");
+    if (reason === null) return;
+
+    const trimmedReason = String(reason || '').trim();
+    if (!trimmedReason) {
+        await CustomUI.alert("❌ 횟수 변경 사유를 입력해주세요.");
+        return;
+    }
+
     try {
-        // 결과값 미리 계산
-        const newQuota = parseInt(currentQuota) + change;
+        const userRef = doc(null, "users", uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) throw new Error("업체 정보를 찾을 수 없습니다.");
+
+        const userData = userSnap.data() || {};
+        const safeCurrentQuota = Number(userData.quota ?? currentQuota ?? 0);
+        const newQuota = safeCurrentQuota + change;
         if (newQuota < 0) {
             await CustomUI.alert("❌ 횟수는 0보다 작을 수 없습니다.");
             return;
         }
 
-        // DB 업데이트 (increment 사용)
-        const userRef = doc(null, "users", uid);
-        await updateDoc(userRef, {
-            quota: increment(change)
+        await updateDoc(userRef, { quota: newQuota });
+
+        const actor = authService?.getCurrentUser?.() || null;
+        await addDoc(collection(null, "users", uid, "quotaHistory"), {
+            change,
+            beforeQuota: safeCurrentQuota,
+            afterQuota: newQuota,
+            reason: trimmedReason,
+            actorUid: actor?.uid || null,
+            actorEmail: actor?.email || 'unknown',
+            companyName: userData.companyName || '미등록 업체',
+            createdAt: serverTimestamp(),
+            actionType: 'adjust'
         });
 
-        await CustomUI.alert(`✅ 변경 완료!\n${currentQuota}회 -> ${newQuota}회`);
+        await CustomUI.alert(`✅ 변경 완료!
+${safeCurrentQuota}회 -> ${newQuota}회
+사유: ${trimmedReason}`);
 
-        // 화면 새로고침 (상세페이지 보고 있으면 상세페이지 갱신, 아니면 목록 갱신)
         if (AdminManager.currentUserUid === uid) {
             AdminManager.viewUserDetail(uid);
         } else {
             AdminManager.loadUsers();
         }
 
+        const quotaTab = document.getElementById('admin-tab-quota-history');
+        if (quotaTab && quotaTab.classList.contains('active')) {
+            AdminManager.loadQuotaHistory();
+        }
     } catch (e) {
         console.error(e);
         await CustomUI.alert("변경 실패: " + e.message);
