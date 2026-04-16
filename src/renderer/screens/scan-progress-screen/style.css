@@ -8,6 +8,30 @@
     margin-bottom: 40px;
 }
 
+@keyframes iosStepPulse {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 0 4px rgba(78, 196, 118, 0.24);
+    }
+
+    50% {
+        opacity: 0.84;
+        box-shadow: 0 0 0 7px rgba(78, 196, 118, 0.12);
+    }
+}
+
+@keyframes iosLinePulse {
+    0%, 100% {
+        opacity: 1;
+        filter: saturate(1);
+    }
+
+    50% {
+        opacity: 0.74;
+        filter: saturate(0.88);
+    }
+}
+
 .ios-stepper {
     position: relative;
     width: min(760px, 92%);
@@ -36,9 +60,13 @@
     width: 0%;
     height: 4px;
     border-radius: 999px;
-    background: #46b96c;
+    background: #4ec476;
     z-index: 1;
     transition: width 0.35s ease;
+}
+
+#ios-stepper-progress {
+    animation: iosLinePulse 1.8s ease-in-out infinite;
 }
 
 .ios-step {
@@ -82,8 +110,8 @@
 }
 
 .ios-step.done .ios-step-circle {
-    background: #46b96c;
-    border-color: #46b96c;
+    background: #4ec476;
+    border-color: #4ec476;
 }
 
 .ios-step.done .ios-step-check {
@@ -95,9 +123,10 @@
 }
 
 .ios-step.current .ios-step-circle {
-    background: #46b96c;
+    background: #4ec476;
     border-color: #ffffff;
-    box-shadow: 0 0 0 4px rgba(70, 185, 108, 0.35);
+    box-shadow: 0 0 0 4px rgba(78, 196, 118, 0.32);
+    animation: iosStepPulse 1.8s ease-in-out infinite;
 }
 
 .ios-step.current .ios-step-check {
