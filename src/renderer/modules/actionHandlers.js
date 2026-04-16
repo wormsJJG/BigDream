@@ -705,9 +705,29 @@ export function initActionHandlers(ctx) {
     const adminTriggers = document.querySelectorAll('.app-title');
     const adminModal = document.getElementById('admin-modal');
     const adminContent = document.querySelector('.modal-content'); // ★ 내용물 박스 선택
+    const adminModalTitle = document.getElementById('admin-modal-title');
+    const adminModalDesc = document.getElementById('admin-modal-desc');
+    const adminAndroidFields = document.getElementById('admin-android-fields');
     const adminInput = document.getElementById('admin-input');
+    const adminIosFields = document.getElementById('admin-ios-fields');
+    const adminIosMode = document.getElementById('admin-ios-mode');
     const adminSaveBtn = document.getElementById('admin-save-btn');
     const adminCancelBtn = document.getElementById('admin-cancel-btn');
+
+    const isPrivilegedRole = () => State.userRole === 'admin' || State.userRole === 'distributor';
+
+    const configureAdminModal = () => {
+        if (adminModalTitle) {
+            adminModalTitle.textContent = '⚡ 진행 설정';
+        }
+        if (adminModalDesc) {
+            adminModalDesc.innerHTML = 'Android와 iOS 진행 방식을 한 번에 설정할 수 있습니다.<br/><span class="bd-modal-hint">iOS 랜덤 20~30분 모드는 빠른 기기에서만 정밀 분석 단계에 적용됩니다.</span>';
+        }
+        if (adminAndroidFields) adminAndroidFields.classList.remove('hidden');
+        if (adminIosFields) adminIosFields.classList.remove('hidden');
+        if (adminInput) adminInput.value = State.androidTargetMinutes || 0;
+        if (adminIosMode) adminIosMode.value = State.iosProgressMode || 'real';
+    };
 
     // 모달 닫기 함수
     const closeAdminModal = () => {
@@ -717,10 +737,11 @@ export function initActionHandlers(ctx) {
     // 저장 로직 (함수로 분리)
     const handleAdminSave = async (ev) => {
         const saveBtn = (ev && ev.currentTarget) ? ev.currentTarget : document.getElementById('admin-save-btn');
-        const value = parseInt(adminInput.value, 10);
+        const androidMinutes = parseInt(adminInput.value, 10);
+        const iosMode = (adminIosMode && adminIosMode.value === 'random_20_30') ? 'random_20_30' : 'real';
 
-        if (isNaN(value) || value < 0) {
-            await CustomUI.alert('시간은 0 이상의 숫자로 입력해주세요.');
+        if (isNaN(androidMinutes) || androidMinutes < 0) {
+            await CustomUI.alert('Android 시간은 0 이상의 숫자로 입력해주세요.');
             return;
         }
 
@@ -729,22 +750,23 @@ export function initActionHandlers(ctx) {
             saveBtn.textContent = '저장 중...';
         }
 
-        console.log('[AdminHidden] saving androidTargetMinutes =', value);
-
         try {
-            const user = authService.getCurrentUser?.() || auth?.currentUser;
+            const user = authService.getCurrentUser?.() || authService.currentUser;
             if (!user) throw new Error('로그인이 필요합니다.');
 
-            // Firestore에 저장
-            await updateDoc(doc(null, 'users', user.uid), {
-                androidTargetMinutes: value,
-                updatedAt: serverTimestamp()
-            });
+            const payload = {
+                updatedAt: serverTimestamp(),
+                ios_progress_mode: iosMode,
+                androidTargetMinutes: androidMinutes,
+                android_scan_duration: androidMinutes
+            };
 
-            // 로컬 상태 즉시 반영
-            State.androidTargetMinutes = value;
+            await updateDoc(doc(null, 'users', user.uid), payload);
+            State.androidTargetMinutes = androidMinutes;
+            State.iosProgressMode = iosMode;
+            console.log('[AdminHidden] saved androidTargetMinutes =', androidMinutes);
+            console.log('[AdminHidden] saved iosProgressMode =', iosMode);
 
-            console.log('[AdminHidden] saved ok');
             await CustomUI.alert('✅ 검사 시간 설정이 저장되었습니다.');
 
             // 모달 닫기
@@ -786,13 +808,10 @@ export function initActionHandlers(ctx) {
                 }
 
                 // 3. 권한별 분기 로직
-                // 💡 관리자(admin)와 총판(distributor) 둘 다 '시간 설정 모달'만 띄웁니다.
-                if (State.userRole === 'admin' || State.userRole === 'distributor') {
+                if (isPrivilegedRole()) {
                     const adminModalEl = document.getElementById('admin-modal');
-                    const adminInputEl = document.getElementById('admin-input');
-
-                    if (adminModalEl && adminInputEl) {
-                        adminInputEl.value = State.androidTargetMinutes || 0;
+                    if (adminModalEl) {
+                        configureAdminModal();
                         adminModalEl.classList.remove('hidden');
                         console.log(`[${State.userRole}] 검사 시간 설정창 오픈`);
                     }

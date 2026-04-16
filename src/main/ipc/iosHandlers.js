@@ -14,7 +14,7 @@ function registerIosHandlers({ ipcMain, CONFIG, MockData, iosService }) {
     return await iosService.checkConnection();
   });
 
-  ipcMain.handle('run-ios-scan', async (event, udid) => {
+  ipcMain.handle('run-ios-scan', async (event, udid, runOptions = {}) => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosScanResult();
 
     const onProgress = (payload) => {
@@ -23,7 +23,7 @@ function registerIosHandlers({ ipcMain, CONFIG, MockData, iosService }) {
       } catch (_e) { }
     };
 
-    return await iosService.runScan(udid, { onProgress });
+    return await iosService.runScan(udid, { ...runOptions, onProgress });
   });
 
   ipcMain.handle('delete-ios-backup', async (_event, udid) => {

@@ -20,10 +20,38 @@
         </div>
     </div>
     <p id="scan-status-text">기기 연결을 확인하는 중...</p>
-    <div class="progress-bar-container">
-        <div id="progress-bar" style="width: 0%;"></div>
+    <div class="ios-stepper">
+        <div class="ios-stepper-line"></div>
+        <div id="ios-stepper-progress"></div>
+
+        <div class="ios-step current" id="ios-step-1">
+            <div class="ios-step-circle">
+                <span class="ios-step-check">✓</span>
+            </div>
+            <div class="ios-step-label">기기 확인</div>
+        </div>
+
+        <div class="ios-step pending" id="ios-step-2">
+            <div class="ios-step-circle">
+                <span class="ios-step-check">✓</span>
+            </div>
+            <div class="ios-step-label">데이터 수집</div>
+        </div>
+
+        <div class="ios-step pending" id="ios-step-3">
+            <div class="ios-step-circle">
+                <span class="ios-step-check">✓</span>
+            </div>
+            <div class="ios-step-label">정밀 분석</div>
+        </div>
+
+        <div class="ios-step pending" id="ios-step-4">
+            <div class="ios-step-circle">
+                <span class="ios-step-check">✓</span>
+            </div>
+            <div class="ios-step-label">결과 정리</div>
+        </div>
     </div>
-    <div id="progress-percent-text" class="progress-percent">0%</div>
     <div class="warning-box">
         <img alt="Warning" src="./assets/icon-warning.png" />
         <span><strong>경고:</strong> 검사가 완료될 때까지 USB 케이블을 절대 분리하지 마십시오.</span>

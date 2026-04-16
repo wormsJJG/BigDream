@@ -194,6 +194,43 @@ export function createViewManager(State) {
             }
         },
 
+        updateIosStageProgress(stage, text) {
+            const statusText = document.getElementById('scan-status-text');
+            const stageItems = Array.from(document.querySelectorAll('#ios-stage-tracker .ios-stage-item'));
+            const orderedStages = ['device-check', 'backup', 'mvt', 'finalize'];
+            const normalizedStage = String(stage || '').trim().toLowerCase();
+            const currentIndex = orderedStages.indexOf(normalizedStage);
+
+            if (statusText && text) {
+                statusText.textContent = text;
+            }
+
+            if (!stageItems.length) {
+                return;
+            }
+
+            stageItems.forEach((item) => {
+                item.classList.remove('is-active', 'is-done');
+            });
+
+            if (normalizedStage === 'complete') {
+                stageItems.forEach((item) => item.classList.add('is-done'));
+                return;
+            }
+
+            if (currentIndex < 0) {
+                return;
+            }
+
+            stageItems.forEach((item, index) => {
+                if (index < currentIndex) {
+                    item.classList.add('is-done');
+                } else if (index === currentIndex) {
+                    item.classList.add('is-active');
+                }
+            });
+        },
+
         updateProgress(percent, text, isIos) {
             const statusBar = document.getElementById('progress-bar');
             const statusText = document.getElementById('scan-status-text');
@@ -305,13 +342,7 @@ export function createViewManager(State) {
             };
 
             if (isIos) {
-                if (statusBar) {
-                    statusBar.style.width = `${percent}%`;
-                    // Keep existing green on legacy screens; new dashboard overrides via CSS
-                    statusBar.style.backgroundColor = statusBar.style.backgroundColor || '#5CB85C';
-                }
                 if (statusText) statusText.textContent = text;
-                if (percentText) percentText.textContent = `${Math.round(percent)}%`;
             } else {
                 if (androidStatusBar) {
                     androidStatusBar.style.width = `${percent}%`;

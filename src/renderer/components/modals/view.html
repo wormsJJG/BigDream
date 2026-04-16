@@ -1,11 +1,26 @@
 <div class="modal hidden" id="admin-modal">
   <div class="modal-content">
-    <h3 class="bd-modal-title">⚡ 관리자 설정</h3>
-    <p class="bd-modal-desc bd-preline">
-      안드로이드 검사 소요 시간(분)을 입력하세요.<br/>
-      <span class="bd-modal-hint">(범위: 10~60, 해제: 0)</span>
+    <h3 id="admin-modal-title" class="bd-modal-title">⚡ 진행 설정</h3>
+    <p id="admin-modal-desc" class="bd-modal-desc bd-preline">
+      Android와 iOS 진행 방식을 한 번에 설정할 수 있습니다.
     </p>
-    <input id="admin-input" class="bd-modal-input" placeholder="0" type="number"/>
+    <div id="admin-android-fields">
+      <p class="bd-modal-desc bd-preline">
+        <strong>Android 진행 설정</strong><br/>
+        <span class="bd-modal-hint">(범위: 10~60, 해제: 0)</span>
+      </p>
+      <input id="admin-input" class="bd-modal-input" placeholder="0" type="number"/>
+    </div>
+    <div id="admin-ios-fields">
+      <p class="bd-modal-desc bd-preline">
+        <strong>iOS 진행 설정</strong><br/>
+        <span class="bd-modal-hint">빠른 iOS 기기(백업 20분 이하)에만 적용됩니다.</span>
+      </p>
+      <select id="admin-ios-mode" class="bd-modal-input">
+        <option value="real">실제 검사 시간 기준</option>
+        <option value="random_20_30">20~30분 랜덤 기준</option>
+      </select>
+    </div>
     <div class="bd-modal-actions bd-modal-actions-right">
       <button class="secondary-button" id="admin-cancel-btn">취소</button>
       <button class="primary-button" id="admin-save-btn">저장</button>

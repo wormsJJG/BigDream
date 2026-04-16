@@ -96,7 +96,7 @@ const bdScanner = {
     },
     ios: {
         checkConnection: () => ipcRenderer.invoke(IPC.IOS.CHECK_CONNECTION),
-        runScan: (udid) => ipcRenderer.invoke(IPC.IOS.RUN_SCAN, udid),
+        runScan: (udid, options = {}) => ipcRenderer.invoke(IPC.IOS.RUN_SCAN, udid, options),
         deleteBackup: (udid) => ipcRenderer.invoke(IPC.IOS.DELETE_BACKUP, udid),
         onScanProgress: (callback) => {
             const handler = (_event, payload) => {
