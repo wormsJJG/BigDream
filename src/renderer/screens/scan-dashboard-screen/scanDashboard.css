@@ -232,23 +232,35 @@
 #scan-dashboard-screen .monitor-top {
   display: grid;
   place-items: center;
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
-#scan-dashboard-screen .phone-frame {
-  width: 140px;
-  height: 260px;
-  border-radius: 28px;
-  background: #111827;
-  border: 1px solid rgba(0, 0, 0, 0.10);
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+#scan-dashboard-screen .phone {
+  width: 118px;
+  height: 228px;
+  border-radius: 22px;
+  border-width: 6px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+  transform: none;
+  margin: 0 auto;
+}
 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+#scan-dashboard-screen .phone-screen {
+  background: #111;
+}
+
+#scan-dashboard-screen .notch {
+  width: 56px;
+  height: 12px;
+}
+
+#scan-dashboard-screen .android-phone-status {
+  margin-top: 8px;
+  color: #00d2ff;
+  font-size: 6px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1.2;
 }
 
 /* ================================
@@ -258,13 +270,13 @@
 @keyframes scanLine { 0% { top: -10%; } 100% { top: 110%; } }
 
 #scan-dashboard-screen #dashboardScannerBeam {
-    display: none; /* JS toggleLaser(true) 시 보임 */
-    position: absolute; 
-    width: 160px; 
-    height: 5px; 
+    display: none;
+    position: absolute;
+    width: 100%;
+    height: 5px;
     background: var(--danger);
-    box-shadow: 0 0 15px var(--danger); 
-    opacity: 0.8; 
+    box-shadow: 0 0 15px var(--danger);
+    opacity: 0.8;
     z-index: 4;
     animation: scanLine 2s infinite linear;
 } 
@@ -272,9 +284,9 @@
 /* 해킹 아이콘 및 텍스트 */
 #scan-dashboard-screen .hack-icon {
   position: relative;
-  font-size: 50px;
+  font-size: 24px;
   color: #00d2ff;
-  margin-bottom: 15px;
+  margin-bottom: 6px;
   z-index: 4;
   animation: blinkRed 1s infinite;
 }
@@ -283,7 +295,7 @@
   position: relative;
   width: 100%;
   color: #00d2ff;
-  font-size: 16px;
+  font-size: 8px;
   font-weight: bold;
   text-align: center;
   text-shadow: 0 0 10px #00d2ff;
@@ -338,8 +350,8 @@
 }
 
 #scan-dashboard-screen .scan-running-text {
-  margin: 14px 0 0;
-  font-size: 20px;
+  margin: 8px 0 0;
+  font-size: 17px;
   font-weight: 800;
   color: rgba(51, 51, 51, 0.92);
 }

@@ -54,9 +54,22 @@
 
   <div class="scan-visual-container">
     <div class="monitor-top">
-        <div class="phone-frame">
-        <div class="scan-beam" id="dashboardScannerBeam"></div>
-        <div class="hack-alert" id="phoneStatusAlert">SYSTEM<br>SCANNING</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="phone-screen">
+          <div class="scanner-beam" id="dashboardScannerBeam"></div>
+          <i class="fas fa-triangle-exclamation hack-icon"></i>
+          <div class="hack-alert" id="phoneStatusAlert">SYSTEM<br />SCANNING</div>
+          <div class="android-phone-status" id="android-phone-status-text">
+            [!] 비정상 권한 접근 탐지...<br />
+            [!] 실시간 프로세스 감시...<br />
+            [!] AI 기반 지능형 위협 분석 중...
+          </div>
+          <div class="data-particle dp-1">App</div>
+          <div class="data-particle dp-2">File</div>
+          <div class="data-particle dp-3">System</div>
+          <div class="data-particle dp-4">Network</div>
+        </div>
       </div>
       <h2 class="scan-running-text" id="android-scan-running-text">검사 진행 중...</h2>
     </div>
