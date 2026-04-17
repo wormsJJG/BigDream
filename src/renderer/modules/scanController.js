@@ -649,15 +649,27 @@ export function initScanController(ctx) {
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
 
                     const applyInitialResultTabHighlight = () => {
-                        const resultSubMenu = document.getElementById('result-sub-menu');
-                        if (resultSubMenu) {
-                            resultSubMenu.classList.remove('hidden');
-                            resultSubMenu.style.display = 'block';
+                        const mode = normalizeDeviceMode(State.currentDeviceMode || osMode);
+                        const isIos = mode === 'ios';
+                        const activeMenuId = isIos ? 'ios-sub-menu' : 'result-sub-menu';
+                        const inactiveMenuId = isIos ? 'result-sub-menu' : 'ios-sub-menu';
+
+                        const activeMenu = document.getElementById(activeMenuId);
+                        const inactiveMenu = document.getElementById(inactiveMenuId);
+
+                        if (inactiveMenu) {
+                            inactiveMenu.classList.add('hidden');
+                            inactiveMenu.style.display = 'none';
                         }
 
-                        const firstTab = document.querySelector('#result-sub-menu .res-tab[data-target="res-summary"]');
+                        if (activeMenu) {
+                            activeMenu.classList.remove('hidden');
+                            activeMenu.style.display = 'block';
+                        }
+
+                        const firstTab = document.querySelector(`#${activeMenuId} .res-tab[data-target="res-summary"]`);
                         if (firstTab) {
-                            document.querySelectorAll('#result-sub-menu .res-tab').forEach(t => t.classList.remove('active'));
+                            document.querySelectorAll(`#${activeMenuId} .res-tab`).forEach(t => t.classList.remove('active'));
                             firstTab.classList.add('active');
                         }
                     };
