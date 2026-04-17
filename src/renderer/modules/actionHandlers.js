@@ -712,10 +712,18 @@ export function initActionHandlers(ctx) {
 
             if (State.currentDeviceMode === 'ios') {
                 const selectedAction = await CustomUI.choose(
-                    '출력 방식을 선택하세요.',
+                    'iOS 검사 결과서 출력',
                     [
-                        { value: 'pdf', label: 'PDF 출력' },
-                        { value: 'report', label: '검사 결과서 출력' },
+                        {
+                            value: 'pdf',
+                            label: 'PDF로 저장',
+                            description: '문서 파일로 저장해 이메일, 메신저, 외부 전달에 바로 사용할 수 있습니다.'
+                        },
+                        {
+                            value: 'report',
+                            label: '화면용 결과서 출력',
+                            description: '현재 검사 결과서 화면을 인쇄 형식으로 정리해 바로 출력하거나 저장할 수 있습니다.'
+                        },
                     ]
                 );
 

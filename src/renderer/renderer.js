@@ -272,11 +272,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 modalOverlay.className = 'modal bd-prompt-modal bd-modal-z10000';
 
                 const modalBox = document.createElement('div');
-                modalBox.className = 'modal-content bd-prompt-content';
+                modalBox.className = 'modal-content bd-prompt-content bd-choice-modal-content';
+
+                const header = document.createElement('div');
+                header.className = 'bd-choice-header';
+
+                const eyebrow = document.createElement('div');
+                eyebrow.className = 'bd-choice-eyebrow';
+                eyebrow.textContent = 'RESULT EXPORT';
 
                 const title = document.createElement('h3');
-                title.className = 'bd-prompt-title bd-preline';
+                title.className = 'bd-prompt-title bd-choice-title bd-preline';
                 title.textContent = String(message ?? '');
+
+                const subtitle = document.createElement('p');
+                subtitle.className = 'bd-choice-subtitle';
+                subtitle.textContent = '원하는 출력 형식을 선택하면 검사 결과서를 해당 방식으로 바로 생성합니다.';
 
                 const buttonGroup = document.createElement('div');
                 buttonGroup.className = 'bd-choice-actions';
@@ -284,21 +295,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const buttons = safeChoices.map((choice, index) => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = index === 0
-                        ? 'primary-button bd-choice-btn'
-                        : 'secondary-button bd-choice-btn';
-                    btn.textContent = String(choice.label);
+                    btn.className = `bd-choice-btn${index === 0 ? ' is-primary' : ''}`;
                     btn.dataset.value = String(choice.value);
+
+                    const label = document.createElement('span');
+                    label.className = 'bd-choice-btn-label';
+                    label.textContent = String(choice.label);
+                    btn.appendChild(label);
+
+                    if (choice.description) {
+                        const description = document.createElement('span');
+                        description.className = 'bd-choice-btn-desc';
+                        description.textContent = String(choice.description);
+                        btn.appendChild(description);
+                    }
+
                     buttonGroup.appendChild(btn);
                     return btn;
                 });
 
                 const cancelBtn = document.createElement('button');
                 cancelBtn.type = 'button';
-                cancelBtn.className = 'secondary-button bd-prompt-btn';
+                cancelBtn.className = 'secondary-button bd-prompt-btn bd-choice-cancel-btn';
                 cancelBtn.textContent = '취소';
 
-                modalBox.appendChild(title);
+                header.appendChild(eyebrow);
+                header.appendChild(title);
+                header.appendChild(subtitle);
+                modalBox.appendChild(header);
                 modalBox.appendChild(buttonGroup);
                 modalBox.appendChild(cancelBtn);
                 modalOverlay.appendChild(modalBox);
