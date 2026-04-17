@@ -14,6 +14,7 @@ import { setCircularGauge } from '../lib/circularGauge.js';
 
 import { renderSuspiciousListView } from '../features/scan/scanView.js';
 export function initScanController(ctx) {
+    const IOS_TRUST_PROMPT_MESSAGE = "검사를 위해 iPhone에서 PIN 입력 후 '이 컴퓨터 신뢰'를 승인해주세요.";
 
     // Shared access to AppDetailManager (module-safe)
     function showAppDetail(appData, displayName) {
@@ -1109,6 +1110,7 @@ export function initScanController(ctx) {
             State.lastScanData = null;
             window.lastScanData = null;
             this.toggleLaser(true);
+            let iosBackupStageLatched = false;
 
             const setIosStep = (step, text) => {
                 const statusText = document.getElementById('scan-status-text');
@@ -1147,37 +1149,32 @@ export function initScanController(ctx) {
 
             let offIosProgress = null;
             const hasMeaningfulBackupSignal = (payload) => {
-                const bytes = Number(payload?.bytes) || 0;
-                const files = Number(payload?.files) || 0;
                 const current = Number(payload?.current) || 0;
                 const total = Number(payload?.total) || 0;
 
-                return (
-                    (current > 0 && total > 0)
-                    || bytes >= (24 * 1024 * 1024)
-                    || files >= 25
-                );
+                return (current > 0 && total > 0);
             };
             const resolveIosStageMessage = (payload) => {
                 const stage = String(payload?.stage || '').trim().toLowerCase();
                 const rawMessage = payload?.message ? String(payload.message) : '';
                 const bytes = Number(payload?.bytes) || 0;
                 const files = Number(payload?.files) || 0;
+                const hasBackupSignal = hasMeaningfulBackupSignal(payload);
 
                 if (stage === 'mvt') {
                     return rawMessage || '수집된 데이터를 기반으로 정밀 분석을 진행하는 중...';
                 }
 
-                if (stage === 'backup') {
+                if (stage === 'backup' && hasBackupSignal) {
                     if (bytes > 0 || files > 0) {
                         return `검사 데이터 수집 중... (파일 ${files.toLocaleString('en-US')}개 / ${Utils.formatBytes(bytes)})`;
                     }
-                    return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+                    return rawMessage || IOS_TRUST_PROMPT_MESSAGE;
                 }
 
-                return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+                return rawMessage || IOS_TRUST_PROMPT_MESSAGE;
             };
-            setIosStep(1, '기기 확인 중...');
+            setIosStep(1, IOS_TRUST_PROMPT_MESSAGE);
 
             try {
                 if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
@@ -1187,20 +1184,32 @@ export function initScanController(ctx) {
                             const msg = resolveIosStageMessage(payload);
 
                             if (stage === 'mvt') {
+                                iosBackupStageLatched = true;
                                 setIosStep(3, '정밀 분석 진행 중...');
                                 return;
                             }
 
                             if (stage === 'backup') {
                                 if (hasMeaningfulBackupSignal(payload)) {
+                                    iosBackupStageLatched = true;
+                                }
+
+                                if (iosBackupStageLatched) {
+                                    setIosStep(2, msg || '검사 데이터 수집 중...');
+                                } else if (hasMeaningfulBackupSignal(payload)) {
                                     setIosStep(2, msg || '검사 데이터 수집 중...');
                                 } else {
-                                    setIosStep(1, '기기 연결 상태를 확인하는 중...');
+                                    setIosStep(1, IOS_TRUST_PROMPT_MESSAGE);
                                 }
                                 return;
                             }
 
-                            setIosStep(1, msg || '기기 확인 중...');
+                            if (iosBackupStageLatched) {
+                                setIosStep(2, msg || '검사 데이터 수집 중...');
+                                return;
+                            }
+
+                            setIosStep(1, msg || IOS_TRUST_PROMPT_MESSAGE);
                         } catch (_e) { }
                     });
                 }

@@ -421,8 +421,14 @@ export function initClientDevice(ctx) {
                     State.currentUdid = ios.udid;
                     this.setUI('connected', 'iPhone 연결됨', ios.model, '#5CB85C', true);
                     return;
+                } else if (ios.status === 'unauthorized') {
+                    State.currentDeviceMode = null;
+                    State.currentUdid = null;
+                    this.setUI('unauthorized', '신뢰 승인 대기 중', ios.error || "아이폰을 잠금 해제하고 '이 컴퓨터 신뢰'를 승인해주세요.", '#F0AD4E', false);
+                    return;
                 } else if (ios.status === 'error') {
                     State.currentDeviceMode = null;
+                    State.currentUdid = null;
                     const errorMessage = ios.error || 'iOS 도구 실행 오류. iTunes 설치 상태 확인 필요.';
                     this.setUI('disconnected', 'iOS 도구 오류', errorMessage, '#D9534F', false);
                     return;
@@ -434,6 +440,7 @@ export function initClientDevice(ctx) {
 
             // 3. 연결 없음 
             State.currentDeviceMode = null;
+            State.currentUdid = null;
             this.setUI('disconnected', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
         },
 

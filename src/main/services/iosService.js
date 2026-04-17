@@ -6,6 +6,7 @@ const { evaluateAppRisk } = require('../../shared/risk/riskRules');
 const { spawn } = require('child_process');
 
 const noop = () => { };
+const IOS_TRUST_PROMPT_MESSAGE = "검사를 위해 iPhone에서 PIN 입력 후 '이 컴퓨터 신뢰'를 승인해주세요.";
 
 function isBoolTrue(v) {
     if (v === true) return true;
@@ -173,6 +174,37 @@ function spawnWithLineStream(command, args, { onLine, cwd, shell } = {}) {
 function createIosService({ fs, path, os, log, CONFIG, Utils }) {
     // NOTE: bootstrap.js passes a single options object.
     if (!fs) throw new Error('createIosService requires fs');
+    const validatePairing = async (udid) => {
+        const pairTool = CONFIG?.PATHS?.IOS_PAIR;
+        if (!pairTool || !fs.existsSync(pairTool)) {
+            return { ok: true, skipped: true };
+        }
+
+        try {
+            const output = await Utils.runCommand(`"${pairTool}" validate -u ${udid}`);
+            const normalized = String(output || '').trim().toLowerCase();
+            const isValidated =
+                normalized.includes('success') ||
+                normalized.includes('validated') ||
+                normalized.includes('paired');
+
+            return isValidated
+                ? { ok: true }
+                : { ok: false, message: 'iOS 신뢰/페어링 확인이 완료되지 않았습니다.' };
+        } catch (error) {
+            const msg = String(error?.message || error || '').toLowerCase();
+            if (
+                msg.includes('passwordprotected') ||
+                msg.includes('passcode') ||
+                msg.includes('locked') ||
+                msg.includes('pair') ||
+                msg.includes('trust')
+            ) {
+                return { ok: false, message: '아이폰 잠금 해제 또는 "이 컴퓨터 신뢰" 승인이 완료되지 않았습니다.' };
+            }
+            return { ok: false, message: 'iOS 신뢰/페어링 상태를 확인하지 못했습니다.' };
+        }
+    };
     const service = {
 
         /**
@@ -187,7 +219,12 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
 
                 if (!udid) return { status: 'disconnected' };
 
-                const cmdInfo = `"${CONFIG.PATHS.IOS_INFO}" -k DeviceName`;
+                const pairing = await validatePairing(udid);
+                if (!pairing.ok) {
+                    return { status: 'unauthorized', error: pairing.message };
+                }
+
+                const cmdInfo = `"${CONFIG.PATHS.IOS_INFO}" -u ${udid} -k DeviceName`;
                 const nameOutput = await Utils.runCommand(cmdInfo);
                 const modelName = nameOutput ? nameOutput.trim() : 'iPhone Device';
                 return { status: 'connected', model: modelName, udid, type: 'ios' };
@@ -219,6 +256,11 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
             let scanStartAt = null;
 
             try {
+                const pairing = await validatePairing(udid);
+                if (!pairing.ok) {
+                    throw new Error(pairing.message);
+                }
+
                 let isBackupComplete = fs.existsSync(path.join(specificBackupPath, 'Status.plist'));
 
                 // 백업 캐시 신뢰성 강화:
@@ -242,7 +284,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     totalSteps: 2,
                     stage: 'device-check',
                     percent: 0,
-                    message: '기기 연결 상태를 확인하는 중...'
+                    message: IOS_TRUST_PROMPT_MESSAGE
                 });
 
                 if (isBackupComplete && hasManifest && metaSaysComplete) {
@@ -303,7 +345,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         totalSteps: 2,
                         stage: 'device-check',
                         percent: 0,
-                        message: '기기 연결 상태를 확인하는 중...'
+                        message: IOS_TRUST_PROMPT_MESSAGE
                     });
 
                     try {
@@ -366,20 +408,12 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         return `아이폰 백업 진행 중... (파일 ${files.toLocaleString('en-US')}개 / ${formatBytes(bytes)})`;
                     };
 
-                    const hasMeaningfulBackupStarted = (bytes, files) => {
-                        const safeBytes = Number(bytes) || 0;
-                        const safeFiles = Number(files) || 0;
-                        const hasTrustedBackupProgress = !!(trustedCount && trustedCount.cur > 0 && trustedCount.total > 0);
-
-                        return (
-                            hasTrustedBackupProgress
-                            || safeBytes >= (24 * MB)
-                            || safeFiles >= 25
-                        );
+                    const hasMeaningfulBackupStarted = () => {
+                        return !!(trustedCount && trustedCount.cur > 0 && trustedCount.total > 0);
                     };
 
                     const emitBackupProgress = (percent, bytes, files, message) => {
-                        const stage = hasMeaningfulBackupStarted(bytes, files) ? 'backup' : 'device-check';
+                        const stage = hasMeaningfulBackupStarted() ? 'backup' : 'device-check';
                         safeEmit(onProgress, {
                             step: 1,
                             totalSteps: 2,
@@ -585,7 +619,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                         totalSteps: 2,
                                         stage: 'device-check',
                                         percent: lastPct,
-                                        message: '기기 연결 상태를 확인하는 중...'
+                                        message: IOS_TRUST_PROMPT_MESSAGE
                                     });
                                     return;
                                 }
@@ -739,9 +773,9 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 lastPctF = moveToward(lastPctF, targetPct);
                                 lastPct = Math.floor(lastPctF);
 
-                                const backupMessage = hasMeaningfulBackupStarted(displayBytes, displayFiles)
+                                const backupMessage = hasMeaningfulBackupStarted()
                                     ? undefined
-                                    : '기기 연결 상태를 확인하는 중...';
+                                    : IOS_TRUST_PROMPT_MESSAGE;
                                 emitBackupProgress(lastPct, displayBytes, displayFiles, backupMessage);
                             } catch (_e) {
                             } finally {
