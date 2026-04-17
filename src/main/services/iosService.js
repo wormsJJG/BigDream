@@ -408,12 +408,19 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         return `아이폰 백업 진행 중... (파일 ${files.toLocaleString('en-US')}개 / ${formatBytes(bytes)})`;
                     };
 
-                    const hasMeaningfulBackupStarted = () => {
-                        return !!(trustedCount && trustedCount.cur > 0 && trustedCount.total > 0);
+                    const hasMeaningfulBackupStarted = (bytes = 0, files = 0) => {
+                        const safeBytes = Number(bytes) || 0;
+                        const safeFiles = Number(files) || 0;
+
+                        return !!(
+                            (trustedCount && trustedCount.cur > 0 && trustedCount.total > 0)
+                            || safeBytes > 0
+                            || safeFiles > 0
+                        );
                     };
 
                     const emitBackupProgress = (percent, bytes, files, message) => {
-                        const stage = hasMeaningfulBackupStarted() ? 'backup' : 'device-check';
+                        const stage = hasMeaningfulBackupStarted(bytes, files) ? 'backup' : 'device-check';
                         safeEmit(onProgress, {
                             step: 1,
                             totalSteps: 2,
@@ -773,7 +780,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 lastPctF = moveToward(lastPctF, targetPct);
                                 lastPct = Math.floor(lastPctF);
 
-                                const backupMessage = hasMeaningfulBackupStarted()
+                                const backupMessage = hasMeaningfulBackupStarted(displayBytes, displayFiles)
                                     ? undefined
                                     : IOS_TRUST_PROMPT_MESSAGE;
                                 emitBackupProgress(lastPct, displayBytes, displayFiles, backupMessage);

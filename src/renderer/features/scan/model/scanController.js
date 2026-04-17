@@ -1073,6 +1073,12 @@ export function initScanController(ctx) {
                 return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
             };
 
+            const shouldShowIosBackupStep = (payload) => {
+                const stage = String(payload?.stage || '').trim().toLowerCase();
+
+                return stage === 'backup' || hasMeaningfulBackupSignal(payload);
+            };
+
             try {
                 try {
                     if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
@@ -1086,12 +1092,8 @@ export function initScanController(ctx) {
                                     return;
                                 }
 
-                                if (stage === 'backup') {
-                                    if (hasMeaningfulBackupSignal(payload)) {
-                                        setIosStep(2, msg || '검사 데이터 수집 중...');
-                                    } else {
-                                        setIosStep(1, '기기 연결 상태를 확인하는 중...');
-                                    }
+                                if (shouldShowIosBackupStep(payload)) {
+                                    setIosStep(2, msg || '검사 데이터 수집 중...');
                                     return;
                                 }
 
