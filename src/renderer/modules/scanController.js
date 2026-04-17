@@ -927,8 +927,8 @@ export function initScanController(ctx) {
                     setTimeout(async () => {
                         try {
                             await CustomUI.alert(
-                                `✅ 임시 분석 데이터 정리 완료
-검사에 사용된 안드로이드 임시 분석 데이터가 정리되었습니다.`
+                                `✅ 검사 수집 데이터 삭제 완료
+검사에 사용된 안드로이드 수집 데이터가 안전하게 삭제되었습니다.`
                             );
                         } catch (_e) { }
                     }, 10000);
@@ -966,8 +966,8 @@ export function initScanController(ctx) {
                             setTimeout(async () => {
                                 try {
                                     await CustomUI.alert(
-                                        `✅ 임시 분석 데이터 정리 완료
-검사에 사용된 안드로이드 임시 분석 데이터가 정리되었습니다.`
+                                        `✅ 검사 수집 데이터 삭제 완료
+검사에 사용된 안드로이드 수집 데이터가 안전하게 삭제되었습니다.`
                                     );
                                 } catch (_e) { }
                             }, 10000);
@@ -987,8 +987,8 @@ export function initScanController(ctx) {
                             setTimeout(async () => {
                                 try {
                                     await CustomUI.alert(
-                                        `✅ 임시 분석 데이터 정리 완료
-검사에 사용된 안드로이드 임시 분석 데이터가 정리되었습니다.`
+                                        `✅ 검사 수집 데이터 삭제 완료
+검사에 사용된 안드로이드 수집 데이터가 안전하게 삭제되었습니다.`
                                     );
                                 } catch (_e) { }
                             }, 10000);
