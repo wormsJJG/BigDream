@@ -330,6 +330,16 @@ export function initClientDevice(ctx) {
                 DeviceManager.stopPolling();
                 ViewManager.showScreen(loggedInView, 'create-scan-screen');
 
+                // ✅ 결과 화면에서 연결 끊기 후 검사 생성 화면으로 돌아갈 때
+                // 좌측 사이드바 하이라이트도 함께 복구
+                try {
+                    document.querySelectorAll('#logged-in-view .nav-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    const navCreate = document.getElementById('nav-create');
+                    if (navCreate) navCreate.classList.add('active');
+                } catch (_e) { }
+
                 // 3. 버튼 상태 복구 및 입력폼 초기화
                 const realStartScanBtn = document.getElementById('real-start-scan-btn');
                 if (realStartScanBtn) {
@@ -411,8 +421,14 @@ export function initClientDevice(ctx) {
                     State.currentUdid = ios.udid;
                     this.setUI('connected', 'iPhone 연결됨', ios.model, '#5CB85C', true);
                     return;
+                } else if (ios.status === 'unauthorized') {
+                    State.currentDeviceMode = null;
+                    State.currentUdid = null;
+                    this.setUI('unauthorized', '신뢰 승인 대기 중', ios.error || "아이폰을 잠금 해제하고 '이 컴퓨터 신뢰'를 승인해주세요.", '#F0AD4E', false);
+                    return;
                 } else if (ios.status === 'error') {
                     State.currentDeviceMode = null;
+                    State.currentUdid = null;
                     const errorMessage = ios.error || 'iOS 도구 실행 오류. iTunes 설치 상태 확인 필요.';
                     this.setUI('disconnected', 'iOS 도구 오류', errorMessage, '#D9534F', false);
                     return;
@@ -424,6 +440,7 @@ export function initClientDevice(ctx) {
 
             // 3. 연결 없음 
             State.currentDeviceMode = null;
+            State.currentUdid = null;
             this.setUI('disconnected', '기기를 연결해주세요', 'Android 또는 iOS 기기를 USB로 연결하세요.', '#333', false);
         },
 

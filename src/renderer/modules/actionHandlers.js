@@ -8,7 +8,7 @@ export function initActionHandlers(ctx) {
 
     // Firebase deps (pass-through from renderer bootstrap)
     const authService = services.auth;
-    const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit } = services.firestore;
+    const { doc, getDoc, updateDoc, collection, getDocs, setDoc, query, orderBy, where, runTransaction, addDoc, serverTimestamp, deleteDoc, increment, limit, startAfter } = services.firestore;
 
     // --- Timestamp/Date normalization (IPC returns plain objects, not Firestore Timestamp prototypes) ---
     const toDateSafe = (value) => {
@@ -74,6 +74,58 @@ export function initActionHandlers(ctx) {
         const d = toDateSafe(value);
         return d ? d.toLocaleString('ko-KR') : '-';
     };
+
+    const buildPdfFileName = (scanData = {}) => {
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const rawModel = String(scanData?.deviceInfo?.model || State.currentDeviceMode || 'Report');
+        const safeModel = rawModel.replace(/[<>:"/\\|?*\x00-\x1F\s]+/g, '_').replace(/^_+|_+$/g, '') || 'Report';
+        return `BD_${dateStr}_${safeModel}.pdf`;
+    };
+
+    const normalizeCompanyName = (value) => String(value || '').trim();
+    const normalizeCompanyNameLower = (value) => normalizeCompanyName(value).toLowerCase();
+
+    const ensurePrintTemplateLoaded = async () => {
+        if (document.getElementById('print-date')) return true;
+
+        try {
+            const host = document.getElementById('print-root');
+            if (host && window?.bdScanner?.app?.readTextFile) {
+                const html = await window.bdScanner.app.readTextFile('src/renderer/components/print/view.html');
+                host.innerHTML = html;
+            }
+        } catch (e) {
+            console.warn('print template load failed:', e);
+        }
+
+        return Boolean(document.getElementById('print-date'));
+    };
+
+    const restorePrintLayout = (appendixHeader, printArea) => {
+        if (appendixHeader) {
+            appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
+        }
+        const fileSection = document.getElementById('print-file-system-section');
+        if (fileSection) fileSection.style.display = 'block';
+        if (printArea) printArea.style.display = 'none';
+    };
+
+    const buildQuotaHistoryGlobalEntry = ({ uid, companyName, userId, change, beforeQuota, afterQuota, reason, actorUid, actorEmail, actionType }) => ({
+        uid,
+        companyName: companyName || '미등록 업체',
+        companyNameLower: normalizeCompanyNameLower(companyName),
+        userId: userId || uid || '-',
+        change: Number(change || 0),
+        beforeQuota: Number(beforeQuota || 0),
+        afterQuota: Number(afterQuota || 0),
+        reason: reason || '-',
+        actorUid: actorUid || null,
+        actorEmail: actorEmail || 'unknown',
+        createdAt: serverTimestamp(),
+        createdAtMs: Date.now(),
+        actionType: actionType || 'adjust'
+    });
 
 
     // [9] 액션 핸들러 (삭제/무력화/인쇄)
@@ -144,71 +196,89 @@ export function initActionHandlers(ctx) {
         });
     }
 
-        function ensurePermissionModal() {
-            const modal = document.getElementById('perm-modal-overlay');
-            if (!modal) return;
-            modal.classList.remove('hidden');
-        }
+    // 2. 무력화
+    function ensurePermissionModal() {
+        const modal = document.getElementById('perm-modal-overlay');
+        if (!modal) return null;
+        modal.classList.remove('hidden');
+        return modal;
+    }
 
-        function hidePermissionModal() {
-            const modal = document.getElementById('perm-modal-overlay');
-            if (!modal) return;
-            modal.classList.add('hidden');
-        }
+    function hidePermissionModal() {
+        const modal = document.getElementById('perm-modal-overlay');
+        if (!modal) return;
+        modal.classList.add('hidden');
+    }
 
-        // 2. 무력화
-        const neutralizeBtn = document.getElementById('neutralize-btn');
-        if (neutralizeBtn) {
+    const neutralizeBtn = document.getElementById('neutralize-btn');
+    if (neutralizeBtn) {
         neutralizeBtn.addEventListener('click', async () => {
             const { package: packageName, appName } = neutralizeBtn.dataset;
             if (!packageName) return;
 
-            // const perms = await window.electronAPI.getGrantedPermissions(packageName);
-            // console.log('권한 목록:', perms);
-            const rawPerms = await window.electronAPI.getGrantedPermissions(packageName);
+            neutralizeBtn.disabled = true;
+            neutralizeBtn.textContent = "권한 불러오는 중...";
 
-            const perms = Array.from(new Set(
-            (rawPerms ?? [])
-                .map(p => String(p).trim())
-                .filter(p => p.startsWith('android.permission.'))
-            ));
+            try {
+                const rawPerms = await window.electronAPI.getGrantedPermissions(packageName);
+                const perms = Array.from(new Set(
+                    (rawPerms ?? [])
+                        .map(p => String(p).trim())
+                        .filter(p => p.startsWith('android.permission.'))
+                ));
 
-            console.log('권한 목록(raw):', rawPerms?.length, rawPerms);
-            console.log('권한 목록(normalized):', perms.length, perms);
+                if (!perms.length) {
+                    throw new Error('선택 가능한 권한이 없습니다.');
+                }
 
-            ensurePermissionModal();
+                const modal = ensurePermissionModal();
+                const container = document.getElementById('perm-chip-container');
+                const selectAllBtn = document.getElementById('perm-select-all-btn');
+                const searchInput = document.getElementById('perm-search-input');
+                const confirmBtn = document.getElementById('perm-confirm-btn');
+                const cancelBtn = document.getElementById('perm-cancel-btn');
+                const subtitle = document.getElementById('perm-modal-subtitle');
 
-            const confirmBtnForData = document.getElementById('perm-confirm-btn');
-            if (confirmBtnForData) {
-                confirmBtnForData.dataset.package = packageName;
-                confirmBtnForData.dataset.appname = appName;
-            }
+                if (!modal || !container || !selectAllBtn || !searchInput || !confirmBtn || !cancelBtn) {
+                    throw new Error('권한 선택 모달 요소를 찾을 수 없습니다.');
+                }
 
-            const subtitle = document.getElementById('perm-modal-subtitle');
-            if (subtitle) subtitle.textContent = `'${appName}' 권한 ${perms.length}개`;
+                if (subtitle) subtitle.textContent = `'${appName}' 권한 ${perms.length}개`;
 
-            const container = document.getElementById('perm-chip-container');
-            if (!container) return;
-            container.innerHTML = '';
+                container.innerHTML = '';
 
-            const updateSelectAll = () => {
-                const btn = document.getElementById('perm-select-all-btn');
-                if (!btn) return;
+                const updateSelectAll = () => {
+                    const chips = [...container.querySelectorAll('.bd-perm-chip')];
+                    const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+                    selectAllBtn.classList.toggle('is-active', allOn);
+                    selectAllBtn.textContent = allOn ? '전체 해제' : '전체 선택';
+                };
 
-                const chips = [...container.querySelectorAll('.bd-perm-chip')];
-                const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
+                Utils.renderPermissionCategories(perms, container, updateSelectAll);
+                updateSelectAll();
 
-                btn.classList.toggle('is-active', allOn);
-                btn.textContent = allOn ? '전체 해제' : '전체 선택';
-            };
+                searchInput.value = '';
+                searchInput.oninput = () => {
+                    const q = searchInput.value.trim().toLowerCase();
+                    const cats = [...container.querySelectorAll('.bd-perm-cat')];
 
-            window.Utils.renderPermissionCategories(perms, container, updateSelectAll);
+                    cats.forEach(catEl => {
+                        const chips = [...catEl.querySelectorAll('.bd-perm-chip')];
+                        let anyVisible = false;
 
-            updateSelectAll(); // ✅ 초기 상태 반영
+                        chips.forEach(chip => {
+                            const text = (chip.textContent || '').toLowerCase();
+                            const ok = q === '' ? true : text.includes(q);
+                            chip.style.display = ok ? '' : 'none';
+                            if (ok) anyVisible = true;
+                        });
 
-            const selectAllBtn = document.getElementById('perm-select-all-btn');
-            if (selectAllBtn) {
-                selectAllBtn.onclick = () => {
+                        catEl.style.display = anyVisible ? '' : 'none';
+                    });
+                };
+
+                selectAllBtn.onclick = (e) => {
+                    e.preventDefault();
                     const chips = [...container.querySelectorAll('.bd-perm-chip')];
                     const allOn = chips.length > 0 && chips.every(chip => chip.dataset.selected === '1');
                     const next = !allOn;
@@ -220,37 +290,72 @@ export function initActionHandlers(ctx) {
 
                     updateSelectAll();
                 };
-            }
 
-            const searchInput = document.getElementById('perm-search-input');
-            if (searchInput) {
-                searchInput.value = '';
-                searchInput.oninput = () => {
-                    const q = searchInput.value.trim().toLowerCase();
-
-                    const cats = [...container.querySelectorAll('.bd-perm-cat')];
-                    cats.forEach(catEl => {
-                    const chips = [...catEl.querySelectorAll('.bd-perm-chip')];
-                    let anyVisible = false;
-
-                    chips.forEach(chip => {
-                        const text = (chip.textContent || '').toLowerCase();
-                        const ok = q === '' ? true : text.includes(q);
-                        chip.style.display = ok ? '' : 'none';
-                        if (ok) anyVisible = true;
-                    });
-
-                    if (q !== '') {
-                        catEl.style.display = anyVisible ? '' : 'none';
-                        if (anyVisible) catEl.classList.remove('collapsed');
-                    } else {
-                        catEl.style.display = '';
-                        const catName = catEl.dataset.cat;
-                        if (DEFAULT_OPEN_CATS.has(catName)) catEl.classList.remove('collapsed');
-                        else catEl.classList.add('collapsed');
-                    }
-                    });
+                const closeModal = (e) => {
+                    e?.preventDefault?.();
+                    e?.stopPropagation?.();
+                    hidePermissionModal();
+                    neutralizeBtn.disabled = false;
+                    neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
                 };
+
+                cancelBtn.onclick = closeModal;
+                modal.onclick = (e) => {
+                    if (e.target === modal) closeModal(e);
+                };
+
+                confirmBtn.onclick = async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const selectedPerms = Array.from(container.querySelectorAll('.bd-perm-chip'))
+                        .filter(chip => chip.dataset.selected === '1')
+                        .map(chip => chip.dataset.perm)
+                        .filter(Boolean);
+
+                    if (!selectedPerms.length) {
+                        await CustomUI.alert('선택된 권한이 없습니다.');
+                        return;
+                    }
+
+                    hidePermissionModal();
+
+                    const ok = await CustomUI.confirm(
+                        `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
+                    );
+
+                    if (!ok) {
+                        ensurePermissionModal();
+                        neutralizeBtn.disabled = false;
+                        neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+                        return;
+                    }
+
+                    neutralizeBtn.disabled = true;
+                    neutralizeBtn.textContent = "무력화 중...";
+
+                    try {
+                        const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
+                        if (result.success) {
+                            await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
+                            document.getElementById('back-to-dashboard-btn')?.click();
+                        } else {
+                            throw new Error(result.error);
+                        }
+                    } catch (err) {
+                        await CustomUI.alert(`무력화 실패: ${err.message}`);
+                    } finally {
+                        neutralizeBtn.disabled = false;
+                        neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+                    }
+                };
+
+                neutralizeBtn.disabled = false;
+                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+            } catch (err) {
+                neutralizeBtn.disabled = false;
+                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
+                await CustomUI.alert(`무력화 실패: ${err.message || err}`);
             }
         });
     }
@@ -305,23 +410,12 @@ export function initActionHandlers(ctx) {
     if (printResultsBtn) {
         printResultsBtn.addEventListener('click', async () => {
             if (!window.lastScanData) {
-                alert("인쇄할 검사 결과가 없습니다.");
+                await CustomUI.alert("인쇄할 검사 결과가 없습니다.");
                 return;
             }
 
-            // print 템플릿이 아직 로드되지 않은 경우(초기 로딩/번들링 환경 차이) 안전하게 주입
-            if (!document.getElementById('print-date')) {
-                try {
-                    const host = document.getElementById('print-root');
-                    if (host && window?.bdScanner?.app?.readTextFile) {
-                        const html = await window.bdScanner.app.readTextFile('src/renderer/components/print/view.html');
-                        host.innerHTML = html;
-                    }
-                } catch (e) {
-                    console.warn('print template load failed:', e);
-                }
-            }
-            if (!document.getElementById('print-date')) {
+            const isTemplateReady = await ensurePrintTemplateLoaded();
+            if (!isTemplateReady) {
                 await CustomUI.alert('인쇄 템플릿을 불러오지 못했습니다. (print-date 없음)');
                 return;
             }
@@ -358,18 +452,59 @@ export function initActionHandlers(ctx) {
             document.getElementById('print-agency-name').textContent = State.agencyName;
 
             // 💡 [추가] 검사자 정보 테이블 바인딩
+            const pickExaminer = (...candidates) => {
+                for (const v of candidates) {
+                    if (v === null || v === undefined) continue;
+                    const s = String(v).trim();
+                    if (!s) continue;
+                    if (s.includes('익명')) continue;
+                    if (s === '000-0000-0000' || s === '0000-00-00' || s === '0001-01-01') continue;
+                    return s;
+                }
+                return '-';
+            };
+
+            const resolvedExaminerName = pickExaminer(
+                data.meta?.targetName,
+                data.meta?.targetUserName,
+                data.meta?.subjectName,
+                data.meta?.personName,
+                data.meta?.clientName,
+                data.targetInfo?.name,
+                data.target?.name,
+                data.subject?.name,
+                data.clientInfo?.name,
+                data.client?.name,
+                data.clientName,
+                isAnonName ? null : clientName
+            );
+            const resolvedExaminerPhone = pickExaminer(
+                data.meta?.targetPhone,
+                data.meta?.targetMobile,
+                data.meta?.subjectPhone,
+                data.meta?.subjectMobile,
+                data.meta?.personPhone,
+                data.meta?.clientPhone,
+                data.targetInfo?.phone,
+                data.targetInfo?.mobile,
+                data.target?.phone,
+                data.target?.mobile,
+                data.subject?.phone,
+                data.subject?.mobile,
+                data.clientInfo?.phone,
+                data.client?.phone,
+                data.clientPhone,
+                isAnonPhone ? null : clientPhone
+            );
+
             const examinerTable = document.getElementById('print-examiner-info');
             if (examinerTable) {
                 examinerTable.innerHTML = `
                     <tr>
                         <th>검사자 이름</th>
-                        <td>${isAnonName ? '익명 처리' : clientName}</td>
-                        <th>생년월일</th>
-                        <td>${isAnonDob ? '익명 처리' : clientDob}</td>
-                    </tr>
-                    <tr>
+                        <td>${resolvedExaminerName}</td>
                         <th>전화번호</th>
-                        <td colspan="3">${isAnonPhone ? '익명 처리' : clientPhone}</td>
+                        <td>${resolvedExaminerPhone}</td>
                     </tr>
                 `;
             }
@@ -379,7 +514,6 @@ export function initActionHandlers(ctx) {
             document.getElementById('print-serial').textContent = data.deviceInfo?.serial || '-';
             // NOTE: print-root는 템플릿 호스트(id="print-root")이므로, 실제 상태 표시는 별도 id를 사용한다.
             document.getElementById('print-root-status').textContent = isIos ? '판단불가 (MVT)' : (data.deviceInfo?.isRooted ? '발견됨 (위험)' : '안전함');
-            document.getElementById('print-phone').textContent = data.deviceInfo?.phoneNumber || '-';
 
             // 4. 종합 판정 및 통계
             const threatCount = suspiciousApps.length;
@@ -390,7 +524,7 @@ export function initActionHandlers(ctx) {
                 summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.`;
             } else {
                 summaryBox.className = 'summary-box status-safe';
-                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않앗습니다.`;
+                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않았습니다.`;
             }
 
             document.getElementById('print-total-count').textContent = allApps.length;
@@ -501,6 +635,7 @@ export function initActionHandlers(ctx) {
             // 7. [부록] 전체 앱 목록 (Android 전용 앱 목록 표시 로직 유지)
 
             const printArea = document.getElementById('printable-report');
+            if (printArea) printArea.style.display = 'block';
             // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
             const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
 
@@ -555,34 +690,70 @@ export function initActionHandlers(ctx) {
                 appGrid.appendChild(div);
             });
 
-            setTimeout(async () => {
-                window.print();
-                printArea.style.display = 'none';
+            const runPrintDialog = async () => {
+                setTimeout(async () => {
+                    window.print();
+                    restorePrintLayout(appendixHeader, printArea);
 
-                // 💡 [복구] 인쇄 후 섹션 번호를 원래대로 복구 (다음 검사를 위해)
-                if (appendixHeader) {
-                    appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
-                }
-                const fileSection = document.getElementById('print-file-system-section');
-                if (fileSection) fileSection.style.display = 'block';
+                    if (State.currentDeviceMode === 'android') {
+                        console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
 
+                        // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
+                        const result = await window.electronAPI.autoPushReportToAndroid();
 
-                if (State.currentDeviceMode === 'android') {
-                    console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
-
-                    // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
-                    const result = await window.electronAPI.autoPushReportToAndroid();
-
-                    if (result.success) {
-                        // 성공 시 사용자에게 알림 (선택 사항)
-                        CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
-                    } else {
-                        // 실패 시 로그만 출력하거나 필요 시 알림
-                        console.error("휴대폰 자동 전송 실패:", result.error);
+                        if (result.success) {
+                            CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
+                        } else {
+                            console.error("휴대폰 자동 전송 실패:", result.error);
+                        }
                     }
+                }, 500);
+            };
+
+            if (State.currentDeviceMode === 'ios') {
+                const selectedAction = await CustomUI.choose(
+                    'iOS 검사 결과서 출력',
+                    [
+                        {
+                            value: 'pdf',
+                            label: 'PDF로 저장',
+                            description: '문서 파일로 저장해 이메일, 메신저, 외부 전달에 바로 사용할 수 있습니다.'
+                        },
+                        {
+                            value: 'report',
+                            label: '화면용 결과서 출력',
+                            description: '현재 검사 결과서 화면을 인쇄 형식으로 정리해 바로 출력하거나 저장할 수 있습니다.'
+                        },
+                    ]
+                );
+
+                if (!selectedAction) {
+                    restorePrintLayout(appendixHeader, printArea);
+                    return;
                 }
 
-            }, 500);
+                if (selectedAction === 'pdf') {
+                    const result = await window.electronAPI.exportIosReportPdf({
+                        fileName: buildPdfFileName(data),
+                    });
+
+                    restorePrintLayout(appendixHeader, printArea);
+
+                    if (result?.success) {
+                        await CustomUI.alert(`PDF가 저장되었습니다.\n${result.filePath}`);
+                    } else if (!result?.canceled) {
+                        await CustomUI.alert(`PDF 저장 실패: ${result?.error || result?.message || '알 수 없는 오류'}`);
+                    }
+                    return;
+                }
+
+                if (selectedAction === 'report') {
+                    await runPrintDialog();
+                    return;
+                }
+            }
+
+            await runPrintDialog();
         });
     }
 
@@ -593,9 +764,29 @@ export function initActionHandlers(ctx) {
     const adminTriggers = document.querySelectorAll('.app-title');
     const adminModal = document.getElementById('admin-modal');
     const adminContent = document.querySelector('.modal-content'); // ★ 내용물 박스 선택
+    const adminModalTitle = document.getElementById('admin-modal-title');
+    const adminModalDesc = document.getElementById('admin-modal-desc');
+    const adminAndroidFields = document.getElementById('admin-android-fields');
     const adminInput = document.getElementById('admin-input');
+    const adminIosFields = document.getElementById('admin-ios-fields');
+    const adminIosMode = document.getElementById('admin-ios-mode');
     const adminSaveBtn = document.getElementById('admin-save-btn');
     const adminCancelBtn = document.getElementById('admin-cancel-btn');
+
+    const isPrivilegedRole = () => State.userRole === 'admin' || State.userRole === 'distributor';
+
+    const configureAdminModal = () => {
+        if (adminModalTitle) {
+            adminModalTitle.textContent = '⚡ 진행 설정';
+        }
+        if (adminModalDesc) {
+            adminModalDesc.innerHTML = 'Android와 iOS 진행 방식을 한 번에 설정할 수 있습니다.<br/><span class="bd-modal-hint">iOS 랜덤 20~30분 모드는 빠른 기기에서만 정밀 분석 단계에 적용됩니다.</span>';
+        }
+        if (adminAndroidFields) adminAndroidFields.classList.remove('hidden');
+        if (adminIosFields) adminIosFields.classList.remove('hidden');
+        if (adminInput) adminInput.value = State.androidTargetMinutes || 0;
+        if (adminIosMode) adminIosMode.value = State.iosProgressMode || 'real';
+    };
 
     // 모달 닫기 함수
     const closeAdminModal = () => {
@@ -605,10 +796,11 @@ export function initActionHandlers(ctx) {
     // 저장 로직 (함수로 분리)
     const handleAdminSave = async (ev) => {
         const saveBtn = (ev && ev.currentTarget) ? ev.currentTarget : document.getElementById('admin-save-btn');
-        const value = parseInt(adminInput.value, 10);
+        const androidMinutes = parseInt(adminInput.value, 10);
+        const iosMode = (adminIosMode && adminIosMode.value === 'random_20_30') ? 'random_20_30' : 'real';
 
-        if (isNaN(value) || value < 0) {
-            await CustomUI.alert('시간은 0 이상의 숫자로 입력해주세요.');
+        if (isNaN(androidMinutes) || androidMinutes < 0) {
+            await CustomUI.alert('Android 시간은 0 이상의 숫자로 입력해주세요.');
             return;
         }
 
@@ -617,22 +809,23 @@ export function initActionHandlers(ctx) {
             saveBtn.textContent = '저장 중...';
         }
 
-        console.log('[AdminHidden] saving androidTargetMinutes =', value);
-
         try {
-            const user = authService.getCurrentUser?.() || auth?.currentUser;
+            const user = authService.getCurrentUser?.() || authService.currentUser;
             if (!user) throw new Error('로그인이 필요합니다.');
 
-            // Firestore에 저장
-            await updateDoc(doc(null, 'users', user.uid), {
-                androidTargetMinutes: value,
-                updatedAt: serverTimestamp()
-            });
+            const payload = {
+                updatedAt: serverTimestamp(),
+                ios_progress_mode: iosMode,
+                androidTargetMinutes: androidMinutes,
+                android_scan_duration: androidMinutes
+            };
 
-            // 로컬 상태 즉시 반영
-            State.androidTargetMinutes = value;
+            await updateDoc(doc(null, 'users', user.uid), payload);
+            State.androidTargetMinutes = androidMinutes;
+            State.iosProgressMode = iosMode;
+            console.log('[AdminHidden] saved androidTargetMinutes =', androidMinutes);
+            console.log('[AdminHidden] saved iosProgressMode =', iosMode);
 
-            console.log('[AdminHidden] saved ok');
             await CustomUI.alert('✅ 검사 시간 설정이 저장되었습니다.');
 
             // 모달 닫기
@@ -674,13 +867,10 @@ export function initActionHandlers(ctx) {
                 }
 
                 // 3. 권한별 분기 로직
-                // 💡 관리자(admin)와 총판(distributor) 둘 다 '시간 설정 모달'만 띄웁니다.
-                if (State.userRole === 'admin' || State.userRole === 'distributor') {
+                if (isPrivilegedRole()) {
                     const adminModalEl = document.getElementById('admin-modal');
-                    const adminInputEl = document.getElementById('admin-input');
-
-                    if (adminModalEl && adminInputEl) {
-                        adminInputEl.value = State.androidTargetMinutes || 0;
+                    if (adminModalEl) {
+                        configureAdminModal();
                         adminModalEl.classList.remove('hidden');
                         console.log(`[${State.userRole}] 검사 시간 설정창 오픈`);
                     }
@@ -722,6 +912,15 @@ export function initActionHandlers(ctx) {
     const AdminManager = {
 
         currentUserUid: null, // 현재 보고 있는 상세 페이지의 업체 UID
+        quotaHistoryState: {
+            pageSize: 10,
+            currentPage: 1,
+            searchKeyword: '',
+            loadedPages: [],
+            pageCursors: [],
+            hasMore: false,
+            source: 'global'
+        },
 
         init() {
             console.log("🚀 AdminManager.init() 시작됨!");
@@ -750,33 +949,105 @@ export function initActionHandlers(ctx) {
             });
             navMenu.insertBefore(li, navMenu.firstChild);
 
-            const tabContainer = document.querySelector('.admin-tabs'); // 탭 버튼 감싸는 div 가정
-            if (tabContainer && !document.getElementById('btn-abnormal-logs')) {
+            const tabContainer = document.querySelector('.admin-tabs');
+            if (tabContainer && !document.querySelector('.admin-tab-btn[data-target="admin-tab-abnormal"]')) {
                 const abBtn = document.createElement('button');
                 abBtn.className = 'admin-tab-btn';
                 abBtn.id = 'btn-abnormal-logs';
                 abBtn.dataset.target = 'admin-tab-abnormal';
                 abBtn.innerText = '⚠️ 비정상 로그';
                 tabContainer.appendChild(abBtn);
-
-                // 탭 클릭 이벤트 연결
-                abBtn.addEventListener('click', () => this.switchTab('admin-tab-abnormal'));
+            }
+            if (tabContainer && !document.querySelector('.admin-tab-btn[data-target="admin-tab-quota-history"]')) {
+                const quotaBtn = document.createElement('button');
+                quotaBtn.className = 'admin-tab-btn';
+                quotaBtn.id = 'btn-quota-history';
+                quotaBtn.dataset.target = 'admin-tab-quota-history';
+                quotaBtn.innerText = '🕘 횟수 변경 이력';
+                tabContainer.appendChild(quotaBtn);
             }
 
-            // 기존 탭 이벤트 연결
             document.querySelectorAll('.admin-tab-btn').forEach(btn => {
-                btn.addEventListener('click', () => this.switchTab(btn.dataset.target));
+                if (btn.dataset.boundClick !== 'true') {
+                    btn.dataset.boundClick = 'true';
+                    btn.addEventListener('click', () => this.switchTab(btn.dataset.target));
+                }
             });
 
-            // 이벤트 리스너들
             const createUserForm = document.getElementById('admin-create-user-form');
-            if (createUserForm) createUserForm.addEventListener('submit', (e) => this.createUser(e));
+            if (createUserForm && createUserForm.dataset.boundSubmit !== 'true') {
+                createUserForm.dataset.boundSubmit = 'true';
+                createUserForm.addEventListener('submit', (e) => this.createUser(e));
+            }
 
             const refreshBtn = document.getElementById('refresh-users-btn');
-            if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadUsers());
+            if (refreshBtn && refreshBtn.dataset.boundClick !== 'true') {
+                refreshBtn.dataset.boundClick = 'true';
+                refreshBtn.addEventListener('click', () => this.loadUsers());
+            }
 
-            // 상세페이지 닫기(뒤로가기) 버튼용 컨테이너 생성
+            const refreshQuotaHistoryBtn = document.getElementById('refresh-quota-history-btn');
+            if (refreshQuotaHistoryBtn && refreshQuotaHistoryBtn.dataset.boundClick !== 'true') {
+                refreshQuotaHistoryBtn.dataset.boundClick = 'true';
+                refreshQuotaHistoryBtn.addEventListener('click', () => this.loadQuotaHistory(1, { reset: true }));
+            }
+
+            const quotaHistorySearchInput = document.getElementById('quota-history-search-input');
+            const quotaHistorySearchBtn = document.getElementById('quota-history-search-btn');
+            if (quotaHistorySearchBtn && quotaHistorySearchBtn.dataset.boundClick !== 'true') {
+                quotaHistorySearchBtn.dataset.boundClick = 'true';
+                quotaHistorySearchBtn.addEventListener('click', () => this.loadQuotaHistory(1, { reset: true }));
+            }
+            if (quotaHistorySearchInput && quotaHistorySearchInput.dataset.boundKeydown !== 'true') {
+                quotaHistorySearchInput.dataset.boundKeydown = 'true';
+                quotaHistorySearchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.loadQuotaHistory(1, { reset: true });
+                    }
+                });
+            }
+
+            const roleSelect = document.getElementById('user-role-select');
+            if (roleSelect && roleSelect.dataset.boundChange !== 'true') {
+                roleSelect.dataset.boundChange = 'true';
+                roleSelect.addEventListener('change', () => this.updateCreateUserFormByRole());
+            }
+            this.updateCreateUserFormByRole();
+
             this.createDetailViewContainer();
+        },
+
+        updateCreateUserFormByRole() {
+            const roleSelect = document.getElementById('user-role-select');
+            const quotaRow = document.getElementById('new-user-quota-row');
+            const quotaReasonRow = document.getElementById('new-user-quota-reason-row');
+            const quotaInput = document.getElementById('new-user-quota');
+            const quotaReasonInput = document.getElementById('new-user-quota-reason');
+
+            const role = roleSelect?.value || 'user';
+            const isAdmin = role === 'admin';
+
+            if (quotaRow) quotaRow.style.display = isAdmin ? 'none' : '';
+            if (quotaReasonRow) quotaReasonRow.style.display = isAdmin ? 'none' : '';
+
+            if (quotaInput) {
+                if (isAdmin) {
+                    quotaInput.dataset.prevValue = quotaInput.value;
+                    quotaInput.value = 0;
+                } else if (quotaInput.value === '' && quotaInput.dataset.prevValue) {
+                    quotaInput.value = quotaInput.dataset.prevValue;
+                }
+            }
+
+            if (quotaReasonInput) {
+                if (isAdmin) {
+                    quotaReasonInput.dataset.prevValue = quotaReasonInput.value;
+                    quotaReasonInput.value = '';
+                } else if (!quotaReasonInput.value && quotaReasonInput.dataset.prevValue) {
+                    quotaReasonInput.value = quotaReasonInput.dataset.prevValue;
+                }
+            }
         },
 
         // 상세 페이지용 HTML 구조 생성 (최초 1회)
@@ -869,40 +1140,8 @@ export function initActionHandlers(ctx) {
                 }
             });
 
-            // 동적으로 생성된 탭(비정상 로그) 처리
-            if (tabId === 'admin-tab-abnormal') {
-                // HTML에 콘텐츠 영역이 없을 수 있으므로 동적 생성
-                let abContent = document.getElementById('admin-tab-abnormal');
-                if (!abContent) {
-                    abContent = document.createElement('div');
-                    abContent.id = 'admin-tab-abnormal';
-                    abContent.className = 'admin-tab-content active';
-                    abContent.innerHTML = `
-                        <h3>⚠️ 비정상/에러 로그 감지</h3>
-                        <div style="margin-bottom:10px; color:#666; font-size:13px;">
-                            * <b>Error:</b> 검사 중 오류 발생 <br>
-                            * <b>Incomplete:</b> 시작은 했으나 종료 기록 없음 (강제종료/튕김)
-                        </div>
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>시간</th>
-                                    <th>업체명</th>
-                                    <th>기기모드</th>
-                                    <th>상태</th>
-                                    <th>내용</th>
-                                </tr>
-                            </thead>
-                            <tbody id="abnormal-log-body"></tbody>
-                        </table>
-                    `;
-                    document.querySelector('.admin-content-area').appendChild(abContent);
-                } else {
-
-                }
-                this.loadAbnormalLogs();
-            }
-
+            if (tabId === 'admin-tab-abnormal') this.loadAbnormalLogs();
+            if (tabId === 'admin-tab-quota-history') this.loadQuotaHistory(1, { reset: true });
             if (tabId === 'admin-tab-list') this.loadUsers();
             if (tabId === 'admin-tab-reports') this.loadReports();
         },
@@ -912,55 +1151,92 @@ export function initActionHandlers(ctx) {
         async createUser(e) {
             e.preventDefault();
 
-            // 1. 입력값 가져오기
             const nameInput = document.getElementById('new-user-name');
             const idInput = document.getElementById('new-user-id');
             const pwdInput = document.getElementById('new-user-pwd');
             const quotaInput = document.getElementById('new-user-quota');
+            const quotaReasonInput = document.getElementById('new-user-quota-reason');
             const roleSelect = document.getElementById('user-role-select');
 
-            const companyName = nameInput.value.trim(); // 업체명
+            const companyName = nameInput.value.trim();
             const inputId = idInput.value.trim();
             const password = pwdInput.value;
-            const selectedRole = roleSelect.value; // 'user', 'distributor', 'admin'
+            const selectedRole = roleSelect.value;
 
-            // 횟수값 확실하게 숫자(Integer)로 변환 (값이 없으면 기본 40)
-            let quota = parseInt(quotaInput.value, 10);
-            if (isNaN(quota)) quota = 40;
+            let quota = parseInt(quotaInput?.value, 10);
+            if (isNaN(quota)) quota = 0;
+            if (selectedRole === 'admin') quota = 0;
+
+            const quotaReason = selectedRole === 'admin'
+                ? ''
+                : (quotaReasonInput?.value || '').trim();
+
+            if (selectedRole !== 'admin' && quota > 0 && !quotaReason) {
+                await CustomUI.alert("초기 지급 사유를 입력해주세요.");
+                quotaReasonInput?.focus?.();
+                return;
+            }
 
             const fullEmail = inputId + ID_DOMAIN;
 
-            // 생성 확인 메시지
             const roleText = roleSelect.options[roleSelect.selectedIndex]?.text || selectedRole;
-            if (!await CustomUI.confirm(`[생성 확인]\n\n업체명: ${companyName}\nID: ${inputId}\n유형: ${roleText}\n기본 횟수: ${quota}회`)) return;
+            const confirmLines = [
+                `[생성 확인]`,
+                ``,
+                `업체명: ${companyName}`,
+                `ID: ${inputId}`,
+                `유형: ${roleText}`,
+                `기본 횟수: ${quota}회`
+            ];
+            if (selectedRole !== 'admin' && quota > 0) {
+                confirmLines.push(`초기 지급 사유: ${quotaReason || '업체 등록 초기 지급'}`);
+            }
+            if (!await CustomUI.confirm(confirmLines.join('\n'))) return;
 
             try {
-                // ✅ Renderer에서는 Firebase SDK로 계정 생성 금지. Main(IPC)에서 생성한다.
                 const created = await services.auth.createUser(fullEmail, password);
                 const newUid = created?.uid;
                 if (!newUid) throw new Error('계정 생성에 실패했습니다(uid 없음)');
 
-                // Firestore에 업체명과 횟수 저장
                 await setDoc(doc(null, "users", newUid), {
-                    companyName: companyName,   // 업체명
-                    userId: inputId,            // 아이디
-                    email: fullEmail,           // 이메일(풀버전)
-                    role: selectedRole,         // 권한
-                    isLocked: false,            // 잠금여부
-                    quota: quota,               // 검사 횟수 저장
+                    companyName: companyName,
+                    userId: inputId,
+                    email: fullEmail,
+                    role: selectedRole,
+                    isLocked: false,
+                    quota: quota,
                     android_scan_duration: 0,
-                    createdAt: serverTimestamp(), // 생성일(서버 시간)
+                    createdAt: serverTimestamp(),
                     lastScanDate: null
                 });
 
+                if (selectedRole !== 'admin' && quota !== 0) {
+                    const actor = authService?.getCurrentUser?.() || null;
+                    const historyEntry = buildQuotaHistoryGlobalEntry({
+                        uid: newUid,
+                        companyName: companyName,
+                        userId: inputId,
+                        change: quota,
+                        beforeQuota: 0,
+                        afterQuota: quota,
+                        reason: quotaReason || '업체 등록 초기 지급',
+                        actorUid: actor?.uid || null,
+                        actorEmail: actor?.email || 'unknown',
+                        actionType: 'create'
+                    });
+
+                    await addDoc(collection(null, "users", newUid, "quotaHistory"), historyEntry);
+                    await addDoc(collection(null, "quotaHistoryGlobal"), historyEntry);
+                }
+
                 await CustomUI.alert(`✅ 생성 완료!\n업체명: ${companyName}\n아이디: ${inputId}`);
 
-                // 폼 초기화
                 document.getElementById('admin-create-user-form').reset();
-                // 초기화 후 기본값 40 다시 세팅
-                if (quotaInput) quotaInput.value = 40;
+                if (quotaInput) quotaInput.value = 0;
+                if (quotaReasonInput) quotaReasonInput.value = '';
+                this.updateCreateUserFormByRole();
 
-                this.loadUsers(); // 목록 새로고침
+                this.loadUsers();
             } catch (error) {
                 console.error(error);
                 await CustomUI.alert("생성 실패: " + (error?.message || error));
@@ -1122,6 +1398,22 @@ export function initActionHandlers(ctx) {
                         <button class="admin-btn btn-delete" style="float:right;" onclick="window.deleteUser('${uid}', '${userData.companyName}')">⚠️ 업체 영구 삭제</button>
                     </div>
     
+                    <h3>🕘 최근 횟수 변경 이력</h3>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>변경 시간</th>
+                                <th>변경 수량</th>
+                                <th>변경 전 → 후</th>
+                                <th>사유</th>
+                                <th>관리자 이메일</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-quota-history-body">
+                            <tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">변경 이력을 불러오는 중...</td></tr>
+                        </tbody>
+                    </table>
+
                     <h3>📨 제출된 결과 리포트 (${reportsSnap.size}건)</h3>
                     <table class="admin-table">
                         <thead>
@@ -1137,6 +1429,7 @@ export function initActionHandlers(ctx) {
                         </tbody>
                     </table>
                 `;
+                await this.loadUserDetailQuotaHistory(uid);
                 const now = new Date();
                 const sevenDaysAgo = new Date();
                 sevenDaysAgo.setDate(now.getDate() - 7); // 현재 날짜에서 7일 전으로 설정
@@ -1181,6 +1474,87 @@ export function initActionHandlers(ctx) {
             } catch (e) {
                 console.error(e);
                 contentDiv.innerHTML = `<p style="color:red;">정보 로드 실패: ${e.message}</p>`;
+            }
+        },
+
+        async loadUserDetailQuotaHistory(uid) {
+            const tbody = document.getElementById('detail-quota-history-body');
+            if (!tbody) return;
+
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">변경 이력을 불러오는 중...</td></tr>';
+
+            try {
+                let rows = [];
+
+                try {
+                    const globalSnap = await getDocs(query(
+                        collection(null, 'quotaHistoryGlobal'),
+                        where('uid', '==', uid),
+                        orderBy('createdAtMs', 'desc'),
+                        limit(10)
+                    ));
+
+                    rows = globalSnap.docs.map((docSnap) => {
+                        const item = docSnap.data() || {};
+                        return {
+                            change: Number(item.change || 0),
+                            beforeQuota: Number(item.beforeQuota || 0),
+                            afterQuota: Number(item.afterQuota || 0),
+                            reason: item.reason || '-',
+                            actorEmail: item.actorEmail || '-',
+                            createdAt: item.createdAt || null,
+                            createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0),
+                            actionType: item.actionType || 'adjust'
+                        };
+                    });
+                } catch (globalError) {
+                    console.warn('detail quotaHistoryGlobal load fallback:', globalError);
+                }
+
+                if (!rows.length) {
+                    const legacySnap = await getDocs(query(
+                        collection(null, 'users', uid, 'quotaHistory'),
+                        orderBy('createdAt', 'desc'),
+                        limit(10)
+                    ));
+
+                    rows = legacySnap.docs.map((docSnap) => {
+                        const item = docSnap.data() || {};
+                        return {
+                            change: Number(item.change || 0),
+                            beforeQuota: Number(item.beforeQuota || 0),
+                            afterQuota: Number(item.afterQuota || 0),
+                            reason: item.reason || '-',
+                            actorEmail: item.actorEmail || '-',
+                            createdAt: item.createdAt || null,
+                            createdAtMs: Number(toDateSafe(item.createdAt)?.getTime() || 0),
+                            actionType: item.actionType || 'adjust'
+                        };
+                    }).sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+                }
+
+                if (!rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">등록된 횟수 변경 이력이 없습니다.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = rows.slice(0, 10).map((item) => {
+                    const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
+                    const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
+                    const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
+                    return `
+                        <tr>
+                            <td>${formatDateTimeKR(item.createdAt)}</td>
+                            <td style="font-weight:700; color:${changeColor};">${changeText}</td>
+                            <td>${item.beforeQuota} → ${item.afterQuota}</td>
+                            <td>${reasonPrefix}: ${item.reason}</td>
+                            <td>${item.actorEmail}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red; padding:20px;">이력 로드 실패: ${e.message}</td></tr>`;
             }
         },
 
@@ -1391,7 +1765,318 @@ export function initActionHandlers(ctx) {
                 tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로그 로드 실패: ${e.message}</td></tr>`;
             }
         },
-        // [탭 3] 전송된 리포트 로딩 (신규 기능)
+        async loadLegacyQuotaHistory() {
+            const historyRows = [];
+            const usersSnap = await getDocs(query(collection(null, "users"), orderBy("createdAt", "desc")));
+
+            for (const userDoc of usersSnap.docs) {
+                const userData = userDoc.data() || {};
+                if (userData.role === 'admin') continue;
+
+                const historySnap = await getDocs(
+                    query(
+                        collection(null, "users", userDoc.id, "quotaHistory"),
+                        orderBy("createdAt", "desc"),
+                        limit(30)
+                    )
+                );
+
+                historySnap.forEach((historyDoc) => {
+                    const item = historyDoc.data() || {};
+                    historyRows.push({
+                        uid: userDoc.id,
+                        companyName: item.companyName || userData.companyName || '미등록 업체',
+                        companyNameLower: normalizeCompanyNameLower(item.companyName || userData.companyName || ''),
+                        userId: userData.userId || userData.email || userDoc.id,
+                        change: Number(item.change || 0),
+                        beforeQuota: Number(item.beforeQuota || 0),
+                        afterQuota: Number(item.afterQuota || 0),
+                        reason: item.reason || '-',
+                        actorEmail: item.actorEmail || '-',
+                        createdAt: item.createdAt || null,
+                        createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0),
+                        actionType: item.actionType || 'adjust'
+                    });
+                });
+            }
+
+            historyRows.sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+            return historyRows;
+        },
+
+        buildQuotaHistoryDocId(item) {
+            const base = [
+                item.uid || 'nouid',
+                item.createdAtMs || 0,
+                item.actionType || 'adjust',
+                item.change || 0,
+                item.afterQuota || 0,
+                (item.reason || '-').slice(0, 30)
+            ].join('_');
+            return base.replace(/[^a-zA-Z0-9가-힣_-]/g, '_');
+        },
+
+        async backfillQuotaHistoryGlobal(items = []) {
+            if (!Array.isArray(items) || items.length === 0) return;
+            const jobs = items.map(async (item) => {
+                try {
+                    const id = this.buildQuotaHistoryDocId(item);
+                    await setDoc(doc(null, 'quotaHistoryGlobal', id), {
+                        uid: item.uid || null,
+                        companyName: item.companyName || '미등록 업체',
+                        companyNameLower: normalizeCompanyNameLower(item.companyName),
+                        userId: item.userId || item.uid || '-',
+                        change: Number(item.change || 0),
+                        beforeQuota: Number(item.beforeQuota || 0),
+                        afterQuota: Number(item.afterQuota || 0),
+                        reason: item.reason || '-',
+                        actorEmail: item.actorEmail || '-',
+                        actorUid: item.actorUid || null,
+                        createdAt: item.createdAt || null,
+                        createdAtMs: Number(item.createdAtMs || 0),
+                        actionType: item.actionType || 'adjust'
+                    }, { merge: true });
+                } catch (e) {
+                    console.warn('quotaHistoryGlobal backfill skip:', e?.message || e);
+                }
+            });
+            await Promise.all(jobs);
+        },
+
+        paginateQuotaHistoryItems(items = []) {
+            const pages = [];
+            for (let i = 0; i < items.length; i += this.quotaHistoryState.pageSize) {
+                pages.push(items.slice(i, i + this.quotaHistoryState.pageSize));
+            }
+            return pages;
+        },
+
+        async activateLegacyQuotaHistory(normalizedSearch = '') {
+            const state = this.quotaHistoryState;
+            const allLegacy = await this.loadLegacyQuotaHistory();
+            const filteredLegacy = normalizedSearch
+                ? allLegacy.filter((item) => normalizeCompanyNameLower(item.companyName).includes(normalizedSearch))
+                : allLegacy;
+            state.source = 'legacy';
+            state.currentPage = 1;
+            state.loadedPages = this.paginateQuotaHistoryItems(filteredLegacy);
+            state.pageCursors = [];
+            state.hasMore = false;
+            if (filteredLegacy.length > 0) {
+                this.backfillQuotaHistoryGlobal(filteredLegacy.slice(0, 300)).catch((e) => {
+                    console.warn('quotaHistoryGlobal background backfill failed:', e?.message || e);
+                });
+            }
+        },
+
+        async fetchGlobalQuotaHistoryBatch(cursorValue = null, batchSize = 100) {
+            const constraints = [orderBy('createdAtMs', 'desc')];
+            if (cursorValue !== null && cursorValue !== undefined) constraints.push(startAfter(cursorValue));
+            constraints.push(limit(batchSize));
+            const snap = await getDocs(query(collection(null, 'quotaHistoryGlobal'), ...constraints));
+            const rows = snap.docs.map((docSnap) => {
+                const item = docSnap.data() || {};
+                return {
+                    ...item,
+                    id: docSnap.id,
+                    createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0)
+                };
+            });
+            return {
+                rows,
+                cursor: rows.length ? rows[rows.length - 1].createdAtMs : null,
+                hasMore: rows.length === batchSize
+            };
+        },
+
+        async ensureQuotaHistorySearchPage(page, normalizedSearch) {
+            const state = this.quotaHistoryState;
+            if (!state.searchScan) {
+                state.searchScan = { cursor: null, exhausted: false, matchedRows: [] };
+            }
+
+            while (state.loadedPages.length < page && !state.searchScan.exhausted) {
+                const batch = await this.fetchGlobalQuotaHistoryBatch(state.searchScan.cursor, 100);
+                const matched = batch.rows.filter((item) => {
+                    const company = normalizeCompanyNameLower(item.companyName);
+                    const userId = normalizeCompanyNameLower(item.userId);
+                    return company.includes(normalizedSearch) || userId.includes(normalizedSearch);
+                });
+
+                if (matched.length > 0) {
+                    state.searchScan.matchedRows.push(...matched);
+                    state.loadedPages = this.paginateQuotaHistoryItems(state.searchScan.matchedRows);
+                }
+
+                state.searchScan.cursor = batch.cursor;
+                state.searchScan.exhausted = !batch.hasMore;
+
+                if (batch.rows.length === 0) {
+                    state.searchScan.exhausted = true;
+                }
+            }
+
+            state.hasMore = !state.searchScan.exhausted;
+        },
+
+        renderQuotaHistoryRows(items) {
+            const tbody = document.getElementById('admin-quota-history-body');
+            if (!tbody) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888; padding:20px;">등록된 횟수 변경 이력이 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map((item) => {
+                const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
+                const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
+                const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
+                return `
+                    <tr>
+                        <td>${formatDateTimeKR(item.createdAtMs || item.createdAt)}</td>
+                        <td>
+                            <div style="font-weight:700;">${item.companyName || '미등록 업체'}</div>
+                            <div style="font-size:12px; color:#888;">${item.userId || '-'}</div>
+                        </td>
+                        <td style="font-weight:700; color:${changeColor};">${changeText}</td>
+                        <td>${Number(item.beforeQuota || 0)} → ${Number(item.afterQuota || 0)}</td>
+                        <td>${reasonPrefix}: ${item.reason || '-'}</td>
+                        <td>${item.actorEmail || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        },
+
+        renderQuotaHistoryPagination() {
+            const container = document.getElementById('quota-history-pagination');
+            if (!container) return;
+
+            const state = this.quotaHistoryState;
+            const totalKnownPages = state.loadedPages.length;
+            if (totalKnownPages <= 1 && !state.hasMore) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="display:flex; justify-content:center; gap:6px; flex-wrap:wrap; margin-top:12px;">';
+            for (let i = 1; i <= totalKnownPages; i++) {
+                const activeStyle = i === state.currentPage
+                    ? 'background:#2563eb; color:#fff; border-color:#2563eb;'
+                    : 'background:#fff; color:#333; border-color:#d1d5db;';
+                html += `<button type="button" class="quota-history-page-btn" data-page="${i}" style="min-width:36px; height:36px; border:1px solid; border-radius:8px; cursor:pointer; ${activeStyle}">${i}</button>`;
+            }
+            if (state.hasMore) {
+                html += `<button type="button" class="quota-history-page-btn" data-page="${totalKnownPages + 1}" style="min-width:36px; height:36px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer; background:#fff; color:#333;">${totalKnownPages + 1}</button>`;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.quota-history-page-btn').forEach((btn) => {
+                btn.onclick = () => {
+                    const page = Number(btn.dataset.page || 1);
+                    this.loadQuotaHistory(page);
+                };
+            });
+        },
+
+        async loadQuotaHistory(page = 1, options = {}) {
+            const tbody = document.getElementById('admin-quota-history-body');
+            if (!tbody) return;
+
+            const state = this.quotaHistoryState;
+            const searchInput = document.getElementById('quota-history-search-input');
+            const searchKeyword = normalizeCompanyName(searchInput?.value || '');
+            const normalizedSearch = normalizeCompanyNameLower(searchKeyword);
+
+            if (options.reset || state.searchKeyword !== normalizedSearch) {
+                state.currentPage = 1;
+                state.searchKeyword = normalizedSearch;
+                state.loadedPages = [];
+                state.pageCursors = [];
+                state.hasMore = false;
+                state.source = 'global';
+                state.searchScan = null;
+            }
+
+            if (page < 1) page = 1;
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">변경 이력을 불러오는 중...</td></tr>';
+
+            try {
+                if (state.source === 'legacy') {
+                    state.currentPage = page;
+                    this.renderQuotaHistoryRows(state.loadedPages[page - 1] || []);
+                    this.renderQuotaHistoryPagination();
+                    return;
+                }
+
+                if (page <= state.loadedPages.length) {
+                    state.currentPage = page;
+                    this.renderQuotaHistoryRows(state.loadedPages[page - 1] || []);
+                    this.renderQuotaHistoryPagination();
+                    return;
+                }
+
+                if (normalizedSearch) {
+                    await this.ensureQuotaHistorySearchPage(page, normalizedSearch);
+                    if (state.loadedPages.length === 0 && state.searchScan?.exhausted) {
+                        await this.activateLegacyQuotaHistory(normalizedSearch);
+                    }
+                    state.currentPage = Math.min(page, Math.max(1, state.loadedPages.length || 1));
+                    this.renderQuotaHistoryRows(state.loadedPages[state.currentPage - 1] || []);
+                    this.renderQuotaHistoryPagination();
+                    return;
+                }
+
+                const constraints = [orderBy('createdAtMs', 'desc')];
+                if (page > 1) {
+                    const prevCursor = state.pageCursors[page - 2];
+                    if (prevCursor === undefined || prevCursor === null) {
+                        state.currentPage = Math.max(1, state.loadedPages.length);
+                        this.renderQuotaHistoryRows(state.loadedPages[state.currentPage - 1] || []);
+                        this.renderQuotaHistoryPagination();
+                        return;
+                    }
+                    constraints.push(startAfter(prevCursor));
+                }
+                constraints.push(limit(state.pageSize));
+
+                const snap = await getDocs(query(collection(null, 'quotaHistoryGlobal'), ...constraints));
+                const docs = snap.docs.map((docSnap) => {
+                    const item = docSnap.data() || {};
+                    return {
+                        ...item,
+                        id: docSnap.id,
+                        createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0)
+                    };
+                });
+
+                if (docs.length === 0 && page === 1) {
+                    await this.activateLegacyQuotaHistory('');
+                    this.renderQuotaHistoryRows(state.loadedPages[0] || []);
+                    this.renderQuotaHistoryPagination();
+                    return;
+                }
+
+                if (docs.length === 0) {
+                    state.hasMore = false;
+                    this.renderQuotaHistoryPagination();
+                    return;
+                }
+
+                state.loadedPages[page - 1] = docs;
+                state.pageCursors[page - 1] = docs[docs.length - 1]?.createdAtMs ?? null;
+                state.currentPage = page;
+                state.hasMore = docs.length === state.pageSize;
+                this.renderQuotaHistoryRows(docs);
+                this.renderQuotaHistoryPagination();
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="6" style="color:red;">이력 로드 실패: ${e.message}</td></tr>`;
+            }
+        },
+
+    // [탭 3] 전송된 리포트 로딩 (신규 기능)
         async loadReports() {
             const tbody = document.getElementById('admin-reports-body');
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">데이터 조회 중...</td></tr>';
@@ -1450,6 +2135,12 @@ export function initActionHandlers(ctx) {
     //        detail-screen이 logged-in-view 바깥에 있는 현재 레이아웃에서는 화면이 하얗게 비는 문제가 발생.
     //        -> ViewManager.showScreen으로 스크린 전환을 통일하고, 템플릿/DOM 준비 후 바인딩.
     window.viewReportDetail = async (reportId) => {
+        try {
+            document.querySelectorAll('#logged-in-view .nav-item').forEach(item => item.classList.remove('active'));
+            const navAdmin = document.getElementById('nav-admin');
+            if (navAdmin) navAdmin.classList.add('active');
+        } catch (_e) { }
+
         const loggedInView = document.getElementById('logged-in-view');
         const detailScreen = document.getElementById('admin-report-detail-screen');
         if (!loggedInView || !detailScreen) return;
@@ -1565,10 +2256,16 @@ export function initActionHandlers(ctx) {
                     }
 
                     // 권한 리스트 생성 (HTML)
+                    const permissionList = Array.isArray(app.grantedList) && app.grantedList.length > 0
+                        ? app.grantedList
+                        : (Array.isArray(app.requestedList) && app.requestedList.length > 0
+                            ? app.requestedList
+                            : (Array.isArray(app.permissions) ? app.permissions : []));
+
                     let permissionHtml = '';
-                    if (app.grantedList && app.grantedList.length > 0) {
-                        permissionHtml = app.grantedList.map(perm => {
-                            const shortPerm = perm.replace('android.permission.', '');
+                    if (permissionList.length > 0) {
+                        permissionHtml = permissionList.map(perm => {
+                            const shortPerm = String(perm || '').replace('android.permission.', '');
                             return `<span class="perm-badge granted">✔ ${shortPerm}</span>`;
                         }).join('');
                     } else {
@@ -1604,7 +2301,7 @@ export function initActionHandlers(ctx) {
                                 </div>
     
                                 <div class="detail-box">
-                                    <label>🔑 허용된 주요 권한 (${app.grantedCount || 0}개)</label>
+                                    <label>🔑 허용된 주요 권한 (${app.grantedCount || permissionList.length || 0}개)</label>
                                     <div class="perm-container">
                                         ${permissionHtml}
                                     </div>
@@ -1667,17 +2364,20 @@ export function initActionHandlers(ctx) {
     };
 
     window.changeQuota = async (uid, currentQuota) => {
-        console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`); // 디버깅용 로그
+        console.log(`횟수 변경 클릭됨: ${uid}, 현재: ${currentQuota}`);
 
-        // CustomUI가 아직 로드되지 않았을 경우를 대비한 안전장치
         if (typeof CustomUI === 'undefined') {
             alert("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.");
             return;
         }
 
-        const input = await CustomUI.prompt(`[횟수 조정]\n현재 횟수: ${currentQuota}회\n\n추가(+)하거나 차감(-)할 수량을 입력하세요.\n(예: 10 또는 -5)`, "0");
+        const input = await CustomUI.prompt(`[횟수 조정]
+현재 횟수: ${currentQuota}회
 
-        if (!input) return; // 취소 누름
+추가(+)하거나 차감(-)할 수량을 입력하세요.
+(예: 10 또는 -5)`, "0");
+
+        if (input === null) return;
         const change = parseInt(input, 10);
 
         if (isNaN(change)) {
@@ -1686,27 +2386,64 @@ export function initActionHandlers(ctx) {
         }
         if (change === 0) return;
 
+        const reason = await CustomUI.prompt(`[사유 입력]
+${change > 0 ? '추가' : '차감'} 사유를 입력하세요.`, "");
+        if (reason === null) return;
+
+        const trimmedReason = String(reason || '').trim();
+        if (!trimmedReason) {
+            await CustomUI.alert("❌ 횟수 변경 사유를 입력해주세요.");
+            return;
+        }
+
         try {
-            // 결과값 미리 계산
-            const newQuota = parseInt(currentQuota) + change;
+            const userRef = doc(null, "users", uid);
+            const userSnap = await getDoc(userRef);
+            if (!userSnap.exists()) throw new Error("업체 정보를 찾을 수 없습니다.");
+
+            const userData = userSnap.data() || {};
+            const safeCurrentQuota = Number(userData.quota ?? currentQuota ?? 0);
+            const newQuota = safeCurrentQuota + change;
+
             if (newQuota < 0) {
                 await CustomUI.alert("❌ 횟수는 0보다 작을 수 없습니다.");
                 return;
             }
 
-            // DB 업데이트 (increment 사용)
-            const userRef = doc(null, "users", uid);
             await updateDoc(userRef, {
-                quota: increment(change)
+                quota: newQuota
             });
 
-            await CustomUI.alert(`✅ 변경 완료!\n${currentQuota}회 -> ${newQuota}회`);
+            const actor = authService?.getCurrentUser?.() || null;
+            const historyEntry = buildQuotaHistoryGlobalEntry({
+                uid,
+                companyName: userData.companyName || '미등록 업체',
+                userId: userData.userId || userData.email || uid,
+                change,
+                beforeQuota: safeCurrentQuota,
+                afterQuota: newQuota,
+                reason: trimmedReason,
+                actorUid: actor?.uid || null,
+                actorEmail: actor?.email || 'unknown',
+                actionType: 'adjust'
+            });
 
-            // 화면 새로고침 (상세페이지 보고 있으면 상세페이지 갱신, 아니면 목록 갱신)
+            await addDoc(collection(null, "users", uid, "quotaHistory"), historyEntry);
+            await addDoc(collection(null, "quotaHistoryGlobal"), historyEntry);
+
+            await CustomUI.alert(`✅ 변경 완료!
+${safeCurrentQuota}회 -> ${newQuota}회
+사유: ${trimmedReason}`);
+
             if (AdminManager.currentUserUid === uid) {
                 AdminManager.viewUserDetail(uid);
             } else {
                 AdminManager.loadUsers();
+            }
+
+            const quotaTab = document.getElementById('admin-tab-quota-history');
+            if (quotaTab && quotaTab.classList.contains('active')) {
+                AdminManager.loadQuotaHistory(1, { reset: true });
             }
 
         } catch (e) {
@@ -1926,86 +2663,4 @@ export function initActionHandlers(ctx) {
 
         return 0; // 두 버전이 같음
     }
-
-    if (window.__permModalDelegationBound) return;
-window.__permModalDelegationBound = true;
-
-document.addEventListener('click', async (e) => {
-  const confirmBtn = e.target.closest('#perm-confirm-btn');
-  const cancelBtn  = e.target.closest('#perm-cancel-btn');
-
-  // ✅ 권한 모달 id는 이거임 (permission-modal 아님)
-  const modalEl = document.getElementById('perm-modal-overlay');
-
-  // 취소
-  if (cancelBtn) {
-    // 너 구조가 class hidden이면 이게 더 정석이지만, 일단 최소 수정:
-    // modalEl?.classList.add('hidden');
-    if (modalEl) modalEl.classList.add('hidden');
-    return;
-  }
-
-        // 확인
-    if (confirmBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const container = document.getElementById('perm-chip-container');
-        const packageName = confirmBtn.dataset.package;
-        const appName = confirmBtn.dataset.appname;
-
-        if (!container || !packageName) return;
-
-        const selectedPerms = Array.from(container.querySelectorAll('button, .bd-perm-chip'))
-            .filter(btn => btn.dataset.selected === '1')
-            .map(btn => btn.dataset.perm)
-            .filter(Boolean);
-
-        // ✅ 선택 없음: (너가 쓰던 방식 유지)
-        if (selectedPerms.length === 0) {
-            document.getElementById('perm-cancel-btn')?.click(); // 모달 닫고 alert 위로
-            await CustomUI.alert('선택된 권한이 없습니다.');
-            // ✅ alert 확인 후 다시 권한 모달 열고 싶으면:
-            // modalEl?.classList.remove('hidden');
-            return;
-        }
-
-        // ✅ confirm 띄우기 전에 모달 닫는 건 유지
-        document.getElementById('perm-cancel-btn')?.click();
-
-        const ok = await CustomUI.confirm(
-            `[주의] '${appName}' 앱의 선택한 권한 ${selectedPerms.length}개를 회수하고 강제 종료하시겠습니까?`
-        );
-
-            // ✅ 취소면: 권한 모달 다시 보여주고 끝 (여기가 핵심)
-        if (!ok) {
-            if (modalEl) modalEl.classList.remove('hidden');
-            return;
-        }
-
-            // ✅ OK면: 모달은 닫힌 상태 유지하고 neutralize 진행
-        const neutralizeBtn = document.getElementById('neutralize-btn');
-        if (neutralizeBtn) {
-            neutralizeBtn.disabled = true;
-            neutralizeBtn.textContent = "무력화 중...";
-        }
-
-        try {
-            const result = await window.electronAPI.neutralizeApp(packageName, selectedPerms);
-            if (result.success) {
-                await CustomUI.alert(`✅ 무력화 성공!\n총 ${result.count}개의 권한을 박탈했습니다.`);
-                document.getElementById('back-to-dashboard-btn')?.click();
-            } else {
-                throw new Error(result.error);
-            }
-        } catch (err) {
-        await CustomUI.alert(`무력화 실패: ${err.message}`);
-        } finally {
-            if (neutralizeBtn) {
-                neutralizeBtn.disabled = false;
-                neutralizeBtn.textContent = "🛡️ 무력화 (권한 박탈)";
-                }
-            }
-        }
-    });
 }

@@ -1,13 +1,4 @@
-/**
- * src/main/services/loginStorage.js
- *
- * Single responsibility: persist/load login info.
- *
- * Behavior:
- * - If remember=true and safeStorage encryption is available => store encrypted safePw (base64)
- * - Otherwise store plain pw
- * - Backward compatible with legacy { safePw } only payload
- */
+
 
 function createLoginStorage({ configPath, safeStorage, fs }) {
   if (!configPath) throw new Error('loginStorage: configPath is required');

@@ -59,7 +59,7 @@ export async function checkUserRole(servicesOrFirebase, uid) {
 
 /**
  * 로그인 유저의 설정값(시간, 회사명, quota) 로드
- * @returns {{ androidTargetMinutes: number, agencyName: string, quota: number } | null}
+ * @returns {{ androidTargetMinutes: number, iosProgressMode: string, agencyName: string, quota: number } | null}
  */
 export async function fetchUserInfoAndSettings(servicesOrFirebase, constants, uidOverride) {
   const auth = getAuth(servicesOrFirebase);
@@ -74,7 +74,7 @@ export async function fetchUserInfoAndSettings(servicesOrFirebase, constants, ui
 
   if (typeof doc !== 'function' || typeof getDoc !== 'function') {
     console.error('fetchUserInfoAndSettings: firestore 함수(doc/getDoc)를 찾을 수 없습니다.');
-    return { androidTargetMinutes: 0, agencyName: '업체명 없음', quota: 0 };
+    return { androidTargetMinutes: 0, iosProgressMode: 'real', agencyName: '업체명 없음', quota: 0 };
   }
 
   try {
@@ -84,11 +84,13 @@ export async function fetchUserInfoAndSettings(servicesOrFirebase, constants, ui
 
     if (!docSnap || (typeof docSnap.exists === 'function' && !docSnap.exists())) {
       console.log('⚠️ 유저 문서가 존재하지 않습니다. (기본값 0분 사용)');
-      return { androidTargetMinutes: 0, agencyName: '업체명 없음', quota: 0 };
+      return { androidTargetMinutes: 0, iosProgressMode: 'real', agencyName: '업체명 없음', quota: 0 };
     }
 
     const data = docSnap.data ? docSnap.data() : {};
     const androidTargetMinutes = data.android_scan_duration || 0;
+    const rawIosProgressMode = String(data.ios_progress_mode || 'real').trim().toLowerCase();
+    const iosProgressMode = rawIosProgressMode === 'random_20_30' ? 'random_20_30' : 'real';
     const agencyName = data.companyName || (data.userId ? `(주) ${data.userId}` : '업체명 없음');
 
     // quota는 number가 정상값. 과거 버그로 객체(map)일 수 있어 방어
@@ -107,9 +109,9 @@ export async function fetchUserInfoAndSettings(servicesOrFirebase, constants, ui
     }
 
     console.log(`✅ 설정 로드 완료: 안드로이드 검사 시간 [${androidTargetMinutes}분]`);
-    return { androidTargetMinutes, agencyName, quota };
+    return { androidTargetMinutes, iosProgressMode, agencyName, quota };
   } catch (error) {
     console.error('❌ 설정 불러오기 실패:', error);
-    return { androidTargetMinutes: 0, agencyName: '업체명 없음', quota: 0 };
+    return { androidTargetMinutes: 0, iosProgressMode: 'real', agencyName: '업체명 없음', quota: 0 };
   }
 }

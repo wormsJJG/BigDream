@@ -78,12 +78,61 @@ export function initScanController(ctx) {
         const meta = payload.meta || {};
         const deviceInfo = payload.deviceInfo || {};
 
-        setText('scan-info-examiner-name', meta.clientName || '-');
-        setText('scan-info-examiner-phone', meta.clientPhone || deviceInfo.phoneNumber || '-');
+        const pick = (...candidates) => {
+            for (const v of candidates) {
+                if (v === null || v === undefined) continue;
+                const s = String(v).trim();
+                if (!s) continue;
+                if (s.includes('익명')) continue;
+                if (s === '000-0000-0000' || s === '0000-00-00' || s === '0001-01-01') continue;
+                return s;
+            }
+            return '-';
+        };
 
-        setText('scan-info-model', deviceInfo.model || '-');
-        setText('scan-info-os', deviceInfo.os || '-');
-        setText('scan-info-serial', deviceInfo.serial || '-');
+        const examinerName = pick(
+            meta.targetName,
+            meta.targetUserName,
+            meta.subjectName,
+            meta.personName,
+            meta.clientName,
+            payload.targetInfo?.name,
+            payload.target?.name,
+            payload.subject?.name,
+            payload.clientInfo?.name,
+            payload.client?.name,
+            payload.clientName,
+            payload.examinerName,
+            payload.examiner?.name,
+            meta.examinerName
+        );
+        const examinerPhone = pick(
+            meta.targetPhone,
+            meta.targetMobile,
+            meta.subjectPhone,
+            meta.subjectMobile,
+            meta.personPhone,
+            meta.clientPhone,
+            payload.targetInfo?.phone,
+            payload.targetInfo?.mobile,
+            payload.target?.phone,
+            payload.target?.mobile,
+            payload.subject?.phone,
+            payload.subject?.mobile,
+            payload.clientInfo?.phone,
+            payload.client?.phone,
+            payload.clientPhone,
+            payload.examinerPhone,
+            payload.examiner?.phone,
+            meta.examinerPhone
+        );
+
+        setText('scan-info-examiner-name', examinerName);
+        setText('scan-info-examiner-phone', examinerPhone);
+
+        setText('scan-info-model', pick(deviceInfo.model));
+        setText('scan-info-os', pick(deviceInfo.os, deviceInfo.osVersion, deviceInfo.version));
+        setText('scan-info-serial', pick(deviceInfo.serial));
         setText('scan-info-root', formatRootStatus(deviceInfo));
 
         const savedAt = meta.savedAt || fileMeta?.savedAt || fileMeta?.mtimeMs;
@@ -532,6 +581,20 @@ export function initScanController(ctx) {
                     bdSetDashboardScrollLock(false);
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
 
+                    const applyInitialResultTabHighlight = () => {
+                        const resultSubMenu = document.getElementById('result-sub-menu');
+                        if (resultSubMenu) {
+                            resultSubMenu.classList.remove('hidden');
+                            resultSubMenu.style.display = 'block';
+                        }
+
+                        const firstTab = document.querySelector('#result-sub-menu .res-tab[data-target="res-summary"]');
+                        if (firstTab) {
+                            document.querySelectorAll('#result-sub-menu .res-tab').forEach(t => t.classList.remove('active'));
+                            firstTab.classList.add('active');
+                        }
+                    };
+
                     requestAnimationFrame(() => {
                         try {
                             ResultsRenderer.render(data);
@@ -554,11 +617,7 @@ export function initScanController(ctx) {
                         }
 
                         // 탭 하이라이트 강제 적용
-                        const firstTab = document.querySelector('.res-tab[data-target="res-summary"]');
-                        if (firstTab) {
-                            document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
-                            firstTab.classList.add('active');
-                        }
+                        applyInitialResultTabHighlight();
                     });
 
                     // 4) 네비 버튼 표시/숨김 
@@ -590,6 +649,11 @@ export function initScanController(ctx) {
                     }
 
                     await CustomUI.alert(`✅ 검사 결과 로드 완료!\n모델: ${data.deviceInfo?.model || '-'}`);
+
+                    // 알림 확인 후에도 첫 결과 탭 하이라이트가 유지되도록 한 번 더 보정
+                    setTimeout(() => {
+                        try { applyInitialResultTabHighlight(); } catch (_) {}
+                    }, 0);
 
                 } else if (result.message !== '열기 취소') {
                     await CustomUI.alert(`❌ 파일 열기 실패: ${result.error || result.message}`);
@@ -940,15 +1004,139 @@ export function initScanController(ctx) {
             State.lastScanData = null;
             window.lastScanData = null;
             this.toggleLaser(true)
+            const setIosStep = (step, text) => {
+                const statusText = document.getElementById('scan-status-text');
+                const progressLine = document.getElementById('ios-stepper-progress');
 
-            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
+                if (statusText && text) {
+                    statusText.textContent = text;
+                }
+
+                const widthMap = {
+                    1: '0%',
+                    2: '25%',
+                    3: '50%',
+                    4: '75%'
+                };
+
+                if (progressLine) {
+                    progressLine.style.width = widthMap[step] || '0%';
+                }
+
+                for (let i = 1; i <= 4; i += 1) {
+                    const el = document.getElementById(`ios-step-${i}`);
+                    if (!el) continue;
+
+                    el.classList.remove('done', 'current', 'pending');
+
+                    if (i < step) {
+                        el.classList.add('done');
+                    } else if (i === step) {
+                        el.classList.add('current');
+                    } else {
+                        el.classList.add('pending');
+                    }
+                }
+            };
+
+            setIosStep(1, '기기 확인 중...');
+            let offIosProgress = null;
+            const hasMeaningfulBackupSignal = (payload) => {
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
+                const current = Number(payload?.current) || 0;
+                const total = Number(payload?.total) || 0;
+                const minBackupBytes = 24 * 1024 * 1024;
+                const minBackupFiles = 25;
+                const minBackupCount = 25;
+
+                return (
+                    (current >= minBackupCount && total > 0)
+                    || bytes >= minBackupBytes
+                    || files >= minBackupFiles
+                );
+            };
+            const resolveIosStageMessage = (payload) => {
+                const stage = String(payload?.stage || '').trim().toLowerCase();
+                const rawMessage = payload?.message ? String(payload.message) : '';
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
+                const trustConfirmed = payload?.trustConfirmed === true;
+
+                if (stage === 'mvt') {
+                    return rawMessage || '수집된 데이터를 기반으로 정밀 분석을 진행하는 중...';
+                }
+
+                if (!trustConfirmed) {
+                    return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+                }
+
+                if (stage === 'backup') {
+                    if (bytes > 0 || files > 0) {
+                        return `검사 데이터 수집 중... (파일 ${files.toLocaleString('en-US')}개 / ${Utils.formatBytes(bytes)})`;
+                    }
+                    return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+                }
+
+                return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+            };
+
+            const shouldShowIosBackupStep = (payload) => {
+                const stage = String(payload?.stage || '').trim().toLowerCase();
+                const trustConfirmed = payload?.trustConfirmed === true;
+
+                return (
+                    trustConfirmed
+                    && (stage === 'backup' || hasMeaningfulBackupSignal(payload))
+                );
+            };
+
             try {
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
+                        offIosProgress = window.electronAPI.onIosScanProgress((payload) => {
+                            try {
+                                const stage = String(payload?.stage || '').trim().toLowerCase();
+                                const msg = resolveIosStageMessage(payload);
+                                const trustConfirmed = payload?.trustConfirmed === true;
+
+                                if (stage === 'mvt') {
+                                    setIosStep(3, '정밀 분석 진행 중...');
+                                    return;
+                                }
+
+                                if (shouldShowIosBackupStep(payload)) {
+                                    setIosStep(2, msg || '검사 데이터 수집 중...');
+                                    return;
+                                }
+
+                                if (!trustConfirmed) {
+                                    setIosStep(1, msg || '기기 연결과 신뢰 상태를 확인하는 중...');
+                                    return;
+                                }
+
+                                setIosStep(1, msg || '기기 확인 중...');
+                            } catch (_e) { }
+                        });
+                    }
+                } catch (_e) { }
+
                 // 1. 실제 검사 수행
-                const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
+                const isPrivilegedRole = State.userRole === 'admin' || State.userRole === 'distributor';
+                const iosProgressPolicy = isPrivilegedRole
+                    ? (State.iosProgressMode || 'real')
+                    : 'random_20_30';
+
+                const rawData = await window.electronAPI.runIosScan(State.currentUdid, {
+                    progressPolicy: iosProgressPolicy,
+                    userRole: State.userRole || 'user'
+                });
                 if (rawData.error) throw new Error(rawData.error);
 
                 // 2. 데이터 변환 및 결과 화면 렌더링
                 const data = Utils.transformIosData(rawData);
+                setIosStep(4, '결과 정리 중...');
+                await new Promise((resolve) => setTimeout(resolve, 400));
                 this.finishScan(data);
 
                 // 3. [성공 시에만 삭제] 10초 뒤 보안 파기 실행
@@ -966,6 +1154,12 @@ export function initScanController(ctx) {
 
             } catch (error) {
                 this.handleError(error);
+            } finally {
+                try {
+                    if (typeof offIosProgress === 'function') {
+                        offIosProgress();
+                    }
+                } catch (_e) { }
             }
         },
 

@@ -17,7 +17,7 @@ function createMainWindow({ baseDir }) {
     width: 1280,
     height: 900,
     webPreferences: {
-      devTools: true,
+      devTools: false,
       preload: path.join(baseDir, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
