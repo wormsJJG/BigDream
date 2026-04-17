@@ -1149,10 +1149,19 @@ export function initScanController(ctx) {
 
             let offIosProgress = null;
             const hasMeaningfulBackupSignal = (payload) => {
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
                 const current = Number(payload?.current) || 0;
                 const total = Number(payload?.total) || 0;
+                const minBackupBytes = 24 * 1024 * 1024;
+                const minBackupFiles = 25;
+                const minBackupCount = 25;
 
-                return (current > 0 && total > 0);
+                return (
+                    (current >= minBackupCount && total > 0)
+                    || bytes >= minBackupBytes
+                    || files >= minBackupFiles
+                );
             };
             const resolveIosStageMessage = (payload) => {
                 const stage = String(payload?.stage || '').trim().toLowerCase();
@@ -1160,9 +1169,14 @@ export function initScanController(ctx) {
                 const bytes = Number(payload?.bytes) || 0;
                 const files = Number(payload?.files) || 0;
                 const hasBackupSignal = hasMeaningfulBackupSignal(payload);
+                const trustConfirmed = payload?.trustConfirmed === true;
 
                 if (stage === 'mvt') {
                     return rawMessage || '수집된 데이터를 기반으로 정밀 분석을 진행하는 중...';
+                }
+
+                if (!trustConfirmed) {
+                    return rawMessage || IOS_TRUST_PROMPT_MESSAGE;
                 }
 
                 if (stage === 'backup' && hasBackupSignal) {
@@ -1182,6 +1196,14 @@ export function initScanController(ctx) {
                         try {
                             const stage = String(payload?.stage || '').trim().toLowerCase();
                             const msg = resolveIosStageMessage(payload);
+                            const rawMessage = String(payload?.message || '');
+                            const trustConfirmed = payload?.trustConfirmed === true;
+                            const shouldLatchBackup =
+                                trustConfirmed
+                                && (
+                                    hasMeaningfulBackupSignal(payload)
+                                    || /백업|데이터 수집/i.test(rawMessage)
+                                );
 
                             if (stage === 'mvt') {
                                 iosBackupStageLatched = true;
@@ -1190,13 +1212,13 @@ export function initScanController(ctx) {
                             }
 
                             if (stage === 'backup') {
-                                if (hasMeaningfulBackupSignal(payload)) {
+                                if (shouldLatchBackup) {
                                     iosBackupStageLatched = true;
                                 }
 
                                 if (iosBackupStageLatched) {
                                     setIosStep(2, msg || '검사 데이터 수집 중...');
-                                } else if (hasMeaningfulBackupSignal(payload)) {
+                                } else if (shouldLatchBackup) {
                                     setIosStep(2, msg || '검사 데이터 수집 중...');
                                 } else {
                                     setIosStep(1, IOS_TRUST_PROMPT_MESSAGE);
@@ -1206,6 +1228,11 @@ export function initScanController(ctx) {
 
                             if (iosBackupStageLatched) {
                                 setIosStep(2, msg || '검사 데이터 수집 중...');
+                                return;
+                            }
+
+                            if (!trustConfirmed) {
+                                setIosStep(1, msg || IOS_TRUST_PROMPT_MESSAGE);
                                 return;
                             }
 

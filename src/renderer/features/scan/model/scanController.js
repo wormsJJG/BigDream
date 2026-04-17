@@ -1046,11 +1046,14 @@ export function initScanController(ctx) {
                 const files = Number(payload?.files) || 0;
                 const current = Number(payload?.current) || 0;
                 const total = Number(payload?.total) || 0;
+                const minBackupBytes = 24 * 1024 * 1024;
+                const minBackupFiles = 25;
+                const minBackupCount = 25;
 
                 return (
-                    (current > 0 && total > 0)
-                    || bytes >= (24 * 1024 * 1024)
-                    || files >= 25
+                    (current >= minBackupCount && total > 0)
+                    || bytes >= minBackupBytes
+                    || files >= minBackupFiles
                 );
             };
             const resolveIosStageMessage = (payload) => {
@@ -1058,9 +1061,14 @@ export function initScanController(ctx) {
                 const rawMessage = payload?.message ? String(payload.message) : '';
                 const bytes = Number(payload?.bytes) || 0;
                 const files = Number(payload?.files) || 0;
+                const trustConfirmed = payload?.trustConfirmed === true;
 
                 if (stage === 'mvt') {
                     return rawMessage || '수집된 데이터를 기반으로 정밀 분석을 진행하는 중...';
+                }
+
+                if (!trustConfirmed) {
+                    return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
                 }
 
                 if (stage === 'backup') {
@@ -1075,8 +1083,12 @@ export function initScanController(ctx) {
 
             const shouldShowIosBackupStep = (payload) => {
                 const stage = String(payload?.stage || '').trim().toLowerCase();
+                const trustConfirmed = payload?.trustConfirmed === true;
 
-                return stage === 'backup' || hasMeaningfulBackupSignal(payload);
+                return (
+                    trustConfirmed
+                    && (stage === 'backup' || hasMeaningfulBackupSignal(payload))
+                );
             };
 
             try {
@@ -1086,6 +1098,7 @@ export function initScanController(ctx) {
                             try {
                                 const stage = String(payload?.stage || '').trim().toLowerCase();
                                 const msg = resolveIosStageMessage(payload);
+                                const trustConfirmed = payload?.trustConfirmed === true;
 
                                 if (stage === 'mvt') {
                                     setIosStep(3, '정밀 분석 진행 중...');
@@ -1094,6 +1107,11 @@ export function initScanController(ctx) {
 
                                 if (shouldShowIosBackupStep(payload)) {
                                     setIosStep(2, msg || '검사 데이터 수집 중...');
+                                    return;
+                                }
+
+                                if (!trustConfirmed) {
+                                    setIosStep(1, msg || '기기 연결과 신뢰 상태를 확인하는 중...');
                                     return;
                                 }
 

@@ -283,6 +283,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     step: 1,
                     totalSteps: 2,
                     stage: 'device-check',
+                    trustConfirmed: false,
                     percent: 0,
                     message: IOS_TRUST_PROMPT_MESSAGE
                 });
@@ -292,6 +293,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         step: 1,
                         totalSteps: 2,
                         stage: 'device-check',
+                        trustConfirmed: true,
                         percent: 100,
                         message: '기존 백업 파일을 확인했습니다. 백업 파일 기반으로 바로 분석을 시작합니다.'
                     });
@@ -320,6 +322,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 step: 1,
                                 totalSteps: 2,
                                 stage: 'device-check',
+                                trustConfirmed: true,
                                 percent: 100,
                                 message: '기존 백업 파일을 확인했습니다. 백업 파일 기반으로 바로 분석을 시작합니다.'
                             });
@@ -344,6 +347,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         step: 1,
                         totalSteps: 2,
                         stage: 'device-check',
+                        trustConfirmed: false,
                         percent: 0,
                         message: IOS_TRUST_PROMPT_MESSAGE
                     });
@@ -408,14 +412,19 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         return `아이폰 백업 진행 중... (파일 ${files.toLocaleString('en-US')}개 / ${formatBytes(bytes)})`;
                     };
 
+                    const MIN_MEANINGFUL_BACKUP_BYTES = 24 * 1024 * 1024;
+                    const MIN_MEANINGFUL_BACKUP_FILES = 25;
+                    const MIN_MEANINGFUL_BACKUP_COUNT = 25;
                     const hasMeaningfulBackupStarted = (bytes = 0, files = 0) => {
                         const safeBytes = Number(bytes) || 0;
                         const safeFiles = Number(files) || 0;
+                        const safeCurrent = Number(trustedCount?.cur) || 0;
+                        const safeTotal = Number(trustedCount?.total) || 0;
 
                         return !!(
-                            (trustedCount && trustedCount.cur > 0 && trustedCount.total > 0)
-                            || safeBytes > 0
-                            || safeFiles > 0
+                            (safeCurrent >= MIN_MEANINGFUL_BACKUP_COUNT && safeTotal > 0)
+                            || safeBytes >= MIN_MEANINGFUL_BACKUP_BYTES
+                            || safeFiles >= MIN_MEANINGFUL_BACKUP_FILES
                         );
                     };
 
@@ -425,12 +434,17 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                             step: 1,
                             totalSteps: 2,
                             stage,
+                            trustConfirmed: true,
                             percent,
                             bytes,
                             files,
                             current: trustedCount?.cur,
                             total: trustedCount?.total,
-                            message: message || buildBackupMessage(bytes, files)
+                            message: message || (
+                                stage === 'backup'
+                                    ? buildBackupMessage(bytes, files)
+                                    : IOS_TRUST_PROMPT_MESSAGE
+                            )
                         });
                     };
 
@@ -625,6 +639,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                         step: 1,
                                         totalSteps: 2,
                                         stage: 'device-check',
+                                        trustConfirmed: false,
                                         percent: lastPct,
                                         message: IOS_TRUST_PROMPT_MESSAGE
                                     });
@@ -823,6 +838,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                         step: 1,
                                         totalSteps: 2,
                                         stage: 'backup',
+                                        trustConfirmed: true,
                                         percent: Math.max(0, Math.min(99, lastPct)),
                                         message: '⚠️ iOS 기기 연결이 끊겼습니다. 케이블 연결/신뢰 상태를 확인해주세요.'
                                     });
@@ -951,6 +967,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     step: 1,
                     totalSteps: 2,
                     stage: 'backup',
+                    trustConfirmed: true,
                     percent: 100,
                     message: '아이폰 백업 완료 ✅'
                 });
@@ -985,6 +1002,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     step: 2,
                     totalSteps: 2,
                     stage: 'mvt',
+                    trustConfirmed: true,
                     percent: 0,
                     message: backupElapsedSec === null
                         ? '기존 백업 파일을 기반으로 정밀 분석을 시작합니다.'
@@ -1065,6 +1083,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                                 step: 2,
                                 totalSteps: 2,
                                 stage: 'mvt',
+                                trustConfirmed: true,
                                 percent: mvtLastPct,
                                 message: 'MVT 정밀 분석 진행 중...'
                             });
@@ -1132,6 +1151,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                             step: 2,
                             totalSteps: 2,
                             stage: 'mvt',
+                            trustConfirmed: true,
                             percent: lastEmittedPct,
                             message: analysisMessages[msgIndex]
                         });
@@ -1155,6 +1175,7 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                     step: 2,
                     totalSteps: 2,
                     stage: 'mvt',
+                    trustConfirmed: true,
                     percent: 100,
                     message: ' MVT 정밀 분석 완료 ✅'
                 });
