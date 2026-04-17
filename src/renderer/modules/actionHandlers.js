@@ -75,8 +75,41 @@ export function initActionHandlers(ctx) {
         return d ? d.toLocaleString('ko-KR') : '-';
     };
 
+    const buildPdfFileName = (scanData = {}) => {
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const rawModel = String(scanData?.deviceInfo?.model || State.currentDeviceMode || 'Report');
+        const safeModel = rawModel.replace(/[<>:"/\\|?*\x00-\x1F\s]+/g, '_').replace(/^_+|_+$/g, '') || 'Report';
+        return `BD_${dateStr}_${safeModel}.pdf`;
+    };
+
     const normalizeCompanyName = (value) => String(value || '').trim();
     const normalizeCompanyNameLower = (value) => normalizeCompanyName(value).toLowerCase();
+
+    const ensurePrintTemplateLoaded = async () => {
+        if (document.getElementById('print-date')) return true;
+
+        try {
+            const host = document.getElementById('print-root');
+            if (host && window?.bdScanner?.app?.readTextFile) {
+                const html = await window.bdScanner.app.readTextFile('src/renderer/components/print/view.html');
+                host.innerHTML = html;
+            }
+        } catch (e) {
+            console.warn('print template load failed:', e);
+        }
+
+        return Boolean(document.getElementById('print-date'));
+    };
+
+    const restorePrintLayout = (appendixHeader, printArea) => {
+        if (appendixHeader) {
+            appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
+        }
+        const fileSection = document.getElementById('print-file-system-section');
+        if (fileSection) fileSection.style.display = 'block';
+        if (printArea) printArea.style.display = 'none';
+    };
 
     const buildQuotaHistoryGlobalEntry = ({ uid, companyName, userId, change, beforeQuota, afterQuota, reason, actorUid, actorEmail, actionType }) => ({
         uid,
@@ -377,23 +410,12 @@ export function initActionHandlers(ctx) {
     if (printResultsBtn) {
         printResultsBtn.addEventListener('click', async () => {
             if (!window.lastScanData) {
-                alert("인쇄할 검사 결과가 없습니다.");
+                await CustomUI.alert("인쇄할 검사 결과가 없습니다.");
                 return;
             }
 
-            // print 템플릿이 아직 로드되지 않은 경우(초기 로딩/번들링 환경 차이) 안전하게 주입
-            if (!document.getElementById('print-date')) {
-                try {
-                    const host = document.getElementById('print-root');
-                    if (host && window?.bdScanner?.app?.readTextFile) {
-                        const html = await window.bdScanner.app.readTextFile('src/renderer/components/print/view.html');
-                        host.innerHTML = html;
-                    }
-                } catch (e) {
-                    console.warn('print template load failed:', e);
-                }
-            }
-            if (!document.getElementById('print-date')) {
+            const isTemplateReady = await ensurePrintTemplateLoaded();
+            if (!isTemplateReady) {
                 await CustomUI.alert('인쇄 템플릿을 불러오지 못했습니다. (print-date 없음)');
                 return;
             }
@@ -502,7 +524,7 @@ export function initActionHandlers(ctx) {
                 summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.`;
             } else {
                 summaryBox.className = 'summary-box status-safe';
-                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않앗습니다.`;
+                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않았습니다.`;
             }
 
             document.getElementById('print-total-count').textContent = allApps.length;
@@ -613,6 +635,7 @@ export function initActionHandlers(ctx) {
             // 7. [부록] 전체 앱 목록 (Android 전용 앱 목록 표시 로직 유지)
 
             const printArea = document.getElementById('printable-report');
+            if (printArea) printArea.style.display = 'block';
             // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
             const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
 
@@ -667,34 +690,62 @@ export function initActionHandlers(ctx) {
                 appGrid.appendChild(div);
             });
 
-            setTimeout(async () => {
-                window.print();
-                printArea.style.display = 'none';
+            const runPrintDialog = async () => {
+                setTimeout(async () => {
+                    window.print();
+                    restorePrintLayout(appendixHeader, printArea);
 
-                // 💡 [복구] 인쇄 후 섹션 번호를 원래대로 복구 (다음 검사를 위해)
-                if (appendixHeader) {
-                    appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
-                }
-                const fileSection = document.getElementById('print-file-system-section');
-                if (fileSection) fileSection.style.display = 'block';
+                    if (State.currentDeviceMode === 'android') {
+                        console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
 
+                        // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
+                        const result = await window.electronAPI.autoPushReportToAndroid();
 
-                if (State.currentDeviceMode === 'android') {
-                    console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
-
-                    // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
-                    const result = await window.electronAPI.autoPushReportToAndroid();
-
-                    if (result.success) {
-                        // 성공 시 사용자에게 알림 (선택 사항)
-                        CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
-                    } else {
-                        // 실패 시 로그만 출력하거나 필요 시 알림
-                        console.error("휴대폰 자동 전송 실패:", result.error);
+                        if (result.success) {
+                            CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
+                        } else {
+                            console.error("휴대폰 자동 전송 실패:", result.error);
+                        }
                     }
+                }, 500);
+            };
+
+            if (State.currentDeviceMode === 'ios') {
+                const selectedAction = await CustomUI.choose(
+                    '출력 방식을 선택하세요.',
+                    [
+                        { value: 'pdf', label: 'PDF 출력' },
+                        { value: 'report', label: '검사 결과서 출력' },
+                    ]
+                );
+
+                if (!selectedAction) {
+                    restorePrintLayout(appendixHeader, printArea);
+                    return;
                 }
 
-            }, 500);
+                if (selectedAction === 'pdf') {
+                    const result = await window.electronAPI.exportIosReportPdf({
+                        fileName: buildPdfFileName(data),
+                    });
+
+                    restorePrintLayout(appendixHeader, printArea);
+
+                    if (result?.success) {
+                        await CustomUI.alert(`PDF가 저장되었습니다.\n${result.filePath}`);
+                    } else if (!result?.canceled) {
+                        await CustomUI.alert(`PDF 저장 실패: ${result?.error || result?.message || '알 수 없는 오류'}`);
+                    }
+                    return;
+                }
+
+                if (selectedAction === 'report') {
+                    await runPrintDialog();
+                    return;
+                }
+            }
+
+            await runPrintDialog();
         });
     }
 

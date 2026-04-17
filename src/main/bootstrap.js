@@ -674,7 +674,10 @@ const updateService = createUpdateService({ firestoreService });
     CONFIG,
     MockData,
     iosService,
-    log
+    log,
+    app,
+    BrowserWindow,
+    dialog
   });
 
 

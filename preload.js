@@ -37,6 +37,7 @@ const IPC = {
         CHECK_CONNECTION: 'check-ios-connection',
         RUN_SCAN: 'run-ios-scan',
         DELETE_BACKUP: 'delete-ios-backup',
+        EXPORT_REPORT_PDF: 'export-ios-report-pdf',
         PROGRESS: 'ios-scan-progress'
     },
     APP: {
@@ -98,6 +99,7 @@ const bdScanner = {
         checkConnection: () => ipcRenderer.invoke(IPC.IOS.CHECK_CONNECTION),
         runScan: (udid, options = {}) => ipcRenderer.invoke(IPC.IOS.RUN_SCAN, udid, options),
         deleteBackup: (udid) => ipcRenderer.invoke(IPC.IOS.DELETE_BACKUP, udid),
+        exportReportPdf: (payload = {}) => ipcRenderer.invoke(IPC.IOS.EXPORT_REPORT_PDF, payload),
         onScanProgress: (callback) => {
             const handler = (_event, payload) => {
                 try { callback(payload); } catch (_e) { }
@@ -122,6 +124,7 @@ const electronAPI = {
     checkIosConnection: bdScanner.ios.checkConnection,
     runIosScan: bdScanner.ios.runScan,
     deleteIosBackup: bdScanner.ios.deleteBackup,
+    exportIosReportPdf: bdScanner.ios.exportReportPdf,
     onIosScanProgress: bdScanner.ios.onScanProgress,
     deleteApkFile: bdScanner.android.deleteApkFile,
     saveScanResult: bdScanner.app.saveScanResult,
