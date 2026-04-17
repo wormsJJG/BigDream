@@ -86,6 +86,7 @@ function start({ rootDir }) {
           ADB: path.join(RESOURCE_DIR, 'platform-tools', os.platform() === 'win32' ? 'adb.exe' : 'adb'),
           IOS_TOOLS: path.join(RESOURCE_DIR, 'ios-tools'),
           IOS_ID: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevice_id.exe' : 'idevice_id'),
+          IOS_PAIR: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevicepair.exe' : 'idevicepair'),
           IOS_INFO: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'ideviceinfo.exe' : 'ideviceinfo'),
           IOS_BACKUP: path.join(RESOURCE_DIR, 'ios-tools', os.platform() === 'win32' ? 'idevicebackup2.exe' : 'idevicebackup2'),
           TEMP_BACKUP: path.join(app.getPath('userData'), 'iphone_backups'),
@@ -673,7 +674,10 @@ const updateService = createUpdateService({ firestoreService });
     CONFIG,
     MockData,
     iosService,
-    log
+    log,
+    app,
+    BrowserWindow,
+    dialog
   });
 
 

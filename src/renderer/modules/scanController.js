@@ -14,6 +14,7 @@ import { setCircularGauge } from '../lib/circularGauge.js';
 
 import { renderSuspiciousListView } from '../features/scan/scanView.js';
 export function initScanController(ctx) {
+    const IOS_TRUST_PROMPT_MESSAGE = "검사를 위해 iPhone에서 PIN 입력 후 '이 컴퓨터 신뢰'를 승인해주세요.";
 
     // Shared access to AppDetailManager (module-safe)
     function showAppDetail(appData, displayName) {
@@ -468,7 +469,7 @@ export function initScanController(ctx) {
     }
 
     // Initial menu state on controller init
-    try { bdSetMenuState('preScan'); } catch (_e) {}
+    try { bdSetMenuState('preScan'); } catch (_e) { }
 
     // Services (auth + firestore)
     const authService = services.auth;
@@ -581,13 +582,13 @@ export function initScanController(ctx) {
                 ViewManager.activateMenu('nav-android-dashboard');
                 bdSetDashboardScrollLock(true);
                 bdResetAndroidDashboardUI(); // [Patch] clear previous dashboard residue
-                
+
                 ViewManager.showScreen(loggedInView, 'scan-dashboard-screen');
                 await ScanController.startAndroidScan();
             } else {
 
                 bdSetDashboardScrollLock(false);
-                
+
                 ViewManager.showScreen(loggedInView, 'scan-progress-screen');
                 await ScanController.startIosScan();
             }
@@ -649,15 +650,27 @@ export function initScanController(ctx) {
                     ViewManager.showScreen(loggedInView, 'scan-results-screen');
 
                     const applyInitialResultTabHighlight = () => {
-                        const resultSubMenu = document.getElementById('result-sub-menu');
-                        if (resultSubMenu) {
-                            resultSubMenu.classList.remove('hidden');
-                            resultSubMenu.style.display = 'block';
+                        const mode = normalizeDeviceMode(State.currentDeviceMode || osMode);
+                        const isIos = mode === 'ios';
+                        const activeMenuId = isIos ? 'ios-sub-menu' : 'result-sub-menu';
+                        const inactiveMenuId = isIos ? 'result-sub-menu' : 'ios-sub-menu';
+
+                        const activeMenu = document.getElementById(activeMenuId);
+                        const inactiveMenu = document.getElementById(inactiveMenuId);
+
+                        if (inactiveMenu) {
+                            inactiveMenu.classList.add('hidden');
+                            inactiveMenu.style.display = 'none';
                         }
 
-                        const firstTab = document.querySelector('#result-sub-menu .res-tab[data-target="res-summary"]');
+                        if (activeMenu) {
+                            activeMenu.classList.remove('hidden');
+                            activeMenu.style.display = 'block';
+                        }
+
+                        const firstTab = document.querySelector(`#${activeMenuId} .res-tab[data-target="res-summary"]`);
                         if (firstTab) {
-                            document.querySelectorAll('#result-sub-menu .res-tab').forEach(t => t.classList.remove('active'));
+                            document.querySelectorAll(`#${activeMenuId} .res-tab`).forEach(t => t.classList.remove('active'));
                             firstTab.classList.add('active');
                         }
                     };
@@ -718,7 +731,7 @@ export function initScanController(ctx) {
 
                     // 알림 확인 후에도 첫 결과 탭 하이라이트가 유지되도록 한 번 더 보정
                     setTimeout(() => {
-                        try { applyInitialResultTabHighlight(); } catch (_) {}
+                        try { applyInitialResultTabHighlight(); } catch (_) { }
                     }, 0);
 
                 } else if (result.message !== '열기 취소') {
@@ -756,226 +769,253 @@ export function initScanController(ctx) {
             }
         },
 
-                async startAndroidScan() {
+        async startAndroidScan() {
 
-                    bdResetAndroidDashboardUI();
-                    // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
-                    State.lastScanData = null;
-                    window.lastScanData = null;
+            bdResetAndroidDashboardUI();
+            // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
+            State.lastScanData = null;
+            window.lastScanData = null;
 
-                    this.toggleLaser(true);
+            this.toggleLaser(true);
 
-                    // 데이터 입자들을 보이게 설정
-                    const particles = document.querySelectorAll('.data-particle');
-                    particles.forEach(p => {
-                        p.style.display = 'block';
-                        p.style.opacity = '1';
-                    });
+            // 데이터 입자들을 보이게 설정
+            const particles = document.querySelectorAll('.data-particle');
+            particles.forEach(p => {
+                p.style.display = 'block';
+                p.style.opacity = '1';
+            });
 
-                    const alertText = document.getElementById('phoneStatusAlert');
-                    if (alertText) {
-                        alertText.textContent = 'SYSTEM SCANNING';
-                        alertText.classList.add('sc-preline');
-                        alertText.style.color = '#00d2ff';
+            const alertText = document.getElementById('phoneStatusAlert');
+            if (alertText) {
+                alertText.textContent = 'SYSTEM SCANNING';
+                alertText.classList.add('sc-preline');
+                alertText.style.color = '#00d2ff';
+            }
+
+            // 폴링 및 UI 리셋
+            this.resetSmartphoneUI();
+            this.startAndroidDashboardPolling();
+
+            // --------------------------------------------
+            // Phase 1: 메타데이터 수집(0~98) 연출 -> runScan 완료 시 100
+            // Phase 2: 검사 진행(시간 기반 0~99) -> finishScan에서 100 마무리
+            // --------------------------------------------
+
+            const startPhase1AdbProgress = () => {
+                let alive = true;
+                let p = 0;
+
+                const start = Date.now();
+                const tickMs = 120;
+
+                // 연출용 기대시간(평균). 너무 길면 답답해지고, 너무 짧으면 후반이 오래 머뭅니다.
+                const expectedMs = 8500;
+
+                // "ADB..." 반복을 피하고, 포렌식 제품 느낌의 단계명으로 표시
+                const messages = [
+                    '디바이스 연결 확인',
+                    '시스템 메타데이터 수집',
+                    '앱 목록 인덱싱',
+                    '권한/환경 점검',
+                    '분석 전처리 준비'
+                ];
+
+                const timer = setInterval(() => {
+                    if (!alive) return;
+
+                    const elapsed = Date.now() - start;
+                    const t = Math.min(1, elapsed / expectedMs); // 0~1
+
+                    // ease-out(초반 빠르고 후반 느리게)
+                    const eased = 1 - Math.pow(1 - t, 3);
+
+                    // 기본 목표치: 0~98
+                    let target = 98 * eased;
+
+                    // ✅ 90%부터 천천히(남은 구간을 더 완만하게)
+                    if (target > 90) {
+                        // 90~98 구간을 느리게 압축
+                        const slowPart = (target - 90) * 0.35;
+                        target = 90 + slowPart;
+
+                        // 멈춤 느낌 제거용 미세 워블
+                        const wobble = (Math.random() - 0.5) * 0.6; // -0.3 ~ +0.3
+                        target = Math.min(98, Math.max(90, target + wobble));
                     }
 
-                    // 폴링 및 UI 리셋
-                    this.resetSmartphoneUI();
-                    this.startAndroidDashboardPolling();
+                    // 스무딩: 목표치를 따라가도록(90 이후 더 느리게)
+                    const follow = target < 90 ? 0.24 : 0.12;
+                    p = p + (target - p) * follow;
 
-                    // --------------------------------------------
-                    // Phase 1: 메타데이터 수집(0~98) 연출 -> runScan 완료 시 100
-                    // Phase 2: 검사 진행(시간 기반 0~99) -> finishScan에서 100 마무리
-                    // --------------------------------------------
+                    const shown = Math.max(0, Math.min(98, Math.round(p)));
 
-                    const startPhase1AdbProgress = () => {
-                        let alive = true;
-                        let p = 0;
+                    // 2.5초마다 메시지 변경
+                    const msg = messages[Math.floor(elapsed / 2500) % messages.length];
 
-                        const start = Date.now();
-                        const tickMs = 120;
+                    ViewManager.updateProgress(shown, `${msg}...`);
+                }, tickMs);
 
-                        // 연출용 기대시간(평균). 너무 길면 답답해지고, 너무 짧으면 후반이 오래 머뭅니다.
-                        const expectedMs = 8500;
+                return {
+                    finish: () => {
+                        alive = false;
+                        clearInterval(timer);
+                        ViewManager.updateProgress(100, '수집 완료. 분석을 시작합니다...');
+                    },
+                    cancel: () => {
+                        alive = false;
+                        clearInterval(timer);
+                    }
+                };
+            };
 
-                        // "ADB..." 반복을 피하고, 포렌식 제품 느낌의 단계명으로 표시
-                        const messages = [
-                            '디바이스 연결 확인',
-                            '시스템 메타데이터 수집',
-                            '앱 목록 인덱싱',
-                            '권한/환경 점검',
-                            '분석 전처리 준비'
-                        ];
+            const startPhase2TimedProgress = ({ totalDurationMs, apps, onDone }) => {
+                const totalApps = apps.length;
+                const start = Date.now();
+                const tickInterval = 200;
 
-                        const timer = setInterval(() => {
-                            if (!alive) return;
+                const tick = () => {
+                    const elapsed = Date.now() - start;
+                    const ratio = totalDurationMs > 0 ? Math.min(1, elapsed / totalDurationMs) : 1;
 
-                            const elapsed = Date.now() - start;
-                            const t = Math.min(1, elapsed / expectedMs); // 0~1
+                    // 99%까지만(완료는 finishScan에서 100)
+                    const percent = Math.min(99, Math.floor(ratio * 100));
 
-                            // ease-out(초반 빠르고 후반 느리게)
-                            const eased = 1 - Math.pow(1 - t, 3);
+                    // 시간 비율로 앱 인덱스도 그럴듯하게 표시
+                    const idx = Math.min(totalApps, Math.max(1, Math.floor(ratio * totalApps)));
+                    const app = apps[idx - 1];
+                    const appName = app?.packageName ? Utils.formatAppName(app.packageName) : '...';
 
-                            // 기본 목표치: 0~98
-                            let target = 98 * eased;
+                    ViewManager.updateProgress(percent, `[${idx}/${totalApps}] 검사 진행중... ${appName}`);
 
-                            // ✅ 90%부터 천천히(남은 구간을 더 완만하게)
-                            if (target > 90) {
-                                // 90~98 구간을 느리게 압축
-                                const slowPart = (target - 90) * 0.35;
-                                target = 90 + slowPart;
+                    if (ratio >= 1) {
+                        onDone?.();
+                        return;
+                    }
+                    setTimeout(tick, tickInterval);
+                };
 
-                                // 멈춤 느낌 제거용 미세 워블
-                                const wobble = (Math.random() - 0.5) * 0.6; // -0.3 ~ +0.3
-                                target = Math.min(98, Math.max(90, target + wobble));
-                            }
+                tick();
+            };
 
-                            // 스무딩: 목표치를 따라가도록(90 이후 더 느리게)
-                            const follow = target < 90 ? 0.24 : 0.12;
-                            p = p + (target - p) * follow;
+            try {
+                // Phase 1 시작(runScan 대기 동안 연출)
+                const phase1 = startPhase1AdbProgress();
 
-                            const shown = Math.max(0, Math.min(98, Math.round(p)));
+                // 실제 데이터 수집/분석
+                const scanData = await window.electronAPI.runScan();
 
-                            // 2.5초마다 메시지 변경
-                            const msg = messages[Math.floor(elapsed / 2500) % messages.length];
+                // Phase 1 종료
+                phase1.finish();
 
-                            ViewManager.updateProgress(shown, `${msg}...`);
-                        }, tickMs);
+                const apps =
+                    scanData.allApps ||
+                    scanData.apps ||
+                    scanData.applications ||
+                    scanData.installedApps ||
+                    scanData.appList ||
+                    scanData.targetApps ||
+                    scanData.mvtResults?.apps ||
+                    scanData.mvtResults?.applications ||
+                    [];
 
-                        return {
-                            finish: () => {
-                                alive = false;
-                                clearInterval(timer);
-                                ViewManager.updateProgress(100, '수집 완료. 분석을 시작합니다...');
-                            },
-                            cancel: () => {
-                                alive = false;
-                                clearInterval(timer);
-                            }
-                        };
-                    };
+                const totalApps = apps.length;
 
-                    const startPhase2TimedProgress = ({ totalDurationMs, apps, onDone }) => {
-                        const totalApps = apps.length;
-                        const start = Date.now();
-                        const tickInterval = 200;
+                if (totalApps === 0) {
+                    this.toggleLaser(false);
+                    this.finishScan(scanData);
+                    console.log('[Security] 검사 성공. 결과 화면 진입 후 10초 뒤 임시 분석 데이터 정리 안내를 표시합니다. ANDROID');
+                    setTimeout(async () => {
+                        try {
+                            await CustomUI.alert(
+                                `✅ 검사 수집 데이터 삭제 완료
+검사에 사용된 안드로이드 수집 데이터가 안전하게 삭제되었습니다.`
+                            );
+                        } catch (_e) { }
+                    }, 10000);
+                    return;
+                }
 
-                        const tick = () => {
-                            const elapsed = Date.now() - start;
-                            const ratio = totalDurationMs > 0 ? Math.min(1, elapsed / totalDurationMs) : 1;
+                // 목표 시간 결정
+                let targetMinutes;
+                if (State.userRole === 'user') {
+                    // 일반 계정: 보안 정책상 20~30분 랜덤
+                    targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
+                    console.log(`[Security Policy] 일반 업체 - 랜덤 시간 적용: ${targetMinutes}분`);
+                } else {
+                    // 특권 계정: 설정 값 사용(없으면 0)
+                    targetMinutes = State.androidTargetMinutes || 0;
+                    console.log(`[Security Policy] 특권 계정 - 설정 시간 적용: ${targetMinutes}분`);
+                }
 
-                            // 99%까지만(완료는 finishScan에서 100)
-                            const percent = Math.min(99, Math.floor(ratio * 100));
+                // Phase 2 시작 전 0%로 리셋 + 문구 전환
+                setTimeout(() => {
+                    ViewManager.updateProgress(0, '검사 진행중...');
+                }, 300);
 
-                            // 시간 비율로 앱 인덱스도 그럴듯하게 표시
-                            const idx = Math.min(totalApps, Math.max(1, Math.floor(ratio * totalApps)));
-                            const app = apps[idx - 1];
-                            const appName = app?.packageName ? Utils.formatAppName(app.packageName) : '...';
+                if (targetMinutes > 0) {
+                    const totalDurationMs = targetMinutes * 60 * 1000;
+                    console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분(시간 기반)`);
 
-                            ViewManager.updateProgress(percent, `[${idx}/${totalApps}] 검사 진행중... ${appName}`);
-
-                            if (ratio >= 1) {
-                                onDone?.();
-                                return;
-                            }
-                            setTimeout(tick, tickInterval);
-                        };
-
-                        tick();
-                    };
-
-                    try {
-                        // Phase 1 시작(runScan 대기 동안 연출)
-                        const phase1 = startPhase1AdbProgress();
-
-                        // 실제 데이터 수집/분석
-                        const scanData = await window.electronAPI.runScan();
-
-                        // Phase 1 종료
-                        phase1.finish();
-
-                        const apps =
-                            scanData.allApps ||
-                            scanData.apps ||
-                            scanData.applications ||
-                            scanData.installedApps ||
-                            scanData.appList ||
-                            scanData.targetApps ||
-                            scanData.mvtResults?.apps ||
-                            scanData.mvtResults?.applications ||
-                            [];
-
-                        const totalApps = apps.length;
-
-                        if (totalApps === 0) {
+                    startPhase2TimedProgress({
+                        totalDurationMs,
+                        apps,
+                        onDone: () => {
                             this.toggleLaser(false);
                             this.finishScan(scanData);
+                            console.log('[Security] 검사 성공. 결과 화면 진입 후 10초 뒤 임시 분석 데이터 정리 안내를 표시합니다. ANDROID');
+                            setTimeout(async () => {
+                                try {
+                                    await CustomUI.alert(
+                                        `✅ 검사 수집 데이터 삭제 완료
+검사에 사용된 안드로이드 수집 데이터가 안전하게 삭제되었습니다.`
+                                    );
+                                } catch (_e) { }
+                            }, 10000);
+                        }
+                    });
+                } else {
+                    // 설정 시간이 0이면 기존 빠른 모드 fallback
+                    const timePerApp = 35;
+                    console.log(`[Theater Mode] 빠른 모드, 총 ${totalApps}개 앱`);
+
+                    let currentIndex = 0;
+                    const processNextApp = () => {
+                        if (currentIndex >= totalApps) {
+                            this.toggleLaser(false);
+                            this.finishScan(scanData);
+                            console.log('[Security] 검사 성공. 결과 화면 진입 후 10초 뒤 임시 분석 데이터 정리 안내를 표시합니다. ANDROID');
+                            setTimeout(async () => {
+                                try {
+                                    await CustomUI.alert(
+                                        `✅ 검사 수집 데이터 삭제 완료
+검사에 사용된 안드로이드 수집 데이터가 안전하게 삭제되었습니다.`
+                                    );
+                                } catch (_e) { }
+                            }, 10000);
                             return;
                         }
 
-                        // 목표 시간 결정
-                        let targetMinutes;
-                        if (State.userRole === 'user') {
-                            // 일반 계정: 보안 정책상 20~30분 랜덤
-                            targetMinutes = Math.floor(Math.random() * (30 - 20 + 1) + 20);
-                            console.log(`[Security Policy] 일반 업체 - 랜덤 시간 적용: ${targetMinutes}분`);
-                        } else {
-                            // 특권 계정: 설정 값 사용(없으면 0)
-                            targetMinutes = State.androidTargetMinutes || 0;
-                            console.log(`[Security Policy] 특권 계정 - 설정 시간 적용: ${targetMinutes}분`);
-                        }
+                        const app = apps[currentIndex];
+                        const appName = Utils.formatAppName(app.packageName);
+                        const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
 
-                        // Phase 2 시작 전 0%로 리셋 + 문구 전환
-                        setTimeout(() => {
-                            ViewManager.updateProgress(0, '검사 진행중...');
-                        }, 300);
+                        ViewManager.updateProgress(
+                            Math.min(99, percent),
+                            `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`
+                        );
 
-                        if (targetMinutes > 0) {
-                            const totalDurationMs = targetMinutes * 60 * 1000;
-                            console.log(`[Theater Mode] 총 ${totalApps}개 앱, 목표 ${targetMinutes}분(시간 기반)`);
+                        currentIndex++;
+                        setTimeout(processNextApp, timePerApp);
+                    };
 
-                            startPhase2TimedProgress({
-                                totalDurationMs,
-                                apps,
-                                onDone: () => {
-                                    this.toggleLaser(false);
-                                    this.finishScan(scanData);
-                                }
-                            });
-                        } else {
-                            // 설정 시간이 0이면 기존 빠른 모드 fallback
-                            const timePerApp = 35;
-                            console.log(`[Theater Mode] 빠른 모드, 총 ${totalApps}개 앱`);
-
-                            let currentIndex = 0;
-                            const processNextApp = () => {
-                                if (currentIndex >= totalApps) {
-                                    this.toggleLaser(false);
-                                    this.finishScan(scanData);
-                                    return;
-                                }
-
-                                const app = apps[currentIndex];
-                                const appName = Utils.formatAppName(app.packageName);
-                                const percent = Math.floor(((currentIndex + 1) / totalApps) * 100);
-
-                                ViewManager.updateProgress(
-                                    Math.min(99, percent),
-                                    `[${currentIndex + 1}/${totalApps}] ${appName} 정밀 분석 중...`
-                                );
-
-                                currentIndex++;
-                                setTimeout(processNextApp, timePerApp);
-                            };
-
-                            processNextApp();
-                        }
-                    } catch (error) {
-                        // 에러 발생 시 레이저를 끄고 에러 핸들링
-                        this.toggleLaser(false);
-                        this.handleError(error);
-                    }
-                },
+                    processNextApp();
+                }
+            } catch (error) {
+                // 에러 발생 시 레이저를 끄고 에러 핸들링
+                this.toggleLaser(false);
+                this.handleError(error);
+            }
+        },
 
         async startLogTransaction(deviceMode) {
             const user = authService.getCurrentUser?.();
@@ -1067,64 +1107,202 @@ export function initScanController(ctx) {
         },
 
         async startIosScan() {
-            // 재검사 시 이전 결과 데이터가 남아있으면 결과 메뉴/탭 표시가 꼬일 수 있어 초기화
             State.lastScanData = null;
             window.lastScanData = null;
-            this.toggleLaser(true)
+            this.toggleLaser(true);
+            let iosBackupStageLatched = false;
 
-            // iOS 실시간 진행률 이벤트 연결 (main -> preload -> renderer)
-            // NOTE: startIosScan 종료 시 반드시 해제해야 중복 리스너로 인한 UI 오동작을 방지할 수 있습니다.
+            const setIosStep = (step, text) => {
+                const statusText = document.getElementById('scan-status-text');
+                const progressLine = document.getElementById('ios-stepper-progress');
+
+                if (statusText && text) {
+                    statusText.textContent = text;
+                }
+
+                const widthMap = {
+                    1: '0%',
+                    2: '25%',
+                    3: '50%',
+                    4: '75%'
+                };
+
+                if (progressLine) {
+                    progressLine.style.width = widthMap[step] || '0%';
+                }
+
+                for (let i = 1; i <= 4; i += 1) {
+                    const el = document.getElementById(`ios-step-${i}`);
+                    if (!el) continue;
+
+                    el.classList.remove('done', 'current', 'pending');
+
+                    if (i < step) {
+                        el.classList.add('done');
+                    } else if (i === step) {
+                        el.classList.add('current');
+                    } else {
+                        el.classList.add('pending');
+                    }
+                }
+            };
+
             let offIosProgress = null;
+            const hasMeaningfulBackupSignal = (payload) => {
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
+                const current = Number(payload?.current) || 0;
+                const total = Number(payload?.total) || 0;
+                const minBackupBytes = 24 * 1024 * 1024;
+                const minBackupFiles = 25;
+                const minBackupCount = 25;
+
+                return (
+                    (current >= minBackupCount && total > 0)
+                    || bytes >= minBackupBytes
+                    || files >= minBackupFiles
+                );
+            };
+            const resolveIosStageMessage = (payload) => {
+                const stage = String(payload?.stage || '').trim().toLowerCase();
+                const rawMessage = payload?.message ? String(payload.message) : '';
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
+                const hasBackupSignal = hasMeaningfulBackupSignal(payload);
+                const trustConfirmed = payload?.trustConfirmed === true;
+
+                if (stage === 'mvt') {
+                    return rawMessage || '수집된 데이터를 기반으로 정밀 분석을 진행하는 중...';
+                }
+
+                if (!trustConfirmed) {
+                    return rawMessage || IOS_TRUST_PROMPT_MESSAGE;
+                }
+
+                if (stage === 'backup' && hasBackupSignal) {
+                    if (bytes > 0 || files > 0) {
+                        return `검사 데이터 수집 중... (파일 ${files.toLocaleString('en-US')}개 / ${Utils.formatBytes(bytes)})`;
+                    }
+                    return rawMessage || IOS_TRUST_PROMPT_MESSAGE;
+                }
+
+                return rawMessage || IOS_TRUST_PROMPT_MESSAGE;
+            };
+            setIosStep(1, IOS_TRUST_PROMPT_MESSAGE);
+
             try {
                 if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
                     offIosProgress = window.electronAPI.onIosScanProgress((payload) => {
                         try {
-                            const pctRaw = payload && payload.percent;
-                            const pct = Number(pctRaw);
-                            const msg = (payload && payload.message) ? String(payload.message) : '';
+                            const stage = String(payload?.stage || '').trim().toLowerCase();
+                            const msg = resolveIosStageMessage(payload);
+                            const rawMessage = String(payload?.message || '');
+                            const trustConfirmed = payload?.trustConfirmed === true;
+                            const shouldLatchBackup =
+                                trustConfirmed
+                                && (
+                                    hasMeaningfulBackupSignal(payload)
+                                    || /백업|데이터 수집/i.test(rawMessage)
+                                );
 
-                            if (Number.isFinite(pct)) {
-                                const clamped = Math.max(0, Math.min(100, Math.floor(pct)));
-                                ViewManager.updateProgress(clamped, msg || '아이폰 백업 및 분석 진행 중...', true);
-                            } else if (msg) {
-                                // percent가 없더라도 메시지는 갱신
-                                const currentPctText = document.getElementById('progress-percent-text')?.textContent || '0%';
-                                const currentPct = Number(String(currentPctText).replace('%', ''));
-                                const safePct = Number.isFinite(currentPct) ? currentPct : 0;
-                                ViewManager.updateProgress(safePct, msg, true);
+                            if (stage === 'mvt') {
+                                iosBackupStageLatched = true;
+                                setIosStep(3, '정밀 분석 진행 중...');
+                                return;
                             }
+
+                            if (stage === 'backup') {
+                                if (shouldLatchBackup) {
+                                    iosBackupStageLatched = true;
+                                }
+
+                                if (iosBackupStageLatched) {
+                                    setIosStep(2, msg || '검사 데이터 수집 중...');
+                                } else if (shouldLatchBackup) {
+                                    setIosStep(2, msg || '검사 데이터 수집 중...');
+                                } else {
+                                    setIosStep(1, IOS_TRUST_PROMPT_MESSAGE);
+                                }
+                                return;
+                            }
+
+                            if (iosBackupStageLatched) {
+                                setIosStep(2, msg || '검사 데이터 수집 중...');
+                                return;
+                            }
+
+                            if (!trustConfirmed) {
+                                setIosStep(1, msg || IOS_TRUST_PROMPT_MESSAGE);
+                                return;
+                            }
+
+                            setIosStep(1, msg || IOS_TRUST_PROMPT_MESSAGE);
                         } catch (_e) { }
                     });
                 }
             } catch (_e) { }
 
-            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
             try {
-                // 1. 실제 검사 수행
-                const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
+                const isPrivilegedRole = State.userRole === 'admin' || State.userRole === 'distributor';
+                const iosProgressPolicy = isPrivilegedRole
+                    ? (State.iosProgressMode || 'real')
+                    : 'random_20_30';
+
+                const rawData = await window.electronAPI.runIosScan(State.currentUdid, {
+                    progressPolicy: iosProgressPolicy,
+                    userRole: State.userRole || 'user'
+                });
                 if (rawData.error) throw new Error(rawData.error);
 
-                // 2. 데이터 변환 및 결과 화면 렌더링
                 const data = Utils.transformIosData(rawData);
+                setIosStep(4, '결과 정리 중...');
+                await new Promise((resolve) => setTimeout(resolve, 400));
                 this.finishScan(data);
 
-                // 3. [성공 시에만 삭제] 10초 뒤 보안 파기 실행
-                console.log(`[Security] 검사 성공. 10초 후 백업 파기를 시도합니다.`);
+                const finishedUdid = State.currentUdid;
+                console.log(`[Security] 검사 성공. 결과 화면 진입 후 10초 뒤 백업 삭제를 시도합니다. UDID=${finishedUdid}`);
 
-                setTimeout(() => {
-                    console.log(`[Renderer] 삭제 요청 발송 -> 대상 UDID: ${State.currentUdid}`);
+                setTimeout(async () => {
+                    try {
+                        const res = await window.electronAPI.deleteIosBackup(finishedUdid);
 
-                    window.electronAPI.deleteIosBackup(State.currentUdid)
-                        .then(res => {
-                            if (res.success) console.log("✅ [Security] 메인 프로세스에서 삭제 완료 응답을 받았습니다.");
-                        })
-                        .catch(err => console.error("❌ [Renderer] 삭제 명령 전달 실패:", err));
+                        if (res?.success && res?.deleted) {
+                            await CustomUI.alert(
+                                `✅ 임시 백업 데이터 삭제 완료
+                            검사에 사용된 iPhone 임시 백업 데이터가 안전하게 삭제되었습니다.`
+                            );
+                            return;
+                        }
+
+                        if (res?.success && !res?.deleted) {
+                            return;
+                        }
+
+                        await CustomUI.alert(
+                            `⚠️ 임시 백업 데이터 자동 삭제 확인 필요
+
+                            이번 검사에 사용된 로컬 임시 백업 파일을
+                            자동으로 삭제하지 못했습니다.
+
+                            개인정보 보호를 위해 백업 폴더 상태를 확인해주세요.
+                            오류: ${res?.error || '알 수 없는 오류'}`
+                        );
+                    } catch (err) {
+                        await CustomUI.alert(
+                            `⚠️ 임시 백업 데이터 자동 삭제 확인 필요
+
+                            이번 검사에 사용된 로컬 임시 백업 파일 삭제 중
+                            오류가 발생했습니다.
+
+                            개인정보 보호를 위해 백업 폴더 상태를 확인해주세요.
+                            오류: ${err?.message || err}`
+                        );
+                    }
                 }, 10000);
 
             } catch (error) {
                 this.handleError(error);
             } finally {
-                // iOS 진행률 리스너 정리
                 try {
                     if (typeof offIosProgress === 'function') {
                         offIosProgress();
@@ -1158,7 +1336,7 @@ export function initScanController(ctx) {
             // 3. 텍스트 초기화
             if (alertText) {
                 alertText.textContent = 'SYSTEM SCANNING';
-                        alertText.classList.add('sc-preline');
+                alertText.classList.add('sc-preline');
                 alertText.style.color = '';
                 alertText.style.textShadow = '';
             }
@@ -1524,7 +1702,7 @@ export function initScanController(ctx) {
             /* [BD-PATCH] IOS_CLEANUP_ANDROID_LISTENERS */
             // If previously bound Android search/sort listeners exist, remove them when rendering iOS to prevent UI corruption.
             if (isIos && Array.isArray(State.__bd_androidListCleanup)) {
-                State.__bd_androidListCleanup.forEach(fn => { try { fn && fn(); } catch (_e) {} });
+                State.__bd_androidListCleanup.forEach(fn => { try { fn && fn(); } catch (_e) { } });
                 State.__bd_androidListCleanup = [];
             }
 
@@ -1888,30 +2066,30 @@ export function initScanController(ctx) {
             };
 
 
-const renderActions = (actions, itemId) => {
-    if (!Array.isArray(actions) || actions.length === 0) return '';
-    const btns = actions.map((a) => {
-        const kind = String(a.kind || '').toLowerCase();
-        const label = escapeHtml(a.label || (kind === 'opensettings' ? '설정 열기' : '실행'));
+            const renderActions = (actions, itemId) => {
+                if (!Array.isArray(actions) || actions.length === 0) return '';
+                const btns = actions.map((a) => {
+                    const kind = String(a.kind || '').toLowerCase();
+                    const label = escapeHtml(a.label || (kind === 'opensettings' ? '설정 열기' : '실행'));
 
-        // IMPORTANT:
-        // JSON 문자열을 escapeHtml()로 attribute에 넣으면 따옴표가 &quot;로 치환되어
-        // JSON.parse가 실패 → 버튼이 "아무 반응 없음"처럼 보입니다.
-        // 따라서 encodeURIComponent로 넣고, 클릭 시 decodeURIComponent 후 JSON.parse 합니다.
-        const data = {
-            kind: a.kind,
-            target: a.target,
-            value: a.value,
-            intent: a.intent,
-            component: a.component,
+                    // IMPORTANT:
+                    // JSON 문자열을 escapeHtml()로 attribute에 넣으면 따옴표가 &quot;로 치환되어
+                    // JSON.parse가 실패 → 버튼이 "아무 반응 없음"처럼 보입니다.
+                    // 따라서 encodeURIComponent로 넣고, 클릭 시 decodeURIComponent 후 JSON.parse 합니다.
+                    const data = {
+                        kind: a.kind,
+                        target: a.target,
+                        value: a.value,
+                        intent: a.intent,
+                        component: a.component,
 
-            itemId
-        };
-        const encoded = encodeURIComponent(JSON.stringify(data));
-        return `<button class="ds-btn ds-action-btn" data-ds-kind="${escapeHtml(kind)}" data-ds-action="${encoded}">${label}</button>`;
-    }).join('');
-    return `<div class="ds-actions">${btns}</div>`;
-};
+                        itemId
+                    };
+                    const encoded = encodeURIComponent(JSON.stringify(data));
+                    return `<button class="ds-btn ds-action-btn" data-ds-kind="${escapeHtml(kind)}" data-ds-action="${encoded}">${label}</button>`;
+                }).join('');
+                return `<div class="ds-actions">${btns}</div>`;
+            };
 
             const rows = items.map((it) => {
                 const note = it.note ? `<div class="ds-note">${escapeHtml(it.note)}</div>` : '';
@@ -1977,15 +2155,15 @@ const renderActions = (actions, itemId) => {
                             this.renderDeviceSecurityStatus(refreshed, container);
                         } catch (e) {
                             console.warn('[DeviceSecurityStatus] action failed', e);
-                            try { btn.textContent = oldText || '실패'; } catch(_e) {}
+                            try { btn.textContent = oldText || '실패'; } catch (_e) { }
                         } finally {
-                            try { btn.disabled = false; } catch(_e) {}
-                            try { btn.textContent = oldText; } catch(_e) {}
+                            try { btn.disabled = false; } catch (_e) { }
+                            try { btn.textContent = oldText; } catch (_e) { }
                         }
                     });
                     container.__dsBound = true;
                 }
-            } catch (_e) {}
+            } catch (_e) { }
         },
 
         // [MVT 분석 박스 렌더링 함수]
@@ -2405,7 +2583,7 @@ const renderActions = (actions, itemId) => {
                 return;
             } else if (cachedEl) {
                 // 잘못된 캐시(plain object 등) 제거 후 정상 생성 흐름으로 진행
-                try { delete app.__bd_el[listKey]; } catch (_) {}
+                try { delete app.__bd_el[listKey]; } catch (_) { }
             }
 
             const isSuspicious = app.reason ? true : false;

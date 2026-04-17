@@ -11,9 +11,9 @@ export async function runAndroidScan(electronAPI) {
   return electronAPI.runScan();
 }
 
-export async function runIosScan(electronAPI, udid, userRole) {
+export async function runIosScan(electronAPI, udid, options) {
   if (!electronAPI?.runIosScan) throw new Error('electronAPI.runIosScan is not available');
-  return electronAPI.runIosScan(udid, userRole);
+  return electronAPI.runIosScan(udid, options);
 }
 
 export async function deleteIosBackup(electronAPI, udid) {

@@ -26,6 +26,7 @@ export function initAuthSettings(ctx) {
         const result = await fetchUserInfoAndSettingsService(services, constants, uidOverride);
         if (!result) return;
         State.androidTargetMinutes = result.androidTargetMinutes || 0;
+        State.iosProgressMode = result.iosProgressMode || 'real';
         State.agencyName = result.agencyName || '업체명 없음';
         State.quota = (result.quota !== undefined) ? result.quota : 0;
     }
@@ -179,6 +180,7 @@ export function initAuthSettings(ctx) {
                     ((ctx.services && ctx.services.deviceManager) ? ctx.services.deviceManager.stopPolling() : undefined);
                     State.isLoggedIn = false;
                     State.androidTargetMinutes = 0;
+                    State.iosProgressMode = 'real';
                     State.agencyName = 'BD SCANNER';
                     State.quota = -1;
 

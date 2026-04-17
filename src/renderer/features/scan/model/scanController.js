@@ -1004,15 +1004,139 @@ export function initScanController(ctx) {
             State.lastScanData = null;
             window.lastScanData = null;
             this.toggleLaser(true)
+            const setIosStep = (step, text) => {
+                const statusText = document.getElementById('scan-status-text');
+                const progressLine = document.getElementById('ios-stepper-progress');
 
-            ViewManager.updateProgress(5, "아이폰 백업 및 분석 진행 중...");
+                if (statusText && text) {
+                    statusText.textContent = text;
+                }
+
+                const widthMap = {
+                    1: '0%',
+                    2: '25%',
+                    3: '50%',
+                    4: '75%'
+                };
+
+                if (progressLine) {
+                    progressLine.style.width = widthMap[step] || '0%';
+                }
+
+                for (let i = 1; i <= 4; i += 1) {
+                    const el = document.getElementById(`ios-step-${i}`);
+                    if (!el) continue;
+
+                    el.classList.remove('done', 'current', 'pending');
+
+                    if (i < step) {
+                        el.classList.add('done');
+                    } else if (i === step) {
+                        el.classList.add('current');
+                    } else {
+                        el.classList.add('pending');
+                    }
+                }
+            };
+
+            setIosStep(1, '기기 확인 중...');
+            let offIosProgress = null;
+            const hasMeaningfulBackupSignal = (payload) => {
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
+                const current = Number(payload?.current) || 0;
+                const total = Number(payload?.total) || 0;
+                const minBackupBytes = 24 * 1024 * 1024;
+                const minBackupFiles = 25;
+                const minBackupCount = 25;
+
+                return (
+                    (current >= minBackupCount && total > 0)
+                    || bytes >= minBackupBytes
+                    || files >= minBackupFiles
+                );
+            };
+            const resolveIosStageMessage = (payload) => {
+                const stage = String(payload?.stage || '').trim().toLowerCase();
+                const rawMessage = payload?.message ? String(payload.message) : '';
+                const bytes = Number(payload?.bytes) || 0;
+                const files = Number(payload?.files) || 0;
+                const trustConfirmed = payload?.trustConfirmed === true;
+
+                if (stage === 'mvt') {
+                    return rawMessage || '수집된 데이터를 기반으로 정밀 분석을 진행하는 중...';
+                }
+
+                if (!trustConfirmed) {
+                    return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+                }
+
+                if (stage === 'backup') {
+                    if (bytes > 0 || files > 0) {
+                        return `검사 데이터 수집 중... (파일 ${files.toLocaleString('en-US')}개 / ${Utils.formatBytes(bytes)})`;
+                    }
+                    return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+                }
+
+                return rawMessage || '기기 연결과 신뢰 상태를 확인하는 중...';
+            };
+
+            const shouldShowIosBackupStep = (payload) => {
+                const stage = String(payload?.stage || '').trim().toLowerCase();
+                const trustConfirmed = payload?.trustConfirmed === true;
+
+                return (
+                    trustConfirmed
+                    && (stage === 'backup' || hasMeaningfulBackupSignal(payload))
+                );
+            };
+
             try {
+                try {
+                    if (window.electronAPI && typeof window.electronAPI.onIosScanProgress === 'function') {
+                        offIosProgress = window.electronAPI.onIosScanProgress((payload) => {
+                            try {
+                                const stage = String(payload?.stage || '').trim().toLowerCase();
+                                const msg = resolveIosStageMessage(payload);
+                                const trustConfirmed = payload?.trustConfirmed === true;
+
+                                if (stage === 'mvt') {
+                                    setIosStep(3, '정밀 분석 진행 중...');
+                                    return;
+                                }
+
+                                if (shouldShowIosBackupStep(payload)) {
+                                    setIosStep(2, msg || '검사 데이터 수집 중...');
+                                    return;
+                                }
+
+                                if (!trustConfirmed) {
+                                    setIosStep(1, msg || '기기 연결과 신뢰 상태를 확인하는 중...');
+                                    return;
+                                }
+
+                                setIosStep(1, msg || '기기 확인 중...');
+                            } catch (_e) { }
+                        });
+                    }
+                } catch (_e) { }
+
                 // 1. 실제 검사 수행
-                const rawData = await window.electronAPI.runIosScan(State.currentUdid, State.userRole);
+                const isPrivilegedRole = State.userRole === 'admin' || State.userRole === 'distributor';
+                const iosProgressPolicy = isPrivilegedRole
+                    ? (State.iosProgressMode || 'real')
+                    : 'random_20_30';
+
+                const rawData = await window.electronAPI.runIosScan(State.currentUdid, {
+                    progressPolicy: iosProgressPolicy,
+                    userRole: State.userRole || 'user'
+                });
                 if (rawData.error) throw new Error(rawData.error);
 
                 // 2. 데이터 변환 및 결과 화면 렌더링
                 const data = Utils.transformIosData(rawData);
+                setIosStep(4, '결과 정리 중...');
+                await new Promise((resolve) => setTimeout(resolve, 400));
                 this.finishScan(data);
 
                 // 3. [성공 시에만 삭제] 10초 뒤 보안 파기 실행
@@ -1030,6 +1154,12 @@ export function initScanController(ctx) {
 
             } catch (error) {
                 this.handleError(error);
+            } finally {
+                try {
+                    if (typeof offIosProgress === 'function') {
+                        offIosProgress();
+                    }
+                } catch (_e) { }
             }
         },
 

@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         lastScanData: null,      // 인쇄용 데이터 백업
         isLoadedScan: false,     // true when a scan result is loaded via "검사 열기"
         androidTargetMinutes: 0, // 기본값 0 (즉시 완료), 히든 메뉴로 변경 가능
+        iosProgressMode: 'real', // admin/distributor only: 'real' | 'random_20_30'
         agencyName: 'BD SCANNER', // 회사 정보 상태
         quota: -1, // -1은 로딩 중 또는 알 수 없음
         scrollPostion: 0
@@ -253,6 +254,106 @@ document.addEventListener('DOMContentLoaded', async () => {
                 okBtn.addEventListener('click', handleOk);
                 cancelBtn.addEventListener('click', handleCancel);
                 input.addEventListener('keydown', handleKeydown);
+            });
+        },
+
+        choose(message, choices = []) {
+            return new Promise((resolve) => {
+                const safeChoices = Array.isArray(choices)
+                    ? choices.filter(choice => choice && choice.value && choice.label)
+                    : [];
+
+                if (safeChoices.length === 0) {
+                    resolve(null);
+                    return;
+                }
+
+                const modalOverlay = document.createElement('div');
+                modalOverlay.className = 'modal bd-prompt-modal bd-modal-z10000';
+
+                const modalBox = document.createElement('div');
+                modalBox.className = 'modal-content bd-prompt-content bd-choice-modal-content';
+
+                const header = document.createElement('div');
+                header.className = 'bd-choice-header';
+
+                const eyebrow = document.createElement('div');
+                eyebrow.className = 'bd-choice-eyebrow';
+                eyebrow.textContent = 'RESULT EXPORT';
+
+                const title = document.createElement('h3');
+                title.className = 'bd-prompt-title bd-choice-title bd-preline';
+                title.textContent = String(message ?? '');
+
+                const subtitle = document.createElement('p');
+                subtitle.className = 'bd-choice-subtitle';
+                subtitle.textContent = '원하는 출력 형식을 선택하면 검사 결과서를 해당 방식으로 바로 생성합니다.';
+
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'bd-choice-actions';
+
+                const buttons = safeChoices.map((choice, index) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = `bd-choice-btn${index === 0 ? ' is-primary' : ''}`;
+                    btn.dataset.value = String(choice.value);
+
+                    const label = document.createElement('span');
+                    label.className = 'bd-choice-btn-label';
+                    label.textContent = String(choice.label);
+                    btn.appendChild(label);
+
+                    if (choice.description) {
+                        const description = document.createElement('span');
+                        description.className = 'bd-choice-btn-desc';
+                        description.textContent = String(choice.description);
+                        btn.appendChild(description);
+                    }
+
+                    buttonGroup.appendChild(btn);
+                    return btn;
+                });
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'secondary-button bd-prompt-btn bd-choice-cancel-btn';
+                cancelBtn.textContent = '취소';
+
+                header.appendChild(eyebrow);
+                header.appendChild(title);
+                header.appendChild(subtitle);
+                modalBox.appendChild(header);
+                modalBox.appendChild(buttonGroup);
+                modalBox.appendChild(cancelBtn);
+                modalOverlay.appendChild(modalBox);
+                document.body.appendChild(modalOverlay);
+
+                const cleanup = () => {
+                    buttons.forEach((btn) => btn.removeEventListener('click', handleChoice));
+                    cancelBtn.removeEventListener('click', handleCancel);
+                    modalOverlay.removeEventListener('keydown', handleKeydown);
+                    modalOverlay.remove();
+                };
+
+                const handleChoice = (event) => {
+                    const value = event.currentTarget?.dataset?.value ?? null;
+                    cleanup();
+                    resolve(value);
+                };
+
+                const handleCancel = () => {
+                    cleanup();
+                    resolve(null);
+                };
+
+                const handleKeydown = (e) => {
+                    if (e.key === 'Escape') handleCancel();
+                };
+
+                buttons.forEach((btn) => btn.addEventListener('click', handleChoice));
+                cancelBtn.addEventListener('click', handleCancel);
+                modalOverlay.addEventListener('keydown', handleKeydown);
+                buttons[0]?.focus();
             });
         }
     };

@@ -75,8 +75,41 @@ export function initActionHandlers(ctx) {
         return d ? d.toLocaleString('ko-KR') : '-';
     };
 
+    const buildPdfFileName = (scanData = {}) => {
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const rawModel = String(scanData?.deviceInfo?.model || State.currentDeviceMode || 'Report');
+        const safeModel = rawModel.replace(/[<>:"/\\|?*\x00-\x1F\s]+/g, '_').replace(/^_+|_+$/g, '') || 'Report';
+        return `BD_${dateStr}_${safeModel}.pdf`;
+    };
+
     const normalizeCompanyName = (value) => String(value || '').trim();
     const normalizeCompanyNameLower = (value) => normalizeCompanyName(value).toLowerCase();
+
+    const ensurePrintTemplateLoaded = async () => {
+        if (document.getElementById('print-date')) return true;
+
+        try {
+            const host = document.getElementById('print-root');
+            if (host && window?.bdScanner?.app?.readTextFile) {
+                const html = await window.bdScanner.app.readTextFile('src/renderer/components/print/view.html');
+                host.innerHTML = html;
+            }
+        } catch (e) {
+            console.warn('print template load failed:', e);
+        }
+
+        return Boolean(document.getElementById('print-date'));
+    };
+
+    const restorePrintLayout = (appendixHeader, printArea) => {
+        if (appendixHeader) {
+            appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
+        }
+        const fileSection = document.getElementById('print-file-system-section');
+        if (fileSection) fileSection.style.display = 'block';
+        if (printArea) printArea.style.display = 'none';
+    };
 
     const buildQuotaHistoryGlobalEntry = ({ uid, companyName, userId, change, beforeQuota, afterQuota, reason, actorUid, actorEmail, actionType }) => ({
         uid,
@@ -377,23 +410,12 @@ export function initActionHandlers(ctx) {
     if (printResultsBtn) {
         printResultsBtn.addEventListener('click', async () => {
             if (!window.lastScanData) {
-                alert("인쇄할 검사 결과가 없습니다.");
+                await CustomUI.alert("인쇄할 검사 결과가 없습니다.");
                 return;
             }
 
-            // print 템플릿이 아직 로드되지 않은 경우(초기 로딩/번들링 환경 차이) 안전하게 주입
-            if (!document.getElementById('print-date')) {
-                try {
-                    const host = document.getElementById('print-root');
-                    if (host && window?.bdScanner?.app?.readTextFile) {
-                        const html = await window.bdScanner.app.readTextFile('src/renderer/components/print/view.html');
-                        host.innerHTML = html;
-                    }
-                } catch (e) {
-                    console.warn('print template load failed:', e);
-                }
-            }
-            if (!document.getElementById('print-date')) {
+            const isTemplateReady = await ensurePrintTemplateLoaded();
+            if (!isTemplateReady) {
                 await CustomUI.alert('인쇄 템플릿을 불러오지 못했습니다. (print-date 없음)');
                 return;
             }
@@ -502,7 +524,7 @@ export function initActionHandlers(ctx) {
                 summaryBox.innerHTML = `⚠️ 위험 (DANGER): 총 ${threatCount}개의 스파이앱이 탐지되었습니다.`;
             } else {
                 summaryBox.className = 'summary-box status-safe';
-                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않앗습니다.`;
+                summaryBox.innerHTML = `✅ 안전 (SAFE): 스파이앱이 탐지 되지 않았습니다.`;
             }
 
             document.getElementById('print-total-count').textContent = allApps.length;
@@ -613,6 +635,7 @@ export function initActionHandlers(ctx) {
             // 7. [부록] 전체 앱 목록 (Android 전용 앱 목록 표시 로직 유지)
 
             const printArea = document.getElementById('printable-report');
+            if (printArea) printArea.style.display = 'block';
             // 💡 [추가] 부록 섹션 제목을 조건부로 변경할 요소 참조 (index.html에 h3 태그라고 가정)
             const appendixHeader = document.querySelector('#printable-report .print-page:last-child h3.section-heading');
 
@@ -667,34 +690,70 @@ export function initActionHandlers(ctx) {
                 appGrid.appendChild(div);
             });
 
-            setTimeout(async () => {
-                window.print();
-                printArea.style.display = 'none';
+            const runPrintDialog = async () => {
+                setTimeout(async () => {
+                    window.print();
+                    restorePrintLayout(appendixHeader, printArea);
 
-                // 💡 [복구] 인쇄 후 섹션 번호를 원래대로 복구 (다음 검사를 위해)
-                if (appendixHeader) {
-                    appendixHeader.textContent = appendixHeader.textContent.replace(/^[56]\./, '6.');
-                }
-                const fileSection = document.getElementById('print-file-system-section');
-                if (fileSection) fileSection.style.display = 'block';
+                    if (State.currentDeviceMode === 'android') {
+                        console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
 
+                        // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
+                        const result = await window.electronAPI.autoPushReportToAndroid();
 
-                if (State.currentDeviceMode === 'android') {
-                    console.log("인쇄 완료 후 휴대폰 자동 전송 시작...");
-
-                    // 메인 프로세스에 PDF 생성 및 전송 요청 (무조건 실행)
-                    const result = await window.electronAPI.autoPushReportToAndroid();
-
-                    if (result.success) {
-                        // 성공 시 사용자에게 알림 (선택 사항)
-                        CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
-                    } else {
-                        // 실패 시 로그만 출력하거나 필요 시 알림
-                        console.error("휴대폰 자동 전송 실패:", result.error);
+                        if (result.success) {
+                            CustomUI.alert(`✅ 휴대폰 전송 완료!\n\n리포트가 휴대폰의 [Download] 폴더에\n자동으로 저장되었습니다.`);
+                        } else {
+                            console.error("휴대폰 자동 전송 실패:", result.error);
+                        }
                     }
+                }, 500);
+            };
+
+            if (State.currentDeviceMode === 'ios') {
+                const selectedAction = await CustomUI.choose(
+                    'iOS 검사 결과서 출력',
+                    [
+                        {
+                            value: 'pdf',
+                            label: 'PDF로 저장',
+                            description: '문서 파일로 저장해 이메일, 메신저, 외부 전달에 바로 사용할 수 있습니다.'
+                        },
+                        {
+                            value: 'report',
+                            label: '화면용 결과서 출력',
+                            description: '현재 검사 결과서 화면을 인쇄 형식으로 정리해 바로 출력하거나 저장할 수 있습니다.'
+                        },
+                    ]
+                );
+
+                if (!selectedAction) {
+                    restorePrintLayout(appendixHeader, printArea);
+                    return;
                 }
 
-            }, 500);
+                if (selectedAction === 'pdf') {
+                    const result = await window.electronAPI.exportIosReportPdf({
+                        fileName: buildPdfFileName(data),
+                    });
+
+                    restorePrintLayout(appendixHeader, printArea);
+
+                    if (result?.success) {
+                        await CustomUI.alert(`PDF가 저장되었습니다.\n${result.filePath}`);
+                    } else if (!result?.canceled) {
+                        await CustomUI.alert(`PDF 저장 실패: ${result?.error || result?.message || '알 수 없는 오류'}`);
+                    }
+                    return;
+                }
+
+                if (selectedAction === 'report') {
+                    await runPrintDialog();
+                    return;
+                }
+            }
+
+            await runPrintDialog();
         });
     }
 
@@ -705,9 +764,29 @@ export function initActionHandlers(ctx) {
     const adminTriggers = document.querySelectorAll('.app-title');
     const adminModal = document.getElementById('admin-modal');
     const adminContent = document.querySelector('.modal-content'); // ★ 내용물 박스 선택
+    const adminModalTitle = document.getElementById('admin-modal-title');
+    const adminModalDesc = document.getElementById('admin-modal-desc');
+    const adminAndroidFields = document.getElementById('admin-android-fields');
     const adminInput = document.getElementById('admin-input');
+    const adminIosFields = document.getElementById('admin-ios-fields');
+    const adminIosMode = document.getElementById('admin-ios-mode');
     const adminSaveBtn = document.getElementById('admin-save-btn');
     const adminCancelBtn = document.getElementById('admin-cancel-btn');
+
+    const isPrivilegedRole = () => State.userRole === 'admin' || State.userRole === 'distributor';
+
+    const configureAdminModal = () => {
+        if (adminModalTitle) {
+            adminModalTitle.textContent = '⚡ 진행 설정';
+        }
+        if (adminModalDesc) {
+            adminModalDesc.innerHTML = 'Android와 iOS 진행 방식을 한 번에 설정할 수 있습니다.<br/><span class="bd-modal-hint">iOS 랜덤 20~30분 모드는 빠른 기기에서만 정밀 분석 단계에 적용됩니다.</span>';
+        }
+        if (adminAndroidFields) adminAndroidFields.classList.remove('hidden');
+        if (adminIosFields) adminIosFields.classList.remove('hidden');
+        if (adminInput) adminInput.value = State.androidTargetMinutes || 0;
+        if (adminIosMode) adminIosMode.value = State.iosProgressMode || 'real';
+    };
 
     // 모달 닫기 함수
     const closeAdminModal = () => {
@@ -717,10 +796,11 @@ export function initActionHandlers(ctx) {
     // 저장 로직 (함수로 분리)
     const handleAdminSave = async (ev) => {
         const saveBtn = (ev && ev.currentTarget) ? ev.currentTarget : document.getElementById('admin-save-btn');
-        const value = parseInt(adminInput.value, 10);
+        const androidMinutes = parseInt(adminInput.value, 10);
+        const iosMode = (adminIosMode && adminIosMode.value === 'random_20_30') ? 'random_20_30' : 'real';
 
-        if (isNaN(value) || value < 0) {
-            await CustomUI.alert('시간은 0 이상의 숫자로 입력해주세요.');
+        if (isNaN(androidMinutes) || androidMinutes < 0) {
+            await CustomUI.alert('Android 시간은 0 이상의 숫자로 입력해주세요.');
             return;
         }
 
@@ -729,22 +809,23 @@ export function initActionHandlers(ctx) {
             saveBtn.textContent = '저장 중...';
         }
 
-        console.log('[AdminHidden] saving androidTargetMinutes =', value);
-
         try {
-            const user = authService.getCurrentUser?.() || auth?.currentUser;
+            const user = authService.getCurrentUser?.() || authService.currentUser;
             if (!user) throw new Error('로그인이 필요합니다.');
 
-            // Firestore에 저장
-            await updateDoc(doc(null, 'users', user.uid), {
-                androidTargetMinutes: value,
-                updatedAt: serverTimestamp()
-            });
+            const payload = {
+                updatedAt: serverTimestamp(),
+                ios_progress_mode: iosMode,
+                androidTargetMinutes: androidMinutes,
+                android_scan_duration: androidMinutes
+            };
 
-            // 로컬 상태 즉시 반영
-            State.androidTargetMinutes = value;
+            await updateDoc(doc(null, 'users', user.uid), payload);
+            State.androidTargetMinutes = androidMinutes;
+            State.iosProgressMode = iosMode;
+            console.log('[AdminHidden] saved androidTargetMinutes =', androidMinutes);
+            console.log('[AdminHidden] saved iosProgressMode =', iosMode);
 
-            console.log('[AdminHidden] saved ok');
             await CustomUI.alert('✅ 검사 시간 설정이 저장되었습니다.');
 
             // 모달 닫기
@@ -786,13 +867,10 @@ export function initActionHandlers(ctx) {
                 }
 
                 // 3. 권한별 분기 로직
-                // 💡 관리자(admin)와 총판(distributor) 둘 다 '시간 설정 모달'만 띄웁니다.
-                if (State.userRole === 'admin' || State.userRole === 'distributor') {
+                if (isPrivilegedRole()) {
                     const adminModalEl = document.getElementById('admin-modal');
-                    const adminInputEl = document.getElementById('admin-input');
-
-                    if (adminModalEl && adminInputEl) {
-                        adminInputEl.value = State.androidTargetMinutes || 0;
+                    if (adminModalEl) {
+                        configureAdminModal();
                         adminModalEl.classList.remove('hidden');
                         console.log(`[${State.userRole}] 검사 시간 설정창 오픈`);
                     }
