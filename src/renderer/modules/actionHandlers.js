@@ -85,6 +85,12 @@ export function initActionHandlers(ctx) {
 
     const normalizeCompanyName = (value) => String(value || '').trim();
     const normalizeCompanyNameLower = (value) => normalizeCompanyName(value).toLowerCase();
+    const isExpectedFirestoreFallbackError = (error) => {
+        const message = String(error?.message || error || '').toLowerCase();
+        return message.includes('failed-precondition')
+            || message.includes('requires an index')
+            || message.includes('the query requires an index');
+    };
 
     const ensurePrintTemplateLoaded = async () => {
         if (document.getElementById('print-date')) return true;
@@ -921,6 +927,50 @@ export function initActionHandlers(ctx) {
             hasMore: false,
             source: 'global'
         },
+        reportsState: {
+            pageSize: 10,
+            currentPage: 1,
+            loadedPages: [],
+            pageCursors: [],
+            hasMore: false
+        },
+        abnormalLogsState: {
+            pageSize: 10,
+            scanBatchSize: 30,
+            currentPage: 1,
+            loadedPages: [],
+            pageCursors: [],
+            hasMore: false
+        },
+        detailQuotaHistoryState: {
+            pageSize: 10,
+            currentPage: 1,
+            loadedPages: [],
+            pageCursors: [],
+            hasMore: false,
+            source: 'global',
+            ownerUid: null,
+            legacyRows: null
+        },
+        detailReportsState: {
+            pageSize: 10,
+            currentPage: 1,
+            loadedPages: [],
+            pageCursors: [],
+            hasMore: false,
+            ownerUid: null,
+            allRows: null
+        },
+        detailScanLogsState: {
+            pageSize: 10,
+            currentPage: 1,
+            loadedPages: [],
+            pageCursors: [],
+            hasMore: false,
+            filterKey: '',
+            ownerUid: null,
+            allRows: null
+        },
 
         init() {
             console.log("🚀 AdminManager.init() 시작됨!");
@@ -990,6 +1040,12 @@ export function initActionHandlers(ctx) {
             if (refreshQuotaHistoryBtn && refreshQuotaHistoryBtn.dataset.boundClick !== 'true') {
                 refreshQuotaHistoryBtn.dataset.boundClick = 'true';
                 refreshQuotaHistoryBtn.addEventListener('click', () => this.loadQuotaHistory(1, { reset: true }));
+            }
+
+            const refreshReportsBtn = document.getElementById('refresh-reports-btn');
+            if (refreshReportsBtn && refreshReportsBtn.dataset.boundClick !== 'true') {
+                refreshReportsBtn.dataset.boundClick = 'true';
+                refreshReportsBtn.addEventListener('click', () => this.loadReports(1, { reset: true }));
             }
 
             const quotaHistorySearchInput = document.getElementById('quota-history-search-input');
@@ -1076,7 +1132,14 @@ export function initActionHandlers(ctx) {
                     <button id="reset-logs-btn" class="admin-btn secondary-button">전체 보기</button>
                 </div>
                 
-                <table class="admin-table">
+                <table class="admin-table" style="table-layout:fixed; width:100%;">
+                    <colgroup>
+                        <col style="width:24%;">
+                        <col style="width:12%;">
+                        <col style="width:12%;">
+                        <col style="width:12%;">
+                        <col style="width:40%;">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>검사 일시 (시작)</th>
@@ -1089,6 +1152,7 @@ export function initActionHandlers(ctx) {
                     <tbody id="user-scan-logs-body">
                         </tbody>
                 </table>
+                <div id="detail-scan-logs-pagination"></div>
             `;
             screen.appendChild(detailDiv);
 
@@ -1140,10 +1204,10 @@ export function initActionHandlers(ctx) {
                 }
             });
 
-            if (tabId === 'admin-tab-abnormal') this.loadAbnormalLogs();
+            if (tabId === 'admin-tab-abnormal') this.loadAbnormalLogs(1, { reset: true });
             if (tabId === 'admin-tab-quota-history') this.loadQuotaHistory(1, { reset: true });
             if (tabId === 'admin-tab-list') this.loadUsers();
-            if (tabId === 'admin-tab-reports') this.loadReports();
+            if (tabId === 'admin-tab-reports') this.loadReports(1, { reset: true });
         },
 
 
@@ -1319,6 +1383,12 @@ export function initActionHandlers(ctx) {
 
         async viewUserDetail(uid) {
             this.currentUserUid = uid;
+            this.detailQuotaHistoryState.source = 'global';
+            this.detailQuotaHistoryState.ownerUid = uid;
+            this.detailScanLogsState.filterKey = '';
+            this.resetPagedState(this.detailQuotaHistoryState);
+            this.resetPagedState(this.detailReportsState);
+            this.resetPagedState(this.detailScanLogsState);
 
             // 1. 목록 숨기고 상세 뷰 보이기
             document.getElementById('admin-tab-list').classList.remove('active'); // 탭 내용 숨김
@@ -1344,16 +1414,7 @@ export function initActionHandlers(ctx) {
                 // 4. 통계 계산
                 const stats = this.calculateScanStats(logsSnap.docs);
 
-                // 5. 제출된 리포트 가져오기 (reported_logs) - 업체 ID 매칭 필요 
-                // UID를 사용하도록 변경합니다.
-                const reportsQ = query(
-                    collection(null, "reported_logs"),
-                    where("agencyId", "==", uid), // 'uid' 변수 사용 (users 문서 ID)
-                    orderBy("reportedAt", "desc")
-                );
-                const reportsSnap = await getDocs(reportsQ);
-
-                // 6. HTML 렌더링
+                // 5. HTML 렌더링
                 contentDiv.innerHTML = `
                     <div class="user-detail-header">
                         <div>
@@ -1413,8 +1474,9 @@ export function initActionHandlers(ctx) {
                             <tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">변경 이력을 불러오는 중...</td></tr>
                         </tbody>
                     </table>
+                    <div id="detail-quota-history-pagination"></div>
 
-                    <h3>📨 제출된 결과 리포트 (${reportsSnap.size}건)</h3>
+                    <h3>📨 제출된 결과 리포트</h3>
                     <table class="admin-table">
                         <thead>
                             <tr>
@@ -1425,11 +1487,13 @@ export function initActionHandlers(ctx) {
                             </tr>
                         </thead>
                         <tbody id="detail-report-body">
-                            ${this.renderDetailReports(reportsSnap)}
+                            <tr><td colspan="4" style="text-align:center; color:#888; padding:20px;">리포트를 불러오는 중...</td></tr>
                         </tbody>
                     </table>
+                    <div id="detail-report-pagination"></div>
                 `;
-                await this.loadUserDetailQuotaHistory(uid);
+                await this.loadUserDetailQuotaHistory(uid, 1, { reset: true });
+                await this.loadUserDetailReports(uid, 1, { reset: true });
                 const now = new Date();
                 const sevenDaysAgo = new Date();
                 sevenDaysAgo.setDate(now.getDate() - 7); // 현재 날짜에서 7일 전으로 설정
@@ -1447,18 +1511,18 @@ export function initActionHandlers(ctx) {
                 if (endDateEl) endDateEl.value = defaultEndDate;
 
                 // 2. loadScanLogs를 계산된 기본 기간을 포함하여 호출
-                this.loadScanLogs(uid, defaultStartDate, defaultEndDate);
+                this.loadScanLogs(uid, defaultStartDate, defaultEndDate, 1, { reset: true });
 
                 // 필터링 버튼 이벤트 등록 (시작일, 종료일 사용)
                 document.getElementById('filter-logs-btn').onclick = () => {
                     const startDate = document.getElementById('log-date-start').value;
                     const endDate = document.getElementById('log-date-end').value;
-                    this.loadScanLogs(uid, startDate, endDate); // 함수 호출 인자 변경
+                    this.loadScanLogs(uid, startDate, endDate, 1, { reset: true });
                 };
                 document.getElementById('reset-logs-btn').onclick = () => {
                     document.getElementById('log-date-start').value = ''; // 필드 리셋
                     document.getElementById('log-date-end').value = ''; // 필드 리셋
-                    this.loadScanLogs(uid);
+                    this.loadScanLogs(uid, null, null, 1, { reset: true });
                 };
 
                 //'목록으로 돌아가기' 버튼 이벤트 핸들러 등록
@@ -1477,84 +1541,123 @@ export function initActionHandlers(ctx) {
             }
         },
 
-        async loadUserDetailQuotaHistory(uid) {
+        async loadUserDetailQuotaHistory(uid, page = 1, options = {}) {
             const tbody = document.getElementById('detail-quota-history-body');
-            if (!tbody) return;
+            if (!tbody || !uid) return;
+
+            const state = this.detailQuotaHistoryState;
+            if (options.reset || state.ownerUid !== uid) {
+                state.ownerUid = uid;
+                state.source = 'global';
+                this.resetPagedState(state);
+            }
 
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">변경 이력을 불러오는 중...</td></tr>';
 
             try {
-                let rows = [];
-
-                try {
-                    const globalSnap = await getDocs(query(
-                        collection(null, 'quotaHistoryGlobal'),
-                        where('uid', '==', uid),
-                        orderBy('createdAtMs', 'desc'),
-                        limit(10)
-                    ));
-
-                    rows = globalSnap.docs.map((docSnap) => {
-                        const item = docSnap.data() || {};
-                        return {
-                            change: Number(item.change || 0),
-                            beforeQuota: Number(item.beforeQuota || 0),
-                            afterQuota: Number(item.afterQuota || 0),
-                            reason: item.reason || '-',
-                            actorEmail: item.actorEmail || '-',
-                            createdAt: item.createdAt || null,
-                            createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0),
-                            actionType: item.actionType || 'adjust'
-                        };
-                    });
-                } catch (globalError) {
-                    console.warn('detail quotaHistoryGlobal load fallback:', globalError);
-                }
-
-                if (!rows.length) {
-                    const legacySnap = await getDocs(query(
-                        collection(null, 'users', uid, 'quotaHistory'),
-                        orderBy('createdAt', 'desc'),
-                        limit(10)
-                    ));
-
-                    rows = legacySnap.docs.map((docSnap) => {
-                        const item = docSnap.data() || {};
-                        return {
-                            change: Number(item.change || 0),
-                            beforeQuota: Number(item.beforeQuota || 0),
-                            afterQuota: Number(item.afterQuota || 0),
-                            reason: item.reason || '-',
-                            actorEmail: item.actorEmail || '-',
-                            createdAt: item.createdAt || null,
-                            createdAtMs: Number(toDateSafe(item.createdAt)?.getTime() || 0),
-                            actionType: item.actionType || 'adjust'
-                        };
-                    }).sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-                }
-
-                if (!rows.length) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">등록된 횟수 변경 이력이 없습니다.</td></tr>';
+                if (page <= state.loadedPages.length) {
+                    state.currentPage = page;
+                    this.renderDetailQuotaHistoryRows(state.loadedPages[page - 1] || []);
+                    this.renderDetailQuotaHistoryPagination();
                     return;
                 }
 
-                tbody.innerHTML = rows.slice(0, 10).map((item) => {
-                    const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
-                    const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
-                    const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
-                    return `
-                        <tr>
-                            <td>${formatDateTimeKR(item.createdAt)}</td>
-                            <td style="font-weight:700; color:${changeColor};">${changeText}</td>
-                            <td>${item.beforeQuota} → ${item.afterQuota}</td>
-                            <td>${reasonPrefix}: ${item.reason}</td>
-                            <td>${item.actorEmail}</td>
-                        </tr>
-                    `;
-                }).join('');
+                let rows = [];
+                let lastCursor = null;
+
+                if (state.source === 'global') {
+                    try {
+                        const constraints = [
+                            where('uid', '==', uid),
+                            orderBy('createdAtMs', 'desc')
+                        ];
+                        if (page > 1) {
+                            const prevCursor = state.pageCursors[page - 2];
+                            if (!prevCursor) {
+                                state.currentPage = Math.max(1, state.loadedPages.length);
+                                this.renderDetailQuotaHistoryRows(state.loadedPages[state.currentPage - 1] || []);
+                                this.renderDetailQuotaHistoryPagination();
+                                return;
+                            }
+                            constraints.push(startAfter(prevCursor));
+                        }
+                        constraints.push(limit(state.pageSize + 1));
+
+                        const globalSnap = await getDocs(query(
+                            collection(null, 'quotaHistoryGlobal'),
+                            ...constraints
+                        ));
+
+                        rows = globalSnap.docs.map((docSnap) => {
+                            const item = docSnap.data() || {};
+                            return {
+                                change: Number(item.change || 0),
+                                beforeQuota: Number(item.beforeQuota || 0),
+                                afterQuota: Number(item.afterQuota || 0),
+                                reason: item.reason || '-',
+                                actorEmail: item.actorEmail || '-',
+                                createdAt: item.createdAt || null,
+                                createdAtMs: Number(item.createdAtMs || toDateSafe(item.createdAt)?.getTime() || 0),
+                                actionType: item.actionType || 'adjust'
+                            };
+                        });
+                        state.hasMore = rows.length > state.pageSize;
+                        rows = rows.slice(0, state.pageSize);
+                        lastCursor = rows.length ? (rows[rows.length - 1]?.createdAtMs ?? null) : null;
+                    } catch (globalError) {
+                        if (!isExpectedFirestoreFallbackError(globalError)) {
+                            console.warn('detail quotaHistoryGlobal load fallback:', globalError);
+                        }
+                        state.source = 'legacy';
+                        this.resetPagedState(state);
+                    }
+                }
+
+                if (!rows.length && state.source === 'legacy') {
+                    if (!Array.isArray(state.legacyRows)) {
+                        const legacySnap = await getDocs(query(
+                            collection(null, 'users', uid, 'quotaHistory'),
+                            orderBy('createdAt', 'desc')
+                        ));
+
+                        state.legacyRows = legacySnap.docs.map((docSnap) => {
+                            const item = docSnap.data() || {};
+                            return {
+                                change: Number(item.change || 0),
+                                beforeQuota: Number(item.beforeQuota || 0),
+                                afterQuota: Number(item.afterQuota || 0),
+                                reason: item.reason || '-',
+                                actorEmail: item.actorEmail || '-',
+                                createdAt: item.createdAt || null,
+                                createdAtMs: Number(toDateSafe(item.createdAt)?.getTime() || 0),
+                                actionType: item.actionType || 'adjust'
+                            };
+                        });
+                    }
+
+                    const startIndex = (page - 1) * state.pageSize;
+                    rows = (state.legacyRows || []).slice(startIndex, startIndex + state.pageSize);
+                    state.hasMore = startIndex + state.pageSize < (state.legacyRows || []).length;
+                    lastCursor = null;
+                }
+
+                if (!rows.length) {
+                    state.hasMore = false;
+                    this.renderDetailQuotaHistoryRows([]);
+                    this.renderDetailQuotaHistoryPagination();
+                    return;
+                }
+
+                state.loadedPages[page - 1] = rows;
+                state.pageCursors[page - 1] = lastCursor;
+                state.currentPage = page;
+                this.renderDetailQuotaHistoryRows(rows);
+                this.renderDetailQuotaHistoryPagination();
             } catch (e) {
                 console.error(e);
                 tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red; padding:20px;">이력 로드 실패: ${e.message}</td></tr>`;
+                const container = document.getElementById('detail-quota-history-pagination');
+                if (container) container.innerHTML = '';
             }
         },
 
@@ -1587,94 +1690,107 @@ export function initActionHandlers(ctx) {
             return stats;
         },
         // 특정 업체의 검사 로그를 불러와 렌더링 (loadScanLogs)
-        async loadScanLogs(uid, startDate = null, endDate = null) {
+        async loadScanLogs(uid, startDate = null, endDate = null, page = 1, options = {}) {
             const tbody = document.getElementById('user-scan-logs-body');
-            if (!tbody) return;
+            if (!tbody || !uid) return;
+
+            const state = this.detailScanLogsState;
+            const filterKey = `${startDate || ''}__${endDate || ''}`;
+            if (options.reset || state.filterKey !== filterKey || state.ownerUid !== uid) {
+                this.resetPagedState(state);
+                state.filterKey = filterKey;
+                state.ownerUid = uid;
+            }
 
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">로그를 불러오는 중...</td></tr>';
 
             try {
-                let logsQ = query(
-                    collection(null, "scan_logs"),
-                    where("userId", "==", uid),
-                    orderBy("startTime", "desc")
-                );
-
-                // 기간 필터링 적용 로직
-                if (startDate && endDate) {
-                    const startTimestamp = new Date(startDate);
-                    const endTimestamp = new Date(endDate);
-
-                    // 종료일은 해당 날짜의 끝(다음 날 00:00:00)까지 포함하도록 하루를 더합니다.
-                    endTimestamp.setDate(endTimestamp.getDate() + 1);
-
-                    // Firebase 쿼리 재구성
-                    logsQ = query(
-                        collection(null, "scan_logs"),
-                        where("userId", "==", uid),
-                        where("startTime", ">=", startTimestamp),
-                        where("startTime", "<", endTimestamp), // 종료일의 다음 날 0시 미만
-                        orderBy("startTime", "desc")
-                    );
-
-                    // 유효성 검사
-                    if (startTimestamp.getTime() >= endTimestamp.getTime()) {
-                        throw new Error("검색 시작일은 종료일보다 이전이어야 합니다.");
-                    }
-                } else if (startDate || endDate) {
-                    // 날짜가 하나만 입력된 경우 경고
-                    throw new Error("기간 검색을 위해 시작일과 종료일을 모두 입력해야 합니다.");
-                }
-
-                const logsSnap = await getDocs(logsQ);
-
-                console.log(`[Admin Log] ${uid} 업체의 로그 ${logsSnap.size}건 발견됨.`);
-
-                if (logsSnap.empty) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">검사 기록이 없습니다.</td></tr>';
+                if (page <= state.loadedPages.length) {
+                    state.currentPage = page;
+                    this.renderDetailScanLogRows(state.loadedPages[page - 1] || []);
+                    this.renderDetailScanLogsPagination();
                     return;
                 }
 
-                let html = '';
-                logsSnap.forEach(doc => {
+                if (!Array.isArray(state.allRows)) {
+                    const constraints = [
+                        where("userId", "==", uid)
+                    ];
 
-                    const log = doc.data();
+                    // 기간 필터링 적용 로직
+                    if (startDate && endDate) {
+                        const startTimestamp = new Date(startDate);
+                        const endTimestamp = new Date(endDate);
 
-                    const startTime = toDateSafe(log.startTime);
+                        // 종료일은 해당 날짜의 끝(다음 날 00:00:00)까지 포함하도록 하루를 더합니다.
+                        endTimestamp.setDate(endTimestamp.getDate() + 1);
 
-                    const endTime = toDateSafe(log.endTime);
-
-                    const dateStr = startTime ? startTime.toLocaleString('ko-KR') : '-';
-                    const statusClass = log.status === 'completed' ? 'color:green' : (log.status === 'error' ? 'color:red' : 'color:orange');
-
-                    let durationStr = '-';
-                    if (startTime && endTime) {
-                        const diffMs = endTime - startTime;
-                        const seconds = Math.floor(diffMs / 1000);
-                        if (seconds > 60) {
-                            durationStr = `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
-                        } else {
-                            durationStr = `${seconds}초`;
+                        // 유효성 검사
+                        if (startTimestamp.getTime() >= endTimestamp.getTime()) {
+                            throw new Error("검색 시작일은 종료일보다 이전이어야 합니다.");
                         }
+                        constraints.push(where("startTime", ">=", startTimestamp));
+                        constraints.push(where("startTime", "<", endTimestamp));
+                    } else if (startDate || endDate) {
+                        // 날짜가 하나만 입력된 경우 경고
+                        throw new Error("기간 검색을 위해 시작일과 종료일을 모두 입력해야 합니다.");
                     }
 
-                    html += `
-                            <tr>
-                                <td>${dateStr}</td>
-                                <td>${log.deviceMode || '-'}</td>
-                                <td style="${statusClass}; font-weight:bold;">${log.status.toUpperCase()}</td>
-                                <td>${durationStr}</td>
-                                <td style="font-size:12px; color:#d9534f;">${log.errorMessage || '-'}</td>
-                            </tr>
-                            `;
-                });
+                    constraints.push(orderBy("startTime", "desc"));
 
-                tbody.innerHTML = html;
+                    try {
+                        const logsSnap = await getDocs(query(
+                            collection(null, "scan_logs"),
+                            ...constraints
+                        ));
+                        state.allRows = logsSnap.docs.map((docSnap) => docSnap.data() || {});
+                    } catch (queryError) {
+                        if (!isExpectedFirestoreFallbackError(queryError)) {
+                            console.warn('detail scan_logs load fallback:', queryError);
+                        }
+                        const fallbackSnap = await getDocs(query(
+                            collection(null, "scan_logs"),
+                            orderBy("startTime", "desc")
+                        ));
+
+                        const startTimestamp = startDate && endDate ? new Date(startDate) : null;
+                        const endTimestamp = startDate && endDate ? new Date(endDate) : null;
+                        if (endTimestamp) endTimestamp.setDate(endTimestamp.getDate() + 1);
+
+                        state.allRows = fallbackSnap.docs
+                            .map((docSnap) => docSnap.data() || {})
+                            .filter((item) => {
+                                if (item.userId !== uid) return false;
+                                if (!startTimestamp || !endTimestamp) return true;
+                                const startedAt = toDateSafe(item.startTime);
+                                return Boolean(startedAt && startedAt >= startTimestamp && startedAt < endTimestamp);
+                            });
+                    }
+                }
+
+                const startIndex = (page - 1) * state.pageSize;
+                const docs = (state.allRows || []).slice(startIndex, startIndex + state.pageSize);
+
+                if (docs.length === 0) {
+                    state.hasMore = false;
+                    this.renderDetailScanLogRows([]);
+                    this.renderDetailScanLogsPagination();
+                    return;
+                }
+
+                state.loadedPages[page - 1] = docs;
+                state.currentPage = page;
+                state.hasMore = startIndex + state.pageSize < (state.allRows || []).length;
+                this.renderDetailScanLogRows(docs);
+                this.renderDetailScanLogsPagination();
 
             } catch (e) {
                 if (e.message.includes("시작일")) {
                     alert(e.message);
                 }
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">로그 로드 실패: ${e.message}</td></tr>`;
+                const container = document.getElementById('detail-scan-logs-pagination');
+                if (container) container.innerHTML = '';
             }
         },
 
@@ -1706,63 +1822,200 @@ export function initActionHandlers(ctx) {
             return html;
         },
 
+        resetPagedState(state) {
+            state.currentPage = 1;
+            state.loadedPages = [];
+            state.pageCursors = [];
+            state.hasMore = false;
+            if (Object.prototype.hasOwnProperty.call(state, 'legacyRows')) {
+                state.legacyRows = null;
+            }
+            if (Object.prototype.hasOwnProperty.call(state, 'allRows')) {
+                state.allRows = null;
+            }
+        },
+
+        renderPageButtons({ containerId, state, buttonClass, onClick }) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const totalKnownPages = state.loadedPages.length;
+            if (totalKnownPages <= 1 && !state.hasMore) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const pageGroupSize = 10;
+            const currentGroup = Math.floor((Math.max(1, state.currentPage) - 1) / pageGroupSize);
+            const startPage = currentGroup * pageGroupSize + 1;
+            const groupLastPage = startPage + pageGroupSize - 1;
+            const endPage = Math.min(groupLastPage, Math.max(startPage, totalKnownPages));
+            const hasPrevGroup = startPage > 1;
+            const hasProgressiveNextPage = state.hasMore && endPage < groupLastPage;
+            const hasNextGroup = state.hasMore && endPage === groupLastPage;
+
+            let html = '<div style="display:flex; justify-content:center; gap:6px; flex-wrap:wrap; margin-top:12px;">';
+
+            if (hasPrevGroup) {
+                const prevGroupPage = startPage - 1;
+                html += `<button type="button" class="${buttonClass}" data-page="${prevGroupPage}" data-nav="prev-group" style="min-width:56px; height:36px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer; background:#fff; color:#333;">이전</button>`;
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                const activeStyle = i === state.currentPage
+                    ? 'background:#2563eb; color:#fff; border-color:#2563eb;'
+                    : 'background:#fff; color:#333; border-color:#d1d5db;';
+                html += `<button type="button" class="${buttonClass}" data-page="${i}" style="min-width:36px; height:36px; border:1px solid; border-radius:8px; cursor:pointer; ${activeStyle}">${i}</button>`;
+            }
+
+            if (hasProgressiveNextPage) {
+                const nextPage = endPage + 1;
+                html += `<button type="button" class="${buttonClass}" data-page="${nextPage}" style="min-width:36px; height:36px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer; background:#fff; color:#333;">${nextPage}</button>`;
+            }
+
+            if (hasNextGroup) {
+                const nextGroupPage = endPage + 1;
+                html += `<button type="button" class="${buttonClass}" data-page="${nextGroupPage}" data-nav="next-group" style="min-width:56px; height:36px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer; background:#fff; color:#333;">다음</button>`;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll(`.${buttonClass}`).forEach((btn) => {
+                btn.onclick = () => {
+                    const page = Number(btn.dataset.page || 1);
+                    onClick(page);
+                };
+            });
+        },
+
         // ----------------------------------------------------
         // [NEW] 비정상 로그 (에러, 튕김) 모아보기
         // ----------------------------------------------------
-        async loadAbnormalLogs() {
+        classifyAbnormalLog(log) {
+            let type = null;
+            if (log.status === 'error') {
+                type = 'ERROR';
+            } else if (log.status === 'started' && !log.endTime) {
+                const startTime = toDateSafe(log.startTime) || new Date();
+                const diff = (new Date() - startTime) / 1000 / 60;
+                if (diff > 60) type = 'INCOMPLETE';
+            }
+
+            if (!type) return null;
+
+            return {
+                loggedAt: log.startTime || null,
+                cursorValue: toDateSafe(log.startTime),
+                companyLabel: `${log.companyName || 'Unknown'} (${log.userId || '-'})`,
+                deviceMode: log.deviceMode || '-',
+                type,
+                message: type === 'ERROR' ? (log.errorMessage || '원인 불명 에러') : '종료 기록 없음(강제종료 의심)'
+            };
+        },
+
+        renderAbnormalLogRows(items = []) {
             const tbody = document.getElementById('abnormal-log-body');
             if (!tbody) return;
+            if (!Array.isArray(items) || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:green;">🎉 최근 발견된 비정상 로그가 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map((item) => {
+                const badgeClass = item.type === 'ERROR' ? 'badge-error' : 'badge-incomplete';
+                return `
+                    <tr>
+                        <td>${formatDateTimeKR(item.loggedAt)}</td>
+                        <td>${item.companyLabel}</td>
+                        <td>${item.deviceMode}</td>
+                        <td><span class="abnormal-badge ${badgeClass}">${item.type}</span></td>
+                        <td style="color:#d9534f; font-size:13px;">${item.message}</td>
+                    </tr>
+                `;
+            }).join('');
+        },
+
+        renderAbnormalPagination() {
+            this.renderPageButtons({
+                containerId: 'abnormal-log-pagination',
+                state: this.abnormalLogsState,
+                buttonClass: 'abnormal-log-page-btn',
+                onClick: (page) => this.loadAbnormalLogs(page)
+            });
+        },
+
+        async ensureAbnormalLogPage(page) {
+            const state = this.abnormalLogsState;
+            let cursor = state.pageCursors[state.loadedPages.length - 1] ?? null;
+            let exhausted = false;
+
+            while (state.loadedPages.length < page && !exhausted) {
+                let pageItems = [];
+
+                while (pageItems.length < state.pageSize && !exhausted) {
+                    const constraints = [orderBy("startTime", "desc")];
+                    if (cursor) constraints.push(startAfter(cursor));
+                    constraints.push(limit(state.scanBatchSize));
+
+                    const snapshot = await getDocs(query(collection(null, "scan_logs"), ...constraints));
+                    const docs = snapshot.docs.map((docSnap) => docSnap.data() || {});
+
+                    if (docs.length === 0) {
+                        exhausted = true;
+                        break;
+                    }
+
+                    docs.forEach((log) => {
+                        const abnormalItem = this.classifyAbnormalLog(log);
+                        if (abnormalItem && pageItems.length < state.pageSize) {
+                            pageItems.push(abnormalItem);
+                        }
+                    });
+
+                    cursor = toDateSafe(docs[docs.length - 1]?.startTime);
+                    if (docs.length < state.scanBatchSize || !cursor) {
+                        exhausted = true;
+                    }
+                }
+
+                if (pageItems.length === 0) {
+                    break;
+                }
+
+                state.loadedPages.push(pageItems);
+                state.pageCursors.push(cursor);
+            }
+
+            state.hasMore = !exhausted;
+        },
+
+        async loadAbnormalLogs(page = 1, options = {}) {
+            const tbody = document.getElementById('abnormal-log-body');
+            if (!tbody) return;
+
+            const state = this.abnormalLogsState;
+            if (options.reset) {
+                this.resetPagedState(state);
+            }
+
+            if (page < 1) page = 1;
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">로그 검색 중...</td></tr>';
 
             try {
-                // 모든 로그를 긁어서 JS로 필터링 (Firestore 복합 쿼리 제한 때문)
-                // 최적화: 최근 100~200개만 가져오거나 날짜 제한을 두는 것이 좋음
-                const q = query(collection(null, "scan_logs"), orderBy("startTime", "desc"), limit(200));
-                const snapshot = await getDocs(q);
-
-                let html = '';
-                let count = 0;
-
-                snapshot.forEach(doc => {
-                    const log = doc.data();
-
-                    let type = null;
-                    // 1. 상태가 error인 경우
-                    if (log.status === 'error') type = 'ERROR';
-                    // 2. 상태가 started인데 endTime이 없는 경우 (진행중일수도 있으나 오래된거면 튕긴것)
-                    else if (log.status === 'started' && !log.endTime) {
-                        // 시작한지 1시간 지났는데 안 끝난거면 튕긴걸로 간주
-                        const startTime = toDateSafe(log.startTime) || new Date();
-                        const diff = (new Date() - startTime) / 1000 / 60; // 분
-                        if (diff > 60) type = 'INCOMPLETE';
-                    }
-
-                    if (type) {
-                        count++;
-                        const date = formatDateTimeKR(log.startTime);
-                        const badgeClass = type === 'ERROR' ? 'badge-error' : 'badge-incomplete';
-                        const msg = type === 'ERROR' ? (log.errorMessage || '원인 불명 에러') : '종료 기록 없음(강제종료 의심)';
-
-                        html += `
-                            <tr>
-                                <td>${date}</td>
-                                <td>${log.companyName || 'Unknown'} (${log.userId})</td>
-                                <td>${log.deviceMode || '-'}</td>
-                                <td><span class="abnormal-badge ${badgeClass}">${type}</span></td>
-                                <td style="color:#d9534f; font-size:13px;">${msg}</td>
-                            </tr>
-                        `;
-                    }
-                });
-
-                if (count === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:green;">🎉 최근 발견된 비정상 로그가 없습니다.</td></tr>';
-                } else {
-                    tbody.innerHTML = html;
+                if (page <= state.loadedPages.length) {
+                    state.currentPage = page;
+                    this.renderAbnormalLogRows(state.loadedPages[page - 1] || []);
+                    this.renderAbnormalPagination();
+                    return;
                 }
 
+                await this.ensureAbnormalLogPage(page);
+                state.currentPage = Math.min(page, Math.max(1, state.loadedPages.length || 1));
+                this.renderAbnormalLogRows(state.loadedPages[state.currentPage - 1] || []);
+                this.renderAbnormalPagination();
             } catch (e) {
                 tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로그 로드 실패: ${e.message}</td></tr>`;
+                document.getElementById('abnormal-log-pagination').innerHTML = '';
             }
         },
         async loadLegacyQuotaHistory() {
@@ -1949,34 +2202,129 @@ export function initActionHandlers(ctx) {
         },
 
         renderQuotaHistoryPagination() {
-            const container = document.getElementById('quota-history-pagination');
-            if (!container) return;
+            this.renderPageButtons({
+                containerId: 'quota-history-pagination',
+                state: this.quotaHistoryState,
+                buttonClass: 'quota-history-page-btn',
+                onClick: (page) => this.loadQuotaHistory(page)
+            });
+        },
 
-            const state = this.quotaHistoryState;
-            const totalKnownPages = state.loadedPages.length;
-            if (totalKnownPages <= 1 && !state.hasMore) {
-                container.innerHTML = '';
+        renderDetailQuotaHistoryRows(items) {
+            const tbody = document.getElementById('detail-quota-history-body');
+            if (!tbody) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888; padding:20px;">등록된 횟수 변경 이력이 없습니다.</td></tr>';
                 return;
             }
 
-            let html = '<div style="display:flex; justify-content:center; gap:6px; flex-wrap:wrap; margin-top:12px;">';
-            for (let i = 1; i <= totalKnownPages; i++) {
-                const activeStyle = i === state.currentPage
-                    ? 'background:#2563eb; color:#fff; border-color:#2563eb;'
-                    : 'background:#fff; color:#333; border-color:#d1d5db;';
-                html += `<button type="button" class="quota-history-page-btn" data-page="${i}" style="min-width:36px; height:36px; border:1px solid; border-radius:8px; cursor:pointer; ${activeStyle}">${i}</button>`;
-            }
-            if (state.hasMore) {
-                html += `<button type="button" class="quota-history-page-btn" data-page="${totalKnownPages + 1}" style="min-width:36px; height:36px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer; background:#fff; color:#333;">${totalKnownPages + 1}</button>`;
-            }
-            html += '</div>';
-            container.innerHTML = html;
+            tbody.innerHTML = items.map((item) => {
+                const changeText = item.change > 0 ? `+${item.change}회` : `${item.change}회`;
+                const changeColor = item.change > 0 ? '#1e7e34' : '#c0392b';
+                const reasonPrefix = item.actionType === 'create' ? '초기 지급' : '변경 사유';
+                return `
+                    <tr>
+                        <td>${formatDateTimeKR(item.createdAtMs || item.createdAt)}</td>
+                        <td style="font-weight:700; color:${changeColor};">${changeText}</td>
+                        <td>${item.beforeQuota} → ${item.afterQuota}</td>
+                        <td>${reasonPrefix}: ${item.reason}</td>
+                        <td>${item.actorEmail}</td>
+                    </tr>
+                `;
+            }).join('');
+        },
 
-            container.querySelectorAll('.quota-history-page-btn').forEach((btn) => {
-                btn.onclick = () => {
-                    const page = Number(btn.dataset.page || 1);
-                    this.loadQuotaHistory(page);
-                };
+        renderDetailQuotaHistoryPagination() {
+            this.renderPageButtons({
+                containerId: 'detail-quota-history-pagination',
+                state: this.detailQuotaHistoryState,
+                buttonClass: 'detail-quota-history-page-btn',
+                onClick: (page) => this.loadUserDetailQuotaHistory(this.currentUserUid, page)
+            });
+        },
+
+        renderDetailReportRows(items) {
+            const tbody = document.getElementById('detail-report-body');
+            if (!tbody) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">제출된 리포트가 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map((item) => {
+                const dateStr = formatDateTimeKR(item.reportedAt);
+                const threat = Number(item.threatCount || 0) > 0 ? `<b style="color:red;">위협 ${item.threatCount}건</b>` : '<span style="color:green;">안전</span>';
+                return `
+                    <tr>
+                        <td>${dateStr}</td>
+                        <td>${item.message || '-'}</td>
+                        <td>${threat}</td>
+                        <td>
+                            <button class="control-btn" style="background:#555; color:white; border:none; padding: 5px 10px; border-radius: 4px;"
+                                    onclick="window.viewReportDetail('${item.id}')">상세보기</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        },
+
+        renderDetailReportsPagination() {
+            this.renderPageButtons({
+                containerId: 'detail-report-pagination',
+                state: this.detailReportsState,
+                buttonClass: 'detail-report-page-btn',
+                onClick: (page) => this.loadUserDetailReports(this.currentUserUid, page)
+            });
+        },
+
+        renderDetailScanLogRows(items) {
+            const tbody = document.getElementById('user-scan-logs-body');
+            if (!tbody) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">검사 기록이 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map((log) => {
+                const startTime = toDateSafe(log.startTime);
+                const endTime = toDateSafe(log.endTime);
+                const dateStr = startTime ? startTime.toLocaleString('ko-KR') : '-';
+                const statusClass = log.status === 'completed' ? 'color:green' : (log.status === 'error' ? 'color:red' : 'color:orange');
+
+                let durationStr = '-';
+                if (startTime && endTime) {
+                    const diffMs = endTime - startTime;
+                    const seconds = Math.floor(diffMs / 1000);
+                    durationStr = seconds > 60
+                        ? `${Math.floor(seconds / 60)}분 ${seconds % 60}초`
+                        : `${seconds}초`;
+                }
+
+                return `
+                    <tr>
+                        <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${dateStr}</td>
+                        <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${log.deviceMode || '-'}</td>
+                        <td style="${statusClass}; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${String(log.status || '-').toUpperCase()}</td>
+                        <td style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${durationStr}</td>
+                        <td style="font-size:12px; color:#d9534f; white-space:normal; word-break:break-word; overflow-wrap:anywhere; line-height:1.4;">${log.errorMessage || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        },
+
+        renderDetailScanLogsPagination() {
+            this.renderPageButtons({
+                containerId: 'detail-scan-logs-pagination',
+                state: this.detailScanLogsState,
+                buttonClass: 'detail-scan-log-page-btn',
+                onClick: (page) => {
+                    const startDate = document.getElementById('log-date-start')?.value || null;
+                    const endDate = document.getElementById('log-date-end')?.value || null;
+                    this.loadScanLogs(this.currentUserUid, startDate, endDate, page);
+                }
             });
         },
 
@@ -2076,53 +2424,180 @@ export function initActionHandlers(ctx) {
             }
         },
 
-    // [탭 3] 전송된 리포트 로딩 (신규 기능)
-        async loadReports() {
+        renderReportRows(items = []) {
             const tbody = document.getElementById('admin-reports-body');
+            if (!tbody) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#999;">전송된 기록이 없습니다.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map(({ id, report }) => {
+                const date = formatDateTimeKR(report.reportedAt);
+                const displayName = report.agencyName || report.agencyId;
+                return `
+                    <tr>
+                        <td>${date}</td>
+                        <td>
+                            <b>${displayName}</b><br>
+                            ${report.agencyName ? `<span style="font-size:11px; color:#888;">(${report.agencyId})</span>` : ''}
+                        </td>
+                        <td>${report.message || '내용 없음'}</td>
+                        <td>
+                            위협: <b style="color:red;">${report.threatCount}</b>건<br>
+                            <span style="font-size:11px; color:#666;">${report.deviceModel || '-'}</span>
+                        </td>
+                        <td>
+                            <button class="control-btn" onclick="window.viewReportDetail('${id}')">상세보기</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        },
+
+        renderReportsPagination() {
+            this.renderPageButtons({
+                containerId: 'admin-reports-pagination',
+                state: this.reportsState,
+                buttonClass: 'admin-reports-page-btn',
+                onClick: (page) => this.loadReports(page)
+            });
+        },
+
+    // [탭 3] 전송된 리포트 로딩 (신규 기능)
+        async loadReports(page = 1, options = {}) {
+            const tbody = document.getElementById('admin-reports-body');
+            if (!tbody) return;
+
+            const state = this.reportsState;
+            if (options.reset) {
+                this.resetPagedState(state);
+            }
+
+            if (page < 1) page = 1;
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">데이터 조회 중...</td></tr>';
 
             try {
-                // 1. 리포트 데이터 가져오기
-                const q = query(collection(null, "reported_logs"), orderBy("reportedAt", "desc"));
-                const querySnapshot = await getDocs(q);
-
-                tbody.innerHTML = '';
-                if (querySnapshot.empty) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#999;">전송된 기록이 없습니다.</td></tr>';
+                if (page <= state.loadedPages.length) {
+                    state.currentPage = page;
+                    this.renderReportRows(state.loadedPages[page - 1] || []);
+                    this.renderReportsPagination();
                     return;
                 }
 
-                querySnapshot.forEach((docSnap) => {
-                    const report = docSnap.data();
-                    const date = formatDateTimeKR(report.reportedAt);
+                const constraints = [orderBy("reportedAt", "desc")];
+                if (page > 1) {
+                    const prevCursor = state.pageCursors[page - 2];
+                    if (!prevCursor) {
+                        state.currentPage = Math.max(1, state.loadedPages.length);
+                        this.renderReportRows(state.loadedPages[state.currentPage - 1] || []);
+                        this.renderReportsPagination();
+                        return;
+                    }
+                    constraints.push(startAfter(prevCursor));
+                }
+                constraints.push(limit(state.pageSize));
 
-                    // ★ [핵심] 저장된 이름을 바로 씀 (없으면 기존 방식대로 ID 표시)
-                    // 예전 로그(이름 저장 안 된 것)를 위해 OR(||) 연산자 사용
-                    const displayName = report.agencyName || report.agencyId;
+                const querySnapshot = await getDocs(query(collection(null, "reported_logs"), ...constraints));
+                const docs = querySnapshot.docs.map((docSnap) => ({
+                    id: docSnap.id,
+                    report: docSnap.data() || {}
+                }));
 
-                    const row = document.createElement('tr');
+                if (docs.length === 0) {
+                    state.hasMore = false;
+                    if (page === 1) {
+                        this.renderReportRows([]);
+                    }
+                    this.renderReportsPagination();
+                    return;
+                }
 
-                    row.innerHTML = `
-                            <td>${date}</td>
-                            <td>
-                                <b>${displayName}</b><br>
-                                ${report.agencyName ? `<span style="font-size:11px; color:#888;">(${report.agencyId})</span>` : ''}
-                            </td>
-                            <td>${report.message || '내용 없음'}</td>
-                            <td>
-                                위협: <b style="color:red;">${report.threatCount}</b>건<br>
-                                <span style="font-size:11px; color:#666;">${report.deviceModel || '-'}</span>
-                            </td>
-                            <td>
-                                <button class="control-btn" onclick="window.viewReportDetail('${docSnap.id}')">상세보기</button>
-                            </td>
-                        `;
-                    tbody.appendChild(row);
-                });
-
+                state.loadedPages[page - 1] = docs;
+                state.pageCursors[page - 1] = toDateSafe(docs[docs.length - 1]?.report?.reportedAt);
+                state.currentPage = page;
+                state.hasMore = docs.length === state.pageSize;
+                this.renderReportRows(docs);
+                this.renderReportsPagination();
             } catch (error) {
                 console.error(error);
                 tbody.innerHTML = `<tr><td colspan="5" style="color:red;">로드 실패: ${error.message}</td></tr>`;
+                document.getElementById('admin-reports-pagination').innerHTML = '';
+            }
+        },
+
+        async loadUserDetailReports(uid, page = 1, options = {}) {
+            const tbody = document.getElementById('detail-report-body');
+            if (!tbody || !uid) return;
+
+            const state = this.detailReportsState;
+            if (options.reset || state.ownerUid !== uid) {
+                this.resetPagedState(state);
+                state.ownerUid = uid;
+            }
+
+            if (page < 1) page = 1;
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888; padding:20px;">리포트를 불러오는 중...</td></tr>';
+
+            try {
+                if (page <= state.loadedPages.length) {
+                    state.currentPage = page;
+                    this.renderDetailReportRows(state.loadedPages[page - 1] || []);
+                    this.renderDetailReportsPagination();
+                    return;
+                }
+
+                if (!Array.isArray(state.allRows)) {
+                    try {
+                        const snap = await getDocs(query(
+                            collection(null, "reported_logs"),
+                            where("agencyId", "==", uid),
+                            orderBy("reportedAt", "desc")
+                        ));
+
+                        state.allRows = snap.docs.map((docSnap) => ({
+                            id: docSnap.id,
+                            ...(docSnap.data() || {})
+                        }));
+                    } catch (queryError) {
+                        if (!isExpectedFirestoreFallbackError(queryError)) {
+                            console.warn('detail reported_logs load fallback:', queryError);
+                        }
+                        const fallbackSnap = await getDocs(query(
+                            collection(null, "reported_logs"),
+                            orderBy("reportedAt", "desc")
+                        ));
+
+                        state.allRows = fallbackSnap.docs
+                            .map((docSnap) => ({
+                                id: docSnap.id,
+                                ...(docSnap.data() || {})
+                            }))
+                            .filter((item) => item.agencyId === uid);
+                    }
+                }
+
+                const startIndex = (page - 1) * state.pageSize;
+                const docs = (state.allRows || []).slice(startIndex, startIndex + state.pageSize);
+
+                if (docs.length === 0) {
+                    state.hasMore = false;
+                    if (page === 1) this.renderDetailReportRows([]);
+                    this.renderDetailReportsPagination();
+                    return;
+                }
+
+                state.loadedPages[page - 1] = docs;
+                state.currentPage = page;
+                state.hasMore = startIndex + state.pageSize < (state.allRows || []).length;
+                this.renderDetailReportRows(docs);
+                this.renderDetailReportsPagination();
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:red; padding:20px;">리포트 로드 실패: ${e.message}</td></tr>`;
+                const container = document.getElementById('detail-report-pagination');
+                if (container) container.innerHTML = '';
             }
         }
     };
