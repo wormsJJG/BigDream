@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const gplayRaw = require('google-play-scraper');
 const gplay = gplayRaw.default || gplayRaw;
+const IPC = require('../../shared/ipcChannels');
 
 function registerAndroidHandlers({
   ipcMain,
@@ -28,7 +29,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Device connection
   // --------------------------------------------------
-  ipcMain.handle('check-device-connection', async () => {
+  ipcMain.handle(IPC.ANDROID.CHECK_DEVICE_CONNECTION, async () => {
     if (CONFIG.IS_DEV_MODE) return MockData.getAndroidConnection();
     return await androidService.checkConnection();
   });
@@ -36,7 +37,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Run scan
   // --------------------------------------------------
-  ipcMain.handle('run-scan', async () => {
+  ipcMain.handle(IPC.ANDROID.RUN_SCAN, async () => {
     if (CONFIG.IS_DEV_MODE) {
       return MockData.getAndroidScanResult?.() || { error: 'DEV scan result not implemented' };
     }
@@ -51,7 +52,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // ✅ Android Dashboard Realtime Data (ONLY ONE)
   // --------------------------------------------------
-  ipcMain.handle('get-android-dashboard-data', async (_event, { serial } = {}) => {
+  ipcMain.handle(IPC.ANDROID.GET_DASHBOARD_DATA, async (_event, { serial } = {}) => {
     if (CONFIG.IS_DEV_MODE) {
       return MockData.getAndroidDashboardData?.() || {
         ok: true,
@@ -82,7 +83,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // ✅ Device Security Status (Android results-only)
   // --------------------------------------------------
-  ipcMain.handle('get-device-security-status', async (_event, { serial } = {}) => {
+  ipcMain.handle(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, async (_event, { serial } = {}) => {
     if (CONFIG.IS_DEV_MODE) {
       return {
         ok: true,
@@ -106,7 +107,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Legacy/compat channel used by renderer patches.
   // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
-  ipcMain.handle('perform-device-security-action', async (_event, { serial, action } = {}) => {
+  ipcMain.handle(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, async (_event, { serial, action } = {}) => {
     try {
       return await androidService.performDeviceSecurityAction(serial, action);
     } catch (err) {
@@ -115,7 +116,7 @@ function registerAndroidHandlers({
     }
   });
 
-  ipcMain.handle('set-device-security-setting', async (_event, { serial, settingId, enabled } = {}) => {
+  ipcMain.handle(IPC.ANDROID.SET_DEVICE_SECURITY_SETTING, async (_event, { serial, settingId, enabled } = {}) => {
     if (CONFIG.IS_DEV_MODE) {
       return { ok: true, changed: true, settingId, enabled: !!enabled };
     }
@@ -128,7 +129,7 @@ function registerAndroidHandlers({
     }
   });
 
-  ipcMain.handle('open-android-settings', async (_event, { serial, screen } = {}) => {
+  ipcMain.handle(IPC.ANDROID.OPEN_ANDROID_SETTINGS, async (_event, { serial, screen } = {}) => {
     if (CONFIG.IS_DEV_MODE) {
       return { ok: true, opened: true, screen: screen || 'UNKNOWN' };
     }
@@ -144,7 +145,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // App uninstall
   // --------------------------------------------------
-  ipcMain.handle('uninstall-app', async (_event, packageName) => {
+  ipcMain.handle(IPC.ANDROID.UNINSTALL_APP, async (_event, packageName) => {
     if (CONFIG.IS_DEV_MODE) {
       await Utils.sleep(1000);
       return { success: true };
@@ -155,7 +156,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Delete APK
   // --------------------------------------------------
-  ipcMain.handle('delete-apk-file', async (_event, { serial, filePath }) => {
+  ipcMain.handle(IPC.ANDROID.DELETE_APK_FILE, async (_event, { serial, filePath }) => {
     if (CONFIG.IS_DEV_MODE) return { success: true };
     return await androidService.deleteApkFile(serial, filePath);
   });
@@ -163,7 +164,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Neutralize app
   // --------------------------------------------------
-  ipcMain.handle('neutralize-app', async (_event, packageName, perms) => {
+  ipcMain.handle(IPC.ANDROID.NEUTRALIZE_APP, async (_event, packageName, perms) => {
     if (CONFIG.IS_DEV_MODE) {
       await Utils.sleep(1500);
       return { success: true, count: (perms?.length ?? 0)};
@@ -172,7 +173,7 @@ function registerAndroidHandlers({
     return await androidService.neutralizeApp(packageName, perms);
   });
 
-  ipcMain.handle('get-granted-permissions', async (_event, packageName) => {
+  ipcMain.handle(IPC.ANDROID.GET_GRANTED_PERMISSIONS, async (_event, packageName) => {
   if (CONFIG.IS_DEV_MODE) {
     return [
       'android.permission.CAMERA',
@@ -186,7 +187,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Get app icon / title
   // --------------------------------------------------
-  ipcMain.handle('get-app-data', async (_event, packageName) => {
+  ipcMain.handle(IPC.ANDROID.GET_APP_DATA, async (_event, packageName) => {
     if (CONFIG.IS_DEV_MODE || !packageName) return null;
 
     try {
@@ -210,7 +211,7 @@ function registerAndroidHandlers({
   // --------------------------------------------------
   // Push report to Android
   // --------------------------------------------------
-  ipcMain.handle('auto-push-report-to-android', async (event) => {
+  ipcMain.handle(IPC.ANDROID.AUTO_PUSH_REPORT, async (event) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
     const tempPdfPath = path.join(app.getPath('temp'), 'BD_Scanner_Report.pdf');
 
@@ -234,15 +235,6 @@ function registerAndroidHandlers({
       return { success: true, remotePath };
     } catch (err) {
       console.error(err);
-      return { success: false, error: err.message };
-    }
-  });
-
-   ipcMain.handle('android-open-settings', async (_event, { action } = {}) => {
-    if (CONFIG.IS_DEV_MODE) return { success: true };
-    try {
-      return await androidService.openSettings(action);
-    } catch (err) {
       return { success: false, error: err.message };
     }
   });

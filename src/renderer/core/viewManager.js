@@ -82,7 +82,7 @@ export function createViewManager(State) {
                 screenId === 'app-detail-view' ||
                 screenId === 'res-privacy' ||
                 screenId === 'admin-report-detail-screen' ||
-                (window.lastScanData && screenId === 'admin-screen')
+                (State.lastScanData && screenId === 'admin-screen')
             );
 
             console.log("📍 [Debug] 최종 판단 - shouldShowResultMenu:", shouldShowResultMenu);
@@ -114,7 +114,7 @@ export function createViewManager(State) {
                         subMenu.classList.remove('hidden');
                         subMenu.style.setProperty('display', 'block', 'important');
                         
-                        const isScanComplete = !!window.lastScanData;
+                        const isScanComplete = !!State.lastScanData;
 
                             const tabs = subMenu.querySelectorAll('li.res-tab');
                             tabs.forEach(tab => {

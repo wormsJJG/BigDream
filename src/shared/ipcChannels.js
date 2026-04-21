@@ -18,11 +18,11 @@ module.exports = {
     RUN_SCAN: 'run-scan',
     OPEN_SCAN_FILE: 'open-scan-file',
     GET_APP_DATA: 'get-app-data',
+    GET_GRANTED_PERMISSIONS: 'get-granted-permissions',
     UNINSTALL_APP: 'uninstall-app',
     NEUTRALIZE_APP: 'neutralize-app',
     DELETE_APK_FILE: 'delete-apk-file',
     AUTO_PUSH_REPORT: 'auto-push-report-to-android',
-    START_FULL_SCAN: 'start-full-scan',
     GET_DASHBOARD_DATA: 'get-android-dashboard-data',
     GET_DEVICE_SECURITY_STATUS: 'get-device-security-status',
     // Device security action router (open settings / best-effort toggles)
@@ -34,7 +34,6 @@ module.exports = {
   IOS: {
     CHECK_CONNECTION: 'check-ios-connection',
     RUN_SCAN: 'run-ios-scan',
-    CHECK_BACKUP_STATUS: 'check-ios-backup-status',
     DELETE_BACKUP: 'delete-ios-backup',
     EXPORT_REPORT_PDF: 'export-ios-report-pdf',
     PROGRESS: 'ios-scan-progress'
@@ -43,7 +42,6 @@ module.exports = {
   APP: {
     FORCE_WINDOW_RESET: 'force-window-reset',
     SAVE_SCAN_RESULT: 'saveScanResult',
-    CHECK_FOR_UPDATE: 'checkForUpdate',
     SAVE_LOGIN_INFO: 'saveLoginInfo',
     GET_LOGIN_INFO: 'getLogininfo',
     READ_TEXT_FILE: 'read-text-file'

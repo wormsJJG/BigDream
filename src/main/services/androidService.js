@@ -2,7 +2,7 @@
  * Auto-extracted from legacy bootstrap.js for maintainable structure.
  * Responsibility: Android domain operations only (no IPC wiring).
  */
-function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, log, exec, CONFIG, analyzeAppWithStaticModel }) {
+function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, log, exec, CONFIG, Utils, analyzeAppWithStaticModel }) {
     // NOTE: bootstrap.js passes a single options object.
     if (!client) throw new Error('createAndroidService requires client');
     if (!adb) throw new Error('createAndroidService requires adb');
@@ -1138,6 +1138,12 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
 
         // VirusTotal 검사 로직
         async runVirusTotalCheck(serial, suspiciousApps) {
+            if (!Utils || typeof Utils.checkVirusTotal !== 'function') {
+                for (const app of suspiciousApps) {
+                    app.vtResult = { error: "VirusTotal 검사 비활성화" };
+                }
+                return;
+            }
             for (const app of suspiciousApps) {
                 try {
                     if (!app.apkPath || app.apkPath === 'N/A') continue;

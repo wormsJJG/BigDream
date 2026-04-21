@@ -1351,10 +1351,36 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
                         });
                     }
 
+                    const pickFirst = (obj, keys) => {
+                        for (const key of keys) {
+                            const value = obj?.[key];
+                            if (value === null || value === undefined) continue;
+                            const text = String(value).trim();
+                            if (text) return text;
+                        }
+                        return '';
+                    };
+
                     // 3. 표준 형식으로 변환
                     rawApps.forEach(appData => {
-                        const bundleId = appData.softwareVersionBundleId || appData.name;
-                        const itemName = appData.itemName || appData.title;
+                        const bundleId = pickFirst(appData, [
+                            'softwareVersionBundleId',
+                            'bundleIdentifier',
+                            'bundleId',
+                            'CFBundleIdentifier',
+                            'identifier',
+                            'id',
+                            'name'
+                        ]);
+                        const itemName = pickFirst(appData, [
+                            'itemName',
+                            'title',
+                            'displayName',
+                            'localizedName',
+                            'bundleDisplayName',
+                            'appName',
+                            'name'
+                        ]);
 
                         if (bundleId) {
                             const decodedName = this.decodeUnicode(itemName);
@@ -1378,12 +1404,55 @@ function createIosService({ fs, path, os, log, CONFIG, Utils }) {
 
             console.log(`[IosService] 파싱 완료. 위협: ${findings.length}건`);
 
+            const classifyFindingArea = (item) => {
+                const text = [
+                    item?.source_file,
+                    item?.module,
+                    item?.check_name,
+                    item?.description,
+                    item?.path,
+                    item?.file_path
+                ].filter(Boolean).join(' ').toLowerCase();
+
+                if (/(safari|webkit|browser|history|url|domain|web)/.test(text)) return 'web';
+                if (/(sms|imessage|message|chat|call|whatsapp|telegram|signal)/.test(text)) return 'messages';
+                if (/(profile|certificate|manifest|app|bundle|mobileinstallation|container)/.test(text)) return 'apps';
+                if (/(artifact|ioc|cache|localstorage|shutdown|plist|sqlite)/.test(text)) return 'artifacts';
+                return 'system';
+            };
+
+            const toWarningText = (item) => {
+                return String(
+                    item?.description
+                    || item?.name
+                    || item?.check_name
+                    || item?.module
+                    || item?.path
+                    || item?.file_path
+                    || '의심 항목'
+                ).trim();
+            };
+
+            const warningBuckets = {
+                web: [],
+                messages: [],
+                system: [],
+                apps: [],
+                artifacts: []
+            };
+
+            findings.forEach((item) => {
+                const area = classifyFindingArea(item);
+                const warningText = toWarningText(item);
+                if (warningText) warningBuckets[area].push(warningText);
+            });
+
             const mvtResults = {
-                web: { name: '웹 브라우징 데이터 검사', files: ['Safari History', 'Chrome Bookmarks'], findings: [] },
-                messages: { name: '메시지 및 통화 기록 검사', files: ['SMS/iMessage DB', 'Call History'], findings: [] },
-                system: { name: '시스템 파일 및 설정 검사', files: ['Configuration Files', 'Log Files'], findings: [] },
-                appData: { name: '설치된 앱 데이터베이스 검사', files: ['Manifest.db', 'App Sandboxes'], findings: [] },
-                ioc: { name: '위협 인디케이터 검사', files: ['Detected IOCs'], findings: [] },
+                web: { status: warningBuckets.web.length ? 'warning' : 'safe', warnings: warningBuckets.web, files: ['Safari History', 'Chrome Bookmarks'] },
+                messages: { status: warningBuckets.messages.length ? 'warning' : 'safe', warnings: warningBuckets.messages, files: ['SMS/iMessage DB', 'Call History'] },
+                system: { status: warningBuckets.system.length ? 'warning' : 'safe', warnings: warningBuckets.system, files: ['Configuration Files', 'Log Files'] },
+                apps: { status: warningBuckets.apps.length ? 'warning' : 'safe', warnings: warningBuckets.apps, files: ['Manifest.db', 'App Sandboxes'] },
+                artifacts: { status: warningBuckets.artifacts.length ? 'warning' : 'safe', warnings: warningBuckets.artifacts, files: ['Detected IOCs', 'Caches', 'LocalStorage'] },
             };
 
 

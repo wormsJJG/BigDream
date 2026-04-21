@@ -6,37 +6,45 @@
 
 const fs = require('fs');
 const path = require('path');
+const IPC = require('../../shared/ipcChannels');
 
-function registerIosHandlers({ ipcMain, CONFIG, MockData, iosService, app, BrowserWindow, dialog }) {
+function registerIosHandlers({ ipcMain, CONFIG, MockData, iosService, app, BrowserWindow, dialog, Utils }) {
   if (!ipcMain) throw new Error('registerIosHandlers requires ipcMain');
   if (!CONFIG) throw new Error('registerIosHandlers requires CONFIG');
   if (!iosService) throw new Error('registerIosHandlers requires iosService');
   if (!app) throw new Error('registerIosHandlers requires app');
   if (!BrowserWindow) throw new Error('registerIosHandlers requires BrowserWindow');
   if (!dialog) throw new Error('registerIosHandlers requires dialog');
+  if (!Utils) throw new Error('registerIosHandlers requires Utils');
 
-  ipcMain.handle('check-ios-connection', async () => {
+  ipcMain.handle(IPC.IOS.CHECK_CONNECTION, async () => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosConnection();
     return await iosService.checkConnection();
   });
 
-  ipcMain.handle('run-ios-scan', async (event, udid, runOptions = {}) => {
+  ipcMain.handle(IPC.IOS.RUN_SCAN, async (event, udid, runOptions = {}) => {
     if (CONFIG.IS_DEV_MODE) return MockData.getIosScanResult();
+
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    const prerequisitesReady = await Utils.checkAndInstallPrerequisites(mainWindow);
+    if (!prerequisitesReady) {
+      return { error: 'iOS 정밀 분석에 필요한 구성 요소가 준비되지 않았습니다.' };
+    }
 
     const onProgress = (payload) => {
       try {
-        event.sender.send('ios-scan-progress', payload);
+        event.sender.send(IPC.IOS.PROGRESS, payload);
       } catch (_e) { }
     };
 
     return await iosService.runScan(udid, { ...runOptions, onProgress });
   });
 
-  ipcMain.handle('delete-ios-backup', async (_event, udid) => {
+  ipcMain.handle(IPC.IOS.DELETE_BACKUP, async (_event, udid) => {
     return await iosService.deleteBackup(udid);
   });
 
-  ipcMain.handle('export-ios-report-pdf', async (event, { fileName } = {}) => {
+  ipcMain.handle(IPC.IOS.EXPORT_REPORT_PDF, async (event, { fileName } = {}) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
     if (!mainWindow) {
       return { success: false, error: '메인 창을 찾을 수 없습니다.' };

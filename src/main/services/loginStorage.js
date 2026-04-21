@@ -1,9 +1,12 @@
 
-
 function createLoginStorage({ configPath, safeStorage, fs }) {
   if (!configPath) throw new Error('loginStorage: configPath is required');
   if (!safeStorage) throw new Error('loginStorage: safeStorage is required');
   if (!fs) throw new Error('loginStorage: fs is required');
+
+  function write(data) {
+    fs.writeFileSync(configPath, JSON.stringify(data));
+  }
 
   function save({ id, pw, remember }) {
     const data = {
@@ -18,12 +21,16 @@ function createLoginStorage({ configPath, safeStorage, fs }) {
         data.safePw = safeStorage.encryptString(plainPw).toString('base64');
       } else {
         data.isEncrypted = false;
-        data.pw = plainPw;
+        data.passwordStored = false;
       }
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(data));
-    return { success: true };
+    write(data);
+    return {
+      success: true,
+      remember: data.remember,
+      passwordStored: !!data.safePw
+    };
   }
 
   function load() {
@@ -40,6 +47,7 @@ function createLoginStorage({ configPath, safeStorage, fs }) {
       const remember = Boolean(data.remember);
       const id = String(data.id ?? '');
       let pw = '';
+      let shouldRewrite = false;
 
       if (remember) {
         // 1) encrypted
@@ -51,9 +59,27 @@ function createLoginStorage({ configPath, safeStorage, fs }) {
             pw = '';
           }
         }
-        // 2) plain
+        // 2) legacy plain text: migrate when possible, otherwise scrub it.
         else if (typeof data.pw === 'string') {
-          pw = data.pw;
+          if (safeStorage.isEncryptionAvailable()) {
+            try {
+              pw = data.pw;
+              data.isEncrypted = true;
+              data.safePw = safeStorage.encryptString(pw).toString('base64');
+              delete data.pw;
+              data.passwordStored = true;
+              shouldRewrite = true;
+            } catch (_e) {
+              pw = '';
+              delete data.pw;
+              data.passwordStored = false;
+              shouldRewrite = true;
+            }
+          } else {
+            delete data.pw;
+            data.passwordStored = false;
+            shouldRewrite = true;
+          }
         }
         // 3) legacy: safePw only
         else if (data.safePw && safeStorage.isEncryptionAvailable()) {
@@ -66,7 +92,16 @@ function createLoginStorage({ configPath, safeStorage, fs }) {
         }
       }
 
-      return { remember, id, pw };
+      if (shouldRewrite) {
+        write(data);
+      }
+
+      return {
+        remember,
+        id,
+        pw,
+        passwordStored: Boolean(pw)
+      };
     } catch (error) {
       // Keep callers safe: never throw from load.
       return { remember: false, id: '', pw: '' };

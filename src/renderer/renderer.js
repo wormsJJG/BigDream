@@ -97,7 +97,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         iosProgressMode: 'real', // admin/distributor only: 'real' | 'random_20_30'
         agencyName: 'BD SCANNER', // 회사 정보 상태
         quota: -1, // -1은 로딩 중 또는 알 수 없음
-        scrollPostion: 0
+        scrollPostion: 0,
+        scanRuntime: {
+            inProgress: false,
+            phase: 'idle',
+            androidListCleanup: []
+        }
     };
 
     // =========================================================
@@ -383,10 +388,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     initAuthSettings(ctx);
     // 2) 고객정보/기기 연결
     initClientDevice(ctx);
-    // 3) 검사 흐름
-    initScanController(ctx);
-    // 4) 앱 상세
+    // 3) 앱 상세
     initAppDetail(ctx);
+    // 4) 검사 흐름
+    initScanController(ctx);
     // 5) 삭제/무력화/인쇄
     initActionHandlers(ctx);
 

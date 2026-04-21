@@ -245,7 +245,6 @@ const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
         if (ctx.services) {
             ctx.services.appDetailManager = AppDetailManager;
         }
-        globalThis.AppDetailManager = AppDetailManager;
 
     
         // 뒤로가기 버튼

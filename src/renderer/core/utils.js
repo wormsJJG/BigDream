@@ -1,4 +1,5 @@
 // Shared renderer utilities
+import { getNormalizedScanApps } from '../features/scan/scanInfo.js';
 
         export const Utils = {
             formatAppName(packageName) {
@@ -17,7 +18,8 @@
             },
     
             transformAndroidData: (scanData) => {
-                const transformedApps = scanData.allApps || [];
+                const transformedApps = getNormalizedScanApps(scanData);
+                const apkFiles = Array.isArray(scanData?.apkFiles) ? scanData.apkFiles : [];
     
                 // 1. 진짜 스파이앱 (최종 필터 확진)
                 const spyApps = transformedApps.filter(app => app.riskLevel === 'SPYWARE');
@@ -29,7 +31,7 @@
                 return {
                     deviceInfo: scanData.deviceInfo,
                     allApps: transformedApps,
-                    apkFiles: scanData.apkFiles || [],
+                    apkFiles,
                     suspiciousApps: spyApps,      // [스파이앱 탭으로]
                     privacyThreatApps: privacyThreats // [개인정보 유출 위협 탭으로]
                 };
@@ -50,6 +52,14 @@
                         packageName: moduleName,
                         cachedTitle: `[iOS] ${moduleName}`,
                         reason: description,
+                        riskReasons: [
+                            {
+                                title: item.check_name || item.module || '탐지 근거',
+                                detail: description,
+                                severity: 'HIGH'
+                            }
+                        ],
+                        aiNarration: description,
                         apkPath: filePath,
                         hash: item.sha256 || 'N/A',
                         isSideloaded: true,
@@ -77,9 +87,9 @@
                 return {
                     deviceInfo: finalDeviceInfo,
                     deviceMode: 'ios',
-                    allApps: iosData.allApps || [],
+                    allApps: getNormalizedScanApps(iosData),
                     suspiciousApps: suspiciousApps,
-                    privacyThreatApps: iosData.privacyThreatApps || [], // (있으면 그대로 통과)
+                    privacyThreatApps: Array.isArray(iosData.privacyThreatApps) ? iosData.privacyThreatApps : [],
                     fileCount: iosData.fileCount || 0,
                     mvtResults: iosData.mvtResults || iosData.mvtAnalysis || {}, // 5대 핵심영역용
                 };
@@ -711,7 +721,4 @@
             }
             },
         };
-        if (typeof window !== 'undefined') {
-            window.Utils = Utils;
-        }
 

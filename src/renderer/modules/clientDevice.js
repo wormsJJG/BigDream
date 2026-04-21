@@ -111,7 +111,10 @@ export function initClientDevice(ctx) {
             ViewManager.showScreen(loggedInView, 'device-connection-screen');
 
             // [Patch] clear scan session flag on disconnect
-            try { if (window.State) window.State.__bd_scanInProgress = false; } catch (_) { }
+            try {
+                State.scanRuntime.inProgress = false;
+                State.scanRuntime.phase = 'idle';
+            } catch (_) { }
 
             DeviceManager.startPolling();
         });
@@ -300,18 +303,15 @@ export function initClientDevice(ctx) {
                     State.isLoadedScan = false;
                     State.lastScanData = null;
                     State.lastScanFileMeta = null;
-                    window.lastScanData = null;
                 } catch (_e) { }
 
                 try {
-                    if (typeof window.__bd_renderScanInfo === 'function') {
-                        window.__bd_renderScanInfo(null, null);
-                    }
+                    ctx.helpers?.renderScanInfo?.(null, null);
                 } catch (_e) { }
 
                 // Android dashboard cleanup (nav/scroll/polling/ui)
                 // [Patch] only show dashboard nav when scan is active
-                if (window.State && window.State.__bd_scanInProgress) {
+                if (State.scanRuntime?.inProgress) {
                     const dashNav = document.getElementById('nav-android-dashboard');
                     if (dashNav) {
                         dashNav.classList.add('hidden');
@@ -322,9 +322,9 @@ export function initClientDevice(ctx) {
                     const dashNav = document.getElementById('nav-android-dashboard');
                     if (dashNav) { dashNav.classList.add('hidden'); dashNav.classList.remove('active'); dashNav.style.display = 'none'; }
                 }
-                try { window.__bd_stopAndroidDashboardPolling && window.__bd_stopAndroidDashboardPolling(); } catch (_) { }
-                try { window.__bd_resetAndroidDashboardUI && window.__bd_resetAndroidDashboardUI(); } catch (_) { }
-                try { window.__bd_setNoScroll && window.__bd_setNoScroll(false); } catch (_) { }
+                try { ctx.helpers?.stopAndroidDashboardPolling?.(); } catch (_) { }
+                try { ctx.helpers?.resetAndroidDashboardUI?.(); } catch (_) { }
+                try { ctx.helpers?.setDashboardScrollLock?.(false); } catch (_) { }
                 State.androidDashboardEnabled = false;
 
                 DeviceManager.stopPolling();
@@ -352,13 +352,9 @@ export function initClientDevice(ctx) {
 
                 try {
                     State.lastScanData = null;
-                    State.__bd_lastScanData = null;
-                    State.__bd_scanInProgress = false;
-                    State.__bd_scanPhase = 'idle';
+                    State.scanRuntime.inProgress = false;
+                    State.scanRuntime.phase = 'idle';
                 } catch (e) { }
-
-                try { window.lastScanData = null; } catch (e) { }
-                try { window.__bd_lastScanData = null; } catch (e) { }
 
                 console.log("[Clean-up] 모든 이전 검사 데이터가 초기화되었습니다.");
 

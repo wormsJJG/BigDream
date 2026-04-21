@@ -113,7 +113,7 @@ export function initAuthSettings(ctx) {
                 // - DB에 'User', 'USER ', 'admin ' 등으로 저장된 케이스를 방지하기 위해 정규화
                 const roleRaw = await checkUserRole(user.uid);
                 const role = String(roleRaw || '').trim().toLowerCase();
-                await window.electronAPI.saveLoginInfo(loginData)
+                const savedLoginInfo = await window.electronAPI.saveLoginInfo(loginData)
                 console.log(`로그인 성공! UID: ${user.uid}, Role: ${role}`);
 
                 // 3. 설정값 불러오기
@@ -135,10 +135,14 @@ export function initAuthSettings(ctx) {
                     document.body.classList.add('is-admin');
                     await CustomUI.alert(`관리자 계정으로 접속했습니다.`);
                     setTimeout(() => {
-                        AdminManager.init();
+                        ctx.services?.adminManager?.init?.();
                     }, 500);
                 } else {
                     document.body.classList.remove('is-admin');
+                }
+
+                if (savedLoginInfo && savedLoginInfo.success && remember && savedLoginInfo.passwordStored === false) {
+                    await CustomUI.alert('이 환경에서는 비밀번호를 안전하게 저장할 수 없어 아이디만 유지합니다.');
                 }
 
                 document.getElementById('nav-create').classList.add('active');
@@ -286,8 +290,8 @@ export function initAuthSettings(ctx) {
                 }
                 console.log(`[Tab Switch] ${targetId} 전환 성공`);
 
-                if (String(targetId || '').startsWith('res-ios-') && typeof window.__bd_forceRenderIosCoreAreas === 'function') {
-                    window.__bd_forceRenderIosCoreAreas();
+                if (String(targetId || '').startsWith('res-ios-') && typeof ctx.helpers?.forceRenderIosCoreAreas === 'function') {
+                    ctx.helpers.forceRenderIosCoreAreas();
                 }
             };
         });
@@ -335,9 +339,7 @@ export function initAuthSettings(ctx) {
             ViewManager.showScreen(loggedInView, 'scan-info-screen');
 
             try {
-                if (typeof window.__bd_renderScanInfo === 'function') {
-                    window.__bd_renderScanInfo(State.lastScanData, State.lastScanFileMeta);
-                }
+                ctx.helpers?.renderScanInfo?.(State.lastScanData, State.lastScanFileMeta);
             } catch (e) {
                 console.warn('[BD-Scanner] scan-info render failed:', e);
             }
@@ -374,7 +376,7 @@ export function initAuthSettings(ctx) {
 
             // Fill info from loaded scan data
             try {
-                const data = window.lastScanData || State.lastScanData || {};
+                const data = State.lastScanData || {};
                 const deviceInfo = data.deviceInfo || {};
 
                 const pick = (...candidates) => {
@@ -474,7 +476,7 @@ export function initAuthSettings(ctx) {
     const navResultBtn = document.getElementById('nav-result');
     if (navResultBtn) {
         navResultBtn.addEventListener('click', () => {
-            if (window.lastScanData) {
+            if (State.lastScanData) {
                 ViewManager.activateMenu('nav-result');
                 ViewManager.showScreen(loggedInView, 'scan-results-screen');
                 
@@ -489,7 +491,7 @@ export function initAuthSettings(ctx) {
                 const privacyNotice2 = document.getElementById('privacy-footer-notice');
                 if (privacyNotice2) privacyNotice2.style.display = 'block';
 
-                ResultsRenderer.render(window.lastScanData);
+                ResultsRenderer.render(State.lastScanData);
             } else {
                 CustomUI.alert("표시할 검사 결과 데이터가 없습니다.");
             }
