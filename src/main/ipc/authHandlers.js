@@ -5,7 +5,8 @@
  * This module should be side-effect free except for ipcMain registration.
  */
 
-const IPC = require('../../shared/ipcChannels');
+const IPC_MODULE = require('../../shared/ipc/ipcChannels');
+const IPC = IPC_MODULE.default || IPC_MODULE;
 
 function registerAuthHandlers({ ipcMain, loginStorage }) {
   if (!ipcMain) throw new Error('authHandlers: ipcMain is required');

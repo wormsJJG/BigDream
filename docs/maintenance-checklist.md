@@ -66,3 +66,6 @@ The following flows must keep working during cleanup:
 - Remaining dependency audit findings are concentrated in `adbkit` / `adbkit-apkreader`.
 - Accepted dependency risk details are tracked in [docs/dependency-risk-register.md](/abs/path/C:/Users/김강산/Desktop/BigDream/docs/dependency-risk-register.md:1).
 - Normalized renderer scan payload expectations are tracked in [docs/scan-result-contract.md](/abs/path/C:/Users/김강산/Desktop/BigDream/docs/scan-result-contract.md:1).
+- Code-level shared scan payload aliases live in [src/shared/contracts/scanResultContract.js](/abs/path/C:/Users/김강산/Desktop/BigDream/src/shared/contracts/scanResultContract.js:1).
+- Renderer wrapper retention and delete conditions are tracked in [docs/renderer-legacy-register.md](/abs/path/C:/Users/김강산/Desktop/BigDream/docs/renderer-legacy-register.md:1).
+- Manual runtime verification order and current TS checkpoint are tracked in [docs/manual-checkpoint.md](/abs/path/C:/Users/김강산/Desktop/BigDream/docs/manual-checkpoint.md:1).

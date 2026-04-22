@@ -6,7 +6,24 @@
   "scripts": {
     "start": "electron .",
     "verify:structure": "node scripts/verify-structure.js",
-    "test": "npm run verify:structure",
+    "verify:runtime-sync": "node scripts/verify-runtime-sync-safety.js",
+    "test": "npm run verify:structure && npm run verify:runtime-sync",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "ts:preview": "tsc -p tsconfig.runtime-preview.json",
+    "ts:verify": "node scripts/verify-ts-preview.js",
+    "ts:sync:shared-first-wave": "node scripts/sync-runtime-shared-first-wave.js",
+    "ts:sync:renderer-app-first-wave": "node scripts/sync-runtime-renderer-app-first-wave.js",
+    "ts:sync:renderer-auth-device": "node scripts/sync-runtime-renderer-feature-auth-device.js",
+    "ts:sync:renderer-appdetail-actions": "node scripts/sync-runtime-renderer-appdetail-actions.js",
+    "ts:sync:renderer-scan-small": "node scripts/sync-runtime-renderer-scan-small.js",
+    "ts:sync:renderer-scan-medium": "node scripts/sync-runtime-renderer-scan-medium.js",
+    "ts:sync:renderer-scan-results-renderer": "node scripts/sync-runtime-renderer-scan-results-renderer.js",
+    "ts:sync:renderer-scan-orchestration": "node scripts/sync-runtime-renderer-scan-orchestration.js",
+    "ts:sync:main-helper-first-wave": "node scripts/sync-runtime-main-helper-first-wave.js",
+    "ts:sync:main-helper-second-wave": "node scripts/sync-runtime-main-helper-second-wave.js",
+    "ts:sync:main-helper-third-wave": "node scripts/sync-runtime-main-helper-third-wave.js",
+    "ts:sync:main-helper-fourth-wave": "node scripts/sync-runtime-main-helper-fourth-wave.js",
+    "ts:sync:main-helper-final-wave": "node scripts/sync-runtime-main-helper-final-wave.js",
     "reinstall:electron": "node scripts/reinstall-electron.js",
     "build": "npm run verify:structure && electron-builder --dir",
     "pack": "npm run verify:structure && electron-builder",
@@ -19,7 +36,8 @@
   "license": "ISC",
   "devDependencies": {
     "electron": "^39.8.8",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "adbkit": "^2.11.1",
@@ -35,17 +53,19 @@
     "productName": "BD-Scanner",
     "appId": "com.bigdream.bdscanner",
     "asar": true,
-
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "assets/setUpIcon.ico",
       "signtoolOptions": {
-        "signingHashAlgorithms": ["sha256"],
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
         "certificateSubjectName": "BigDream Corp",
         "rfc3161TimeStampServer": "http://timestamp.globalsign.com/tsa/r6advanced1"
       }
     },
-
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": false,
@@ -57,14 +77,30 @@
       "artifactName": "BD-Scanner-${version}.${ext}",
       "uninstallDisplayName": "BD-Scanner"
     },
-
     "extraResources": [
-      { "from": "platform-tools/", "to": "platform-tools/", "filter": ["**/*"] },
-      { "from": "ios-tools/", "to": "ios-tools/", "filter": ["**/*"] },
-      { "from": "pcap_receiver.py", "to": "pcap_receiver.py" },
-      { "from": "assets/models", "to": "assets/models" }
+      {
+        "from": "platform-tools/",
+        "to": "platform-tools/",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "ios-tools/",
+        "to": "ios-tools/",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "pcap_receiver.py",
+        "to": "pcap_receiver.py"
+      },
+      {
+        "from": "assets/models",
+        "to": "assets/models"
+      }
     ],
-
     "publish": {
       "provider": "github",
       "private": true

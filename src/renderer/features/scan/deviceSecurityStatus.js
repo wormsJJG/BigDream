@@ -5,7 +5,6 @@ export function createDeviceSecurityStatusController() {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
-
     const badge = (status, level) => {
         const raw = String(status || 'UNKNOWN');
         const upper = raw.toUpperCase();
@@ -13,31 +12,33 @@ export function createDeviceSecurityStatusController() {
             : upper.startsWith('OFF') ? 'OFF'
                 : upper.startsWith('UNKNOWN') ? 'UNKNOWN'
                     : upper;
-
         const sev = String(level || '').toLowerCase();
         let cls = 'pill';
         let style = '';
         if (s === 'ON' && (sev === 'high' || sev === 'medium')) {
             cls += ' pill-danger';
-        } else if (s === 'ON' && sev === 'info') {
+        }
+        else if (s === 'ON' && sev === 'info') {
             cls += ' pill-warn';
-        } else if (s === 'OFF') {
+        }
+        else if (s === 'OFF') {
             style = 'background:#ecfdf3;color:#027a48;border:1px solid #abefc6;';
-        } else {
+        }
+        else {
             style = 'background:#f2f4f7;color:#344054;border:1px solid #eaecf0;';
         }
         const suffix = upper.startsWith('ON') && raw.includes('(') ? escapeHtml(raw.slice(2).trim()) : '';
         return `<span class="${cls}" style="${style}">${s}${suffix ? ` <span style="opacity:.8; font-weight:500;">${suffix}</span>` : ''}</span>`;
     };
-
     const renderChips = (list) => {
-        if (!Array.isArray(list) || list.length === 0) return '';
+        if (!Array.isArray(list) || list.length === 0)
+            return '';
         const chips = list.map((x) => `<span class="ds-chip">${escapeHtml(x)}</span>`).join('');
         return `<div class="ds-chip-row">${chips}</div>`;
     };
-
     const renderActions = (actions, itemId) => {
-        if (!Array.isArray(actions) || actions.length === 0) return '';
+        if (!Array.isArray(actions) || actions.length === 0)
+            return '';
         const btns = actions.map((a) => {
             const kind = String(a.kind || '').toLowerCase();
             const label = escapeHtml(a.label || (kind === 'opensettings' ? '설정 열기' : '실행'));
@@ -54,37 +55,33 @@ export function createDeviceSecurityStatusController() {
         }).join('');
         return `<div class="ds-actions">${btns}</div>`;
     };
-
     const render = (payload, container) => {
-        if (!container) return;
-
+        if (!container)
+            return;
         if (payload && typeof payload.then === 'function') {
             container.textContent = '상태 확인 중...';
             payload
                 .then((resolved) => render(resolved, container))
                 .catch((e) => {
-                    console.warn('[DeviceSecurityStatus] load failed', e);
-                    container.textContent = '기기 보안 상태를 불러오지 못했습니다.';
-                });
+                console.warn('[DeviceSecurityStatus] load failed', e);
+                container.textContent = '기기 보안 상태를 불러오지 못했습니다.';
+            });
             return;
         }
-
-        if (!payload || payload.ok === false) {
-            container.textContent = payload?.error ? `불러오기 실패: ${payload.error}` : '불러오기 실패';
+        const resolvedPayload = payload;
+        if (!resolvedPayload || resolvedPayload.ok === false) {
+            container.textContent = resolvedPayload?.error ? `불러오기 실패: ${resolvedPayload.error}` : '불러오기 실패';
             return;
         }
-
-        const items = Array.isArray(payload.items) ? payload.items : [];
+        const items = Array.isArray(resolvedPayload.items) ? resolvedPayload.items : [];
         if (items.length === 0) {
             container.textContent = '표시할 점검 항목이 없습니다.';
             return;
         }
-
         const rows = items.map((it) => {
             const note = it.note ? `<div class="ds-note">${escapeHtml(it.note)}</div>` : '';
             const detailText = it.detail || it.desc || '';
             const chips = renderChips(it.list);
-
             return `
               <div class="ds-card ds-${escapeHtml(String(it.level || 'unknown').toLowerCase())}">
                 <div class="ds-head">
@@ -98,7 +95,6 @@ export function createDeviceSecurityStatusController() {
               </div>
             `;
         }).join('');
-
         container.innerHTML = `
           <div class="ds-guide">
             <div class="ds-guide-title">안내</div>
@@ -111,58 +107,77 @@ export function createDeviceSecurityStatusController() {
           </div>
           ${rows}
         `;
-
         try {
             if (!container.__dsBound) {
                 container.addEventListener('click', async (ev) => {
-                    const btn = ev.target && ev.target.closest ? ev.target.closest('.ds-action-btn') : null;
-                    if (!btn) return;
+                    const target = ev.target;
+                    const btn = target && target.closest ? target.closest('.ds-action-btn') : null;
+                    if (!btn)
+                        return;
                     const raw = btn.getAttribute('data-ds-action');
-                    if (!raw) return;
-
-                    let payload = null;
+                    if (!raw)
+                        return;
+                    let actionPayload = null;
                     try {
-                        payload = JSON.parse(decodeURIComponent(raw));
-                    } catch (_e) {
-                        payload = null;
+                        actionPayload = JSON.parse(decodeURIComponent(raw));
                     }
-                    if (!payload || !payload.kind) return;
-
+                    catch (_e) {
+                        actionPayload = null;
+                    }
+                    if (!actionPayload || !actionPayload.kind)
+                        return;
                     if (!window.electronAPI || typeof window.electronAPI.performDeviceSecurityAction !== 'function') {
                         console.warn('[DeviceSecurityStatus] performDeviceSecurityAction not available');
                         return;
                     }
-
                     btn.disabled = true;
                     const oldText = btn.textContent;
                     btn.textContent = '처리 중...';
                     try {
-                        await window.electronAPI.performDeviceSecurityAction({ action: payload });
+                        await window.electronAPI.performDeviceSecurityAction({ action: actionPayload });
                         const refreshed = await window.electronAPI.getDeviceSecurityStatus();
                         render(refreshed, container);
-                    } catch (e) {
+                    }
+                    catch (e) {
                         console.warn('[DeviceSecurityStatus] action failed', e);
-                        try { btn.textContent = oldText || '실패'; } catch (_e) { }
-                    } finally {
-                        try { btn.disabled = false; } catch (_e) { }
-                        try { btn.textContent = oldText; } catch (_e) { }
+                        try {
+                            btn.textContent = oldText || '실패';
+                        }
+                        catch (_e) { /* noop */ }
+                    }
+                    finally {
+                        try {
+                            btn.disabled = false;
+                        }
+                        catch (_e) { /* noop */ }
+                        try {
+                            btn.textContent = oldText;
+                        }
+                        catch (_e) { /* noop */ }
                     }
                 });
                 container.__dsBound = true;
             }
-        } catch (_e) { }
+        }
+        catch (_e) {
+            /* noop */
+        }
     };
-
     return {
         async load(container) {
-            if (!container || !window.electronAPI?.getDeviceSecurityStatus) return;
+            if (!container || !window.electronAPI?.getDeviceSecurityStatus)
+                return;
             container.textContent = '상태 확인 중...';
             try {
                 const sec = await window.electronAPI.getDeviceSecurityStatus();
                 render(sec, container);
-            } catch (e) {
+            }
+            catch (e) {
                 console.warn('[DeviceSecurityStatus] load failed', e);
-                try { container.textContent = '기기 보안 상태를 불러오지 못했습니다.'; } catch (_e) { }
+                try {
+                    container.textContent = '기기 보안 상태를 불러오지 못했습니다.';
+                }
+                catch (_e) { /* noop */ }
             }
         },
         render

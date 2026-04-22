@@ -5,7 +5,8 @@
 
 const os = require('os');
 const path = require('path');
-const IPC = require('../../shared/ipcChannels');
+const IPC_MODULE = require('../../shared/ipc/ipcChannels');
+const IPC = IPC_MODULE.default || IPC_MODULE;
 
 function registerAppHandlers({ ipcMain, BrowserWindow, dialog, app, fs }) {
   if (!ipcMain) throw new Error('registerAppHandlers: ipcMain is required');

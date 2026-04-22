@@ -1,4 +1,5 @@
-const IPC = require('../../shared/ipcChannels');
+const IPC_MODULE = require('../../shared/ipc/ipcChannels');
+const IPC = IPC_MODULE.default || IPC_MODULE;
 
 /**
  * src/main/ipc/firestoreHandlers.js

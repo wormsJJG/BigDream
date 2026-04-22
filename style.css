@@ -8,4 +8,4 @@
 
 @import "./src/renderer/styles/uiUtils.css";
 /* Screen: Android dashboard */
-@import "./src/renderer/screens/scan-dashboard-screen/scanDashboard.css";
+@import "./src/renderer/pages/scan-dashboard-screen/style.css";

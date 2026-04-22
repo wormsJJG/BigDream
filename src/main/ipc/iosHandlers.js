@@ -6,7 +6,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const IPC = require('../../shared/ipcChannels');
+const IPC_MODULE = require('../../shared/ipc/ipcChannels');
+const IPC = IPC_MODULE.default || IPC_MODULE;
 
 function registerIosHandlers({ ipcMain, CONFIG, MockData, iosService, app, BrowserWindow, dialog, Utils }) {
   if (!ipcMain) throw new Error('registerIosHandlers requires ipcMain');

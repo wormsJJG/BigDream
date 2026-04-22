@@ -1,3 +1,5 @@
+import { getScreenTemplateCandidates } from '../../app/screenPaths.js';
+
 export function createAdminActionHandlers({
     AdminManager,
     ViewManager,
@@ -33,8 +35,15 @@ export function createAdminActionHandlers({
             if (detailScreen.innerHTML && detailScreen.innerHTML.trim().length > 0) return;
             try {
                 if (window?.bdScanner?.app?.readTextFile) {
-                    const html = await window.bdScanner.app.readTextFile('src/renderer/screens/admin-report-detail-screen/view.html');
-                    if (html) detailScreen.innerHTML = html;
+                    for (const candidatePath of getScreenTemplateCandidates('admin-report-detail-screen')) {
+                        try {
+                            const html = await window.bdScanner.app.readTextFile(candidatePath);
+                            if (html) {
+                                detailScreen.innerHTML = html;
+                                return;
+                            }
+                        } catch (_innerError) { }
+                    }
                 }
             } catch (e) {
                 console.warn('[viewReportDetail] template load failed:', e);

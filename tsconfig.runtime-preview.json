@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".ts-build-preview",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": false,
+    "allowJs": false,
+    "checkJs": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "release",
+    "node_modules",
+    ".ts-build-preview"
+  ]
+}

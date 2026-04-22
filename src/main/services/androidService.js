@@ -6,8 +6,57 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
     // NOTE: bootstrap.js passes a single options object.
     if (!client) throw new Error('createAndroidService requires client');
     if (!adb) throw new Error('createAndroidService requires adb');
-    const { evaluateAndroidAppRisk, RISK_LEVELS } = require('../../shared/risk/riskRules');
-    const { evaluateAndroidSpywareFinalVerdict } = require('../../shared/spyware/spywareFinalFilter');
+    const { evaluateAndroidAppRisk, RISK_LEVELS } = require('../../shared/constants/riskRules');
+    const { evaluateAndroidSpywareFinalVerdict } = require('../../shared/constants/spywareFinalFilter');
+    const { createAndroidDeviceSecurityHelpers } = require('./androidDeviceSecurity');
+    const { createAndroidAppInventoryHelpers } = require('./androidAppInventory');
+    const { createAndroidScanAnalysisHelpers } = require('./androidScanAnalysis');
+    const { createAndroidScanPreparationHelpers } = require('./androidScanPreparation');
+
+    async function adbShell(serial, cmd) {
+        const out = await client.shell(serial, cmd);
+        return (await adb.util.readAll(out)).toString().trim();
+    }
+
+    async function adbShellWithTimeout(serial, cmd, timeoutMs = 7000) {
+        return await Promise.race([
+            adbShell(serial, cmd),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`adb timeout: ${cmd}`)), timeoutMs))
+        ]);
+    }
+
+    const androidDeviceSecurity = createAndroidDeviceSecurityHelpers({
+        client,
+        adb,
+        adbShell,
+        adbShellWithTimeout
+    });
+    const androidAppInventory = createAndroidAppInventoryHelpers({
+        client,
+        adb,
+        ApkReader,
+        fs,
+        path,
+        os
+    });
+    const androidScanAnalysis = createAndroidScanAnalysisHelpers({
+        analyzeAppWithStaticModel,
+        getAppPermissions: (...args) => androidAppInventory.getAppPermissions(...args),
+        getAppInstallTime: (...args) => androidAppInventory.getAppInstallTime(...args),
+        checkIsRunningBackground: (...args) => androidAppInventory.checkIsRunningBackground(...args),
+        evaluateAndroidSpywareFinalVerdict,
+        evaluateAndroidAppRisk,
+        RISK_LEVELS
+    });
+    const androidScanPreparation = createAndroidScanPreparationHelpers({
+        getEnabledAccessibilityPackages: (...args) => androidDeviceSecurity.getEnabledAccessibilityPackages(...args),
+        getActiveDeviceAdminPackages: (...args) => androidDeviceSecurity.getActiveDeviceAdminPackages(...args),
+        getDeviceInfo: (...args) => service.getDeviceInfo(...args),
+        getInstalledApps: (...args) => androidAppInventory.getInstalledApps(...args),
+        findApkFiles: (...args) => androidAppInventory.findApkFiles(...args),
+        getNetworkUsageMap: (...args) => androidAppInventory.getNetworkUsageMap(...args),
+        getApkPermissionsOnly: (...args) => androidAppInventory.getApkPermissionsOnly(...args)
+    });
 
 
     const service = {
@@ -90,149 +139,37 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
                 if (devices.length === 0) throw new Error('기기 없음');
                 const serial = devices[0].id;
 
-                // ✅ (무료 최종 필터 정확도 향상)
-                // 접근성 서비스 활성/기기 관리자 활성 상태는 앱별로 매번 조회하지 않고, 스캔 시작 시 한 번만 수집합니다.
-                // - dumpsys accessibility: Enabled services에서 패키지 추출
-                // - dumpsys device_policy: Active admin에서 패키지 추출
-                const [enabledA11yPkgs, activeAdminPkgs] = await Promise.all([
-                    service.getEnabledAccessibilityPackages(serial),
-                    service.getActiveDeviceAdminPackages(serial)
-                ]);
+                const {
+                    deviceInfo,
+                    allApps,
+                    networkMap,
+                    processedApks,
+                    enabledA11yPkgs,
+                    activeAdminPkgs
+                } = await androidScanPreparation.prepareScanArtifacts(serial);
 
-                const deviceInfo = await service.getDeviceInfo(serial);
-                deviceInfo.os = 'ANDROID';
-
-                const allApps = await service.getInstalledApps(serial);
-                const apkFiles = await service.findApkFiles(serial);
-                const networkMap = await service.getNetworkUsageMap(serial);
-
-                const processedApks = await Promise.all(apkFiles.map(async (apk) => {
-                    const perms = await service.getApkPermissionsOnly(serial, apk.apkPath);
-                    return {
-                        ...apk,
-                        requestedList: perms,
-                        requestedCount: perms.length
-                    };
-                }));
-
-                const processedApps = [];
-                const analyze = analyzeAppWithStaticModel;
-
-                for (let i = 0; i < allApps.length; i += 20) {
-                    const chunk = allApps.slice(i, i + 20);
-                    const results = await Promise.all(chunk.map(async (app) => {
-                        try {
-                            const [isRunningBg, permData, installDate] = await Promise.all([
-                                service.checkIsRunningBackground(serial, app.packageName),
-                                service.getAppPermissions(serial, app.packageName),
-                                service.getAppInstallTime(serial, app.packageName)
-                            ]);
-
-                            const permissions = [...new Set([
-                                ...(permData.requestedList || []),
-                                ...(permData.grantedList || [])
-                            ])];
-
-                            const netStats = networkMap[app.uid] || { rx: 0, tx: 0 };
-
-                            const trustedPrefixes = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'android'];
-                            const isMasquerading = trustedPrefixes.some(p => app.packageName.startsWith(p)) && !app.isSystemApp;
-
-                            const aiPayload = {
-                                packageName: app.packageName,
-                                permissions,
-                                isSideloaded: app.isSideloaded,
-                                isSystemPath: app.apkPath.startsWith('/system') || app.apkPath.startsWith('/vendor') || app.apkPath.startsWith('/product'),
-                                isMasquerading,
-                                services_cnt: permData.servicesCount || 0,
-                                receivers_cnt: permData.receiversCount || 0
-                            };
-
-                            const aiResult = analyze ? await analyze(aiPayload) : { score: 0, grade: 'SAFE', reason: '' };
-
-                            if (aiResult.score >= 50) {
-                                console.log(`\n🚨 [AI 탐지 로그: ${app.packageName}]`);
-                                console.log(`- 판정 점수: ${aiResult.score}점 (${aiResult.grade})`);
-                                console.log(`- 앱 경로: ${app.apkPath}`);
-                                console.log(`- 시스템 경로 판정: ${aiPayload.isSystemPath}`);
-                                console.log(`- 서비스 개수: ${permData.servicesCount}`);
-                                console.log(`- 리시버 개수: ${permData.receiversCount}`);
-                                console.log(`- 권한 개수: ${permissions.length}`);
-                                console.log(`- 사이드로드 여부: ${app.isSideloaded}`);
-                                console.log(`- 원인: ${aiResult.reason}`);
-                                console.log(`-------------------------------------------\n`);
-                            }
-
-                            const isAccessibilityEnabled = enabledA11yPkgs.has(app.packageName);
-                            const isDeviceAdminActive = activeAdminPkgs.has(app.packageName);
-
-                            return {
-                                ...app,
-                                isRunningBg,
-                                isAccessibilityEnabled,
-                                isDeviceAdminActive,
-                                ...permData,
-                                dataUsage: netStats,
-                                aiScore: aiResult.score,
-                                aiGrade: aiResult.grade,
-                                installDate,
-                                reason: aiResult.reason,
-                                servicesCount: permData.servicesCount,
-                                receiversCount: permData.receiversCount
-                            };
-                        } catch (e) {
-                            console.error(`Error analyzing ${app.packageName}:`, e);
-                            return { ...app, error: true };
-                        }
-                    }));
-                    processedApps.push(...results);
-                }
-
-                let suspiciousApps = processedApps.filter(app => app.aiGrade === 'DANGER' || app.aiGrade === 'WARNING');
-                // ✅ VT(유료) 정밀 검사는 사용하지 않습니다. (최종 필터는 내부 정책 기반)
-
-                // 2) ✅ 최종 분류
-                // - 2-1) 스파이앱 최종 확정(무료): src/shared/spyware/spywareFinalFilter.js
-                // - 2-2) 개인정보 유출 위협: src/shared/risk/riskRules.js
-                processedApps.forEach((app) => {
-                    // (A) 최종 스파이 확정 필터 (AI 의심 앱만 대상으로 조합 기반 확정)
-                    const finalVerdict = evaluateAndroidSpywareFinalVerdict(app);
-
-                    if (finalVerdict.isSpyware) {
-                        app.riskLevel = RISK_LEVELS.SPYWARE;
-                        app.riskReasons = finalVerdict.reasons || [];
-                        app.recommendation = [
-                            { action: 'UNINSTALL', label: '앱 삭제 권장' },
-                            { action: 'REVOKE_PERMISSIONS', label: '권한 회수(전체)' },
-                            { action: 'CHECK_ACCOUNTS', label: '계정/인증정보 점검' }
-                        ];
-                        app.aiNarration = finalVerdict.narration || '스파이앱으로 분류했습니다.';
-                        app.reason = `[최종 필터 확진] ${app.aiNarration}`;
-                        return;
-                    }
-
-                    // (B) 개인정보 유출 위협 평가
-                    const evaluated = evaluateAndroidAppRisk(app);
-
-                    app.riskLevel = evaluated.riskLevel;
-                    app.riskReasons = evaluated.riskReasons;
-                    app.recommendation = evaluated.recommendation;
-                    app.aiNarration = evaluated.aiNarration;
-
-                    // UI 호환용 reason도 유지 (대표 문장 1개)
-                    if (app.riskLevel === RISK_LEVELS.PRIVACY_RISK) {
-                        app.reason = `[개인정보 유출 위협] ${evaluated.aiNarration}`;
-                    } else if (!app.reason) {
-                        app.reason = '';
-                    }
+                const processedApps = await androidScanAnalysis.analyzeInstalledApps({
+                    serial,
+                    allApps,
+                    networkMap,
+                    enabledA11yPkgs,
+                    activeAdminPkgs
                 });
 
-                const spywareApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.SPYWARE);
-                const privacyThreatApps = processedApps.filter(app => app.riskLevel === RISK_LEVELS.PRIVACY_RISK);
+                const {
+                    suspiciousApps,
+                    privacyThreatApps,
+                    runningCount
+                } = androidScanAnalysis.classifyAnalyzedApps(processedApps);
 
-                const runningAppsCount = processedApps.filter(app => app.isRunningBg).length;
-
-                return { deviceInfo, allApps: processedApps, suspiciousApps: spywareApps, privacyThreatApps, apkFiles: processedApks, runningCount: runningAppsCount };
+                return {
+                    deviceInfo,
+                    allApps: processedApps,
+                    suspiciousApps,
+                    privacyThreatApps,
+                    apkFiles: processedApks,
+                    runningCount
+                };
             } catch (err) {
                 console.error(err);
                 return { error: err.message };
@@ -262,319 +199,34 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
         // ---------------------------------------------------------
         // ✅ [Helper] adb shell 결과를 "문자열"로 받기 (Stream -> String)
         async adbShell(serial, cmd) {
-            const out = await client.shell(serial, cmd);
-            return (await adb.util.readAll(out)).toString().trim();
+            return adbShell(serial, cmd);
         },
 
         // ---------------------------------------------------------
         // ✅ [Helper] adbShell with timeout (prevents UI hang)
         async adbShellWithTimeout(serial, cmd, timeoutMs = 7000) {
-            return await Promise.race([
-                service.adbShell(serial, cmd),
-                new Promise((_, reject) => setTimeout(() => reject(new Error(`adb timeout: ${cmd}`)), timeoutMs))
-            ]);
+            return adbShellWithTimeout(serial, cmd, timeoutMs);
         },
 
         // ---------------------------------------------------------
         // ✅ [Android] Device Security Status
         // Returns: { ok: boolean, items: Array<{id,title,status,level,detail?,note?}>, error? }
         async getDeviceSecurityStatus(serial) {
-            try {
-                const devices = await client.listDevices();
-                if (devices.length === 0) throw new Error('기기 연결 안 됨');
-                const target = serial || devices[0].id;
-
-                const getSetting = async (namespace, key) => {
-                    try {
-                        const out = await service.adbShellWithTimeout(target, `settings get ${namespace} ${key}`);
-                        if (!out || out === 'null' || out === 'undefined') return null;
-                        return out.trim();
-                    } catch (_e) {
-                        return null;
-                    }
-                };
-
-                const asBool = (v) => {
-                    if (v == null) return null;
-                    const s = String(v).trim();
-                    if (s === '1' || s.toLowerCase() === 'true') return true;
-                    if (s === '0' || s.toLowerCase() === 'false') return false;
-                    return null;
-                };
-
-                // Core settings
-                const devOpt = asBool(await getSetting('global', 'development_settings_enabled'));
-                const usbDebug = asBool(await getSetting('global', 'adb_enabled'));
-                const wifiDebug = asBool(await getSetting('global', 'adb_wifi_enabled')) ?? asBool(await getSetting('secure', 'adb_wifi_enabled'));
-
-                // (요구사항) Play 스토어 보안/자동 차단 관련 항목은 현재 화면에서 제외합니다.
-
-                // Unknown sources (legacy; modern Android is per-app, so this may be null)
-                const unknownSources = asBool(await getSetting('secure', 'install_non_market_apps'));
-
-                // Accessibility / Device Admin / Notification access
-                const a11yEnabled = asBool(await getSetting('secure', 'accessibility_enabled'));
-                const enabledA11yPkgs = await service.getEnabledAccessibilityPackages(target);
-                const activeAdminPkgs = await service.getActiveDeviceAdminPackages(target);
-                const notifListenersRaw = await getSetting('secure', 'enabled_notification_listeners');
-                const notifListenerPkgs = new Set();
-                if (notifListenersRaw) {
-                    // format: com.pkg/.Service:com.other/.Svc
-                    String(notifListenersRaw).split(':').forEach((entry) => {
-                        const m = entry.trim().match(/^([a-zA-Z0-9_\.]+)\//);
-                        if (m && m[1]) notifListenerPkgs.add(m[1]);
-                    });
-                }
-
-                const items = [];
-
-                // Action descriptors used by renderer to show "끄기/켜기/설정 열기" buttons.
-                // Renderer will call IPC to apply these actions.
-                const buildActions = (id, boolVal) => {
-                    // Renderer가 기대하는 스키마: { kind: 'toggle'|'openSettings', ... }
-                    // 요구사항:
-                    // - 개발자 옵션 / USB 디버깅: 화면에 "끄기" 버튼 제거
-                    // - 무선 디버깅: ON일 때만 "끄기" 제공 (OFF일 때 "켜기" 미제공)
-
-                    if (id === 'wifiDebug') {
-                        const actions = [];
-                        if (boolVal === true) {
-                            actions.push({ kind: 'toggle', label: '끄기', target: 'wifiDebug', value: false });
-                        }
-                        actions.push({ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS' });
-                        return actions;
-                    }
-
-                    if (id === 'devOptions') {
-                        return [];
-                    }
-
-                    if (id === 'usbDebug') {
-                        return [];
-                    }
-
-                    if (id === 'unknownSources') {
-                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.MANAGE_UNKNOWN_APP_SOURCES' }];
-                    }
-                    if (id === 'accessibility') {
-                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.ACCESSIBILITY_SETTINGS' }];
-                    }
-                    if (id === 'deviceAdmin') {
-                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'com.android.settings/.DeviceAdminSettings' }];
-                    }
-                    if (id === 'notificationAccess') {
-                        return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS' }];
-                    }
-
-                    return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.SETTINGS' }];
-                };
-
-                const push = (id, title, boolVal, { levelOn = 'warn', levelOff = 'ok', unknown = 'unknown', detailOn = '', detailOff = '', note } = {}) => {
-                    if (boolVal === true) {
-                        items.push({ id, title, status: 'ON', level: levelOn, detail: detailOn, actions: buildActions(id, true), ...(note ? { note } : {}) });
-                    } else if (boolVal === false) {
-                        items.push({ id, title, status: 'OFF', level: levelOff, detail: detailOff, actions: buildActions(id, false), ...(note ? { note } : {}) });
-                    } else {
-                        items.push({ id, title, status: 'UNKNOWN', level: unknown, detail: '기기/OS 정책으로 확인할 수 없거나 권한이 부족합니다.', actions: buildActions(id, null), ...(note ? { note } : {}) });
-                    }
-                };
-
-                push('devOptions', '개발자 옵션', devOpt, {
-                    levelOn: 'warn',
-                    levelOff: 'ok',
-                    detailOn: '개발자 옵션이 활성화되어 있습니다. 악성 앱이 디버그 기능을 악용할 여지가 증가할 수 있습니다.',
-                    detailOff: '개발자 옵션이 비활성화되어 있습니다.'
-                });
-
-                // USB debugging: informational, because BD-SCANNER uses it
-                push('usbDebug', 'USB 디버깅', usbDebug, {
-                    levelOn: 'info',
-                    levelOff: 'ok',
-                    detailOn: '검사를 위해 일시적으로 필요합니다. 검사 종료 시 자동으로 비활성화될 수 있도록 안내합니다.',
-                    detailOff: 'USB 디버깅이 비활성화되어 있습니다.',
-                    note: 'BD-SCANNER 검사 수행을 위해 USB 디버깅이 사용될 수 있습니다. 검사 종료 후에는 비활성화하는 것을 권장합니다.'
-                });
-
-                push('wifiDebug', '무선 디버깅', wifiDebug, {
-                    levelOn: 'warn',
-                    levelOff: 'ok',
-                    detailOn: '무선 디버깅이 켜져 있습니다. 동일 네트워크에서 디버깅 연결 위험이 증가할 수 있습니다.',
-                    detailOff: '무선 디버깅이 꺼져 있습니다.'
-                });
-
-                push('unknownSources', '출처를 알 수 없는 앱 설치 허용(레거시)', unknownSources, {
-                    levelOn: 'high',
-                    levelOff: 'ok',
-                    unknown: 'unknown',
-                    detailOn: '공식 스토어 외 설치가 허용되어 있습니다. 스파이앱 유입 위험이 증가합니다.',
-                    detailOff: '공식 스토어 외 설치가 제한되어 있습니다.',
-                    note: '최신 Android는 “앱별로” 알 수 없는 앱 설치 권한을 관리합니다. 이 값이 UNKNOWN일 수 있습니다.'
-                });
-
-                // (요구사항) Play 스토어 관련 항목은 표시하지 않습니다.
-
-
-                // Accessibility services
-                const a11yCount = enabledA11yPkgs.size;
-                items.push({
-                    id: 'accessibility',
-                    title: '접근성 서비스 활성 앱',
-                    status: a11yCount > 0 ? `ON (${a11yCount})` : 'OFF',
-                    level: a11yCount > 0 ? 'high' : 'ok',
-                    detail: a11yCount > 0
-                        ? `활성화된 접근성 서비스: ${Array.from(enabledA11yPkgs).slice(0, 10).join(', ')}${a11yCount > 10 ? ' ...' : ''}`
-                        : '활성화된 접근성 서비스가 감지되지 않았습니다.',
-                    list: Array.from(enabledA11yPkgs),
-                    note: '접근성 권한은 화면 조작/입력 가로채기에 악용될 수 있어 스파이앱 탐지에서 매우 중요합니다.',
-                    actions: buildActions('accessibility', a11yCount > 0)
-                });
-
-                // Device admin
-                const adminCount = activeAdminPkgs.size;
-                items.push({
-                    id: 'deviceAdmin',
-                    title: '기기 관리자(Device Admin) 활성 앱',
-                    status: adminCount > 0 ? `ON (${adminCount})` : 'OFF',
-                    level: adminCount > 0 ? 'warn' : 'ok',
-                    detail: adminCount > 0
-                        ? `활성 기기 관리자: ${Array.from(activeAdminPkgs).slice(0, 10).join(', ')}${adminCount > 10 ? ' ...' : ''}`
-                        : '활성 기기 관리자 앱이 감지되지 않았습니다.',
-                    list: Array.from(activeAdminPkgs),
-                    note: '기기 관리자 권한은 삭제 방해/잠금 등 악용될 수 있습니다.',
-                    actions: buildActions('deviceAdmin', adminCount > 0)
-                });
-
-                // Notification listeners
-                const notifCount = notifListenerPkgs.size;
-                items.push({
-                    id: 'notificationAccess',
-                    title: '알림 접근(Notification Access) 앱',
-                    status: notifCount > 0 ? `ON (${notifCount})` : 'OFF',
-                    level: notifCount > 0 ? 'warn' : 'ok',
-                    detail: notifCount > 0
-                        ? `알림 접근 허용: ${Array.from(notifListenerPkgs).slice(0, 10).join(', ')}${notifCount > 10 ? ' ...' : ''}`
-                        : '알림 접근 권한 앱이 감지되지 않았습니다.',
-                    list: Array.from(notifListenerPkgs),
-                    note: '알림 접근은 OTP/메신저 알림 가로채기에 악용될 수 있습니다.',
-                    actions: buildActions('notificationAccess', notifCount > 0)
-                });
-
-                // Additional context: accessibility_enabled setting
-                if (a11yEnabled === false && a11yCount > 0) {
-                    items.push({
-                        id: 'accessibilityMismatch',
-                        title: '접근성 설정 불일치',
-                        status: 'WARN',
-                        level: 'warn',
-                        detail: 'accessibility_enabled 값은 OFF인데 활성 서비스가 존재합니다. 기기/OS 특성 또는 파싱 차이일 수 있어 재확인이 필요합니다.'
-                    });
-                }
-
-                return { ok: true, items };
-            } catch (err) {
-                return { ok: false, error: err.message, items: [] };
-            }
+            return androidDeviceSecurity.getDeviceSecurityStatus(serial);
         },
 
         // ---------------------------------------------------------
         // ✅ Apply device security action (best-effort)
         // ---------------------------------------------------------
         async setDeviceSecuritySetting(serial, settingId, enabled) {
-            try {
-                const devices = await client.listDevices();
-                if (devices.length === 0) throw new Error('기기 연결 안 됨');
-                const target = serial || devices[0].id;
-
-                const on = enabled ? '1' : '0';
-                const id = String(settingId || '');
-
-                // Some settings require WRITE_SECURE_SETTINGS (usually granted to shell on userdebug/eng).
-                // We'll try best-effort and return a friendly error if blocked.
-                if (id === 'devOptions') {
-                    // Some devices mirror this in secure as well.
-                    try { await service.adbShellWithTimeout(target, `settings put global development_settings_enabled ${on}`); } catch (_e) { }
-                    try { await service.adbShellWithTimeout(target, `settings put secure development_settings_enabled ${on}`); } catch (_e) { }
-                    return { ok: true, changed: true, settingId: id, enabled: !!enabled };
-                }
-                if (id === 'usbDebug') {
-                    // Best-effort: settings provider + usb functions fallback.
-                    try { await service.adbShellWithTimeout(target, `settings put global adb_enabled ${on}`); } catch (_e) { }
-                    try { await service.adbShellWithTimeout(target, `settings put secure adb_enabled ${on}`); } catch (_e) { }
-                    // Some OEMs require adjusting usb functions to actually drop adb.
-                    if (!enabled) {
-                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions mtp`); } catch (_e) { }
-                        try { await service.adbShellWithTimeout(target, `svc usb setFunctions none`); } catch (_e) { }
-                    }
-                    return { ok: true, changed: true, settingId: id, enabled: !!enabled };
-                }
-                if (id === 'wifiDebug') {
-                    // Some devices store this in global, others in secure. Try both.
-                    try {
-                        await service.adbShellWithTimeout(target, `settings put global adb_wifi_enabled ${on}`);
-                    } catch (_e) {
-                        // ignore
-                    }
-                    try {
-                        await service.adbShellWithTimeout(target, `settings put secure adb_wifi_enabled ${on}`);
-                    } catch (_e) {
-                        // ignore
-                    }
-                    return { ok: true, changed: true, settingId: id, enabled: !!enabled };
-                }
-
-                if (id === 'securityAutoBlock') {
-                    // Best-effort: "app verification / play protect" style toggles.
-                    // NOTE: OEM features (e.g., Samsung Auto Blocker) may not be controllable via ADB settings.
-                    // We still try common keys to improve the odds.
-                    const cmds = [
-                        `settings put global package_verifier_enable ${on}`,
-                        `settings put secure package_verifier_enable ${on}`,
-                        `settings put global verifier_verify_adb_installs ${on}`,
-                        `settings put secure verifier_verify_adb_installs ${on}`,
-                    ];
-                    for (const c of cmds) {
-                        try { await service.adbShellWithTimeout(target, c); } catch (_e) { }
-                    }
-                    return { ok: true, changed: true, settingId: id, enabled: !!enabled };
-                }
-
-                return { ok: false, error: `지원하지 않는 설정입니다: ${id}` };
-            } catch (err) {
-                return { ok: false, error: err?.message || String(err) };
-            }
+            return androidDeviceSecurity.setDeviceSecuritySetting(serial, settingId, enabled);
         },
 
         // ---------------------------------------------------------
         // ✅ Open Android Settings screen via ADB (best-effort)
         // ---------------------------------------------------------
         async openAndroidSettings(serial, screen) {
-            try {
-                const devices = await client.listDevices();
-                if (devices.length === 0) throw new Error('기기 연결 안 됨');
-                const target = serial || devices[0].id;
-
-                const s = String(screen || '').toUpperCase();
-                // Default fallback
-                let intent = 'android.settings.SETTINGS';
-
-                if (s === 'DEVELOPER_OPTIONS') intent = 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS';
-                else if (s === 'ACCESSIBILITY_SETTINGS') intent = 'android.settings.ACCESSIBILITY_SETTINGS';
-                else if (s === 'DEVICE_ADMIN_SETTINGS') intent = 'android.settings.DEVICE_ADMIN_SETTINGS';
-                else if (s === 'NOTIFICATION_LISTENER_SETTINGS') intent = 'android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS';
-                else if (s === 'UNKNOWN_APP_SOURCES') intent = 'android.settings.MANAGE_UNKNOWN_APP_SOURCES';
-                else if (s === 'SECURITY_SETTINGS') intent = 'android.settings.SECURITY_SETTINGS';
-
-                // Best-effort start settings activity (some devices require user/flags)
-                try {
-                    await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`, 12000);
-                } catch (_e) {
-                    // Fallback for some Android versions
-                    await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`, 12000);
-                }
-                return { ok: true, opened: true, screen: s || 'SETTINGS' };
-            } catch (err) {
-                return { ok: false, error: err?.message || String(err) };
-            }
+            return androidDeviceSecurity.openAndroidSettings(serial, screen);
         },
 
         // ---------------------------------------------------------
@@ -582,149 +234,21 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
         // action: { kind: 'toggle'|'openSettings', target?, value?, intent? }
         // ---------------------------------------------------------
        async performDeviceSecurityAction(serial, action) {
-            try {
-                const act = action || {};
-                const kind = String(act.kind || '').toLowerCase();
-
-                if (kind === 'opensettings') {
-                    const devices = await client.listDevices();
-                    if (devices.length === 0) throw new Error('기기 연결 안 됨');
-                    const target = serial || devices[0].id;
-
-                    // Prefer explicit component if provided (more reliable on some OEM devices)
-                    const component = act.component ? String(act.component).trim() : '';
-                    if (component) {
-                        try {
-                            await service.adbShellWithTimeout(target, `am start --user 0 -W -n ${component} -f 0x10000000`);
-                            return { ok: true, opened: true, component };
-                        } catch (_e) {
-                            try {
-                                await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -n ${component}`);
-                                return { ok: true, opened: true, component };
-                            } catch (_e2) { /* fallthrough */ }
-                        }
-                    }
-
-                    // If renderer passes raw intent, use it.
-                    const intent = act.intent ? String(act.intent).trim() : '';
-                    if (intent) {
-                        try {
-
-                            if (intent == 'com.android.settings/.DeviceAdminSettings') {
-
-                                await service.adbShellWithTimeout(target, `am start -n ${intent}`);
-                            } else {
-
-                                await service.adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`);
-                            }
-                        } catch (_e) {
-                            await service.adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`);
-                        }
-                        return { ok: true, opened: true, intent };
-                    }
-
-                    // Fallback to generic settings
-                    return await service.openAndroidSettings(serial, 'SETTINGS');
-                }
-
-                if (kind === 'toggle') {
-                    const tgt = String(act.target || '').trim();
-                    const enabled = act.value === true;
-                    // Map legacy targets -> settingId
-                    const map = {
-                        wifiDebug: 'wifiDebug',
-                        usbDebug: 'usbDebug',
-                        devOptions: 'devOptions',
-                        securityAutoBlock: 'securityAutoBlock',
-                    };
-                    const settingId = map[tgt] || tgt;
-                    return await service.setDeviceSecuritySetting(serial, settingId, enabled);
-                }
-
-                return { ok: false, error: 'INVALID_ACTION' };
-            } catch (err) {
-                return { ok: false, error: err?.message || String(err) };
-            }
+            return androidDeviceSecurity.performDeviceSecurityAction(serial, action);
         },
 
         // ---------------------------------------------------------
         // ✅ [Helper] 접근성(Accessibility) 활성 서비스 패키지 목록
         // dumpsys accessibility 출력에서 Enabled services / Enabled Accessibility Services 항목을 파싱합니다.
         async getEnabledAccessibilityPackages(serial) {
-            try {
-                const raw = await service.adbShell(serial, 'dumpsys accessibility');
-                if (!raw) return new Set();
-
-                const pkgs = new Set();
-                const lines = raw.split(/\r?\n/);
-
-                // "Enabled services:" 블록 이후에 컴포넌트 라인이 여러 줄 나오는 케이스가 많습니다.
-                let inEnabledBlock = false;
-                for (const line of lines) {
-                    const trimmed = line.trim();
-
-                    if (/^Enabled (Accessibility )?services\s*:/i.test(trimmed)) {
-                        inEnabledBlock = true;
-                        continue;
-                    }
-
-                    // 블록 종료 조건: 다음 섹션 헤더가 나오면 종료
-                    if (inEnabledBlock && (/^[A-Z][A-Za-z\s]+:/.test(trimmed) || trimmed.startsWith('m'))) {
-                        // dumpsys 출력은 포맷이 다양하므로 너무 공격적으로 끊지 않고,
-                        // 빈 줄이거나 다음 섹션처럼 보이는 라인에서만 종료
-                        if (trimmed === '' || /^[A-Z][A-Za-z\s]+:/.test(trimmed)) {
-                            inEnabledBlock = false;
-                        }
-                    }
-
-                    if (!inEnabledBlock) continue;
-
-                    // componentName 예: com.example.app/com.example.app.AccessibilityService
-                    const m = trimmed.match(/([a-zA-Z0-9_\.]+)\/[a-zA-Z0-9_\.$]+/);
-                    if (m && m[1]) pkgs.add(m[1]);
-                }
-
-                return pkgs;
-            } catch (e) {
-                console.warn('⚠️ 접근성 활성 서비스 목록 조회 실패:', e?.message || e);
-                return new Set();
-            }
+            return androidDeviceSecurity.getEnabledAccessibilityPackages(serial);
         },
 
         // ---------------------------------------------------------
         // ✅ [Helper] 기기 관리자(Device Admin) 활성 패키지 목록
         // dumpsys device_policy 출력에서 Active admin / Active Admins 항목의 ComponentInfo를 파싱합니다.
         async getActiveDeviceAdminPackages(serial) {
-            try {
-                const raw = await service.adbShell(serial, 'dumpsys device_policy');
-                if (!raw) return new Set();
-
-                const pkgs = new Set();
-
-                // 1) ComponentInfo{com.pkg/.Receiver}
-                const re = /ComponentInfo\{([^\/\}\s]+)\//g;
-                let match;
-                while ((match = re.exec(raw)) !== null) {
-                    if (match[1]) pkgs.add(match[1]);
-                }
-
-                // 2) 혹시 dumpsys가 다른 포맷이면 dpm list도 시도(지원되는 기기에서만)
-                if (pkgs.size === 0) {
-                    try {
-                        const out = await service.adbShell(serial, 'dpm list active-admins');
-                        const lines = String(out || '').split(/\r?\n/);
-                        for (const line of lines) {
-                            const m = line.trim().match(/([a-zA-Z0-9_\.]+)\/[a-zA-Z0-9_\.$]+/);
-                            if (m && m[1]) pkgs.add(m[1]);
-                        }
-                    } catch (_e) { }
-                }
-
-                return pkgs;
-            } catch (e) {
-                console.warn('⚠️ 기기 관리자 활성 목록 조회 실패:', e?.message || e);
-                return new Set();
-            }
+            return androidDeviceSecurity.getActiveDeviceAdminPackages(serial);
         },
 
         async getGrantedPermissions(packageName) {
@@ -818,283 +342,33 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
 
         // 설치된 앱 목록 (시스템 앱 필터링 강화 버전)
         async getInstalledApps(serial) {
-            // 1. 시스템 앱 목록 획득 (가장 정확한 명단)
-            const sysOutput = await client.shell(serial, 'pm list packages -s');
-            const sysData = await adb.util.readAll(sysOutput);
-            const systemPackages = new Set(sysData.toString().trim().split('\n').map(l => l.replace('package:', '').trim()));
-
-            // 2. 전체 앱 목록 및 상세 정보 획득
-            const output = await client.shell(serial, 'pm list packages -i -f -U');
-            const data = await adb.util.readAll(output);
-            const lines = data.toString().trim().split('\n');
-
-            const TRUSTED_INSTALLERS = [
-                'com.android.vending', 'com.sec.android.app.samsungapps', 'com.skt.skaf.A000Z00040',
-                'com.kt.olleh.storefront', 'com.lguplus.appstore', 'com.google.android.feedback'
-            ];
-
-            // 시스템 앱이라고 믿을 수 있는 이름 패턴 (AI 학습 및 필터링용)
-            const TRUSTED_PREFIXES = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
-
-            return lines.map((line) => {
-                if (!line) return null;
-                const parts = line.split(/\s+/);
-                let packageName = '', apkPath = 'N/A', installer = null, uid = null;
-
-                // [사용자님의 원본 파싱 로직 유지]
-                parts.forEach(part => {
-                    if (part.includes('=')) {
-                        if (part.startsWith('package:')) {
-                            const cleanPart = part.replace('package:', '');
-                            const splitIdx = cleanPart.lastIndexOf('=');
-                            if (splitIdx !== -1) {
-                                apkPath = cleanPart.substring(0, splitIdx);
-                                packageName = cleanPart.substring(splitIdx + 1);
-                            }
-                        } else if (part.startsWith('installer=')) {
-                            installer = part.replace('installer=', '');
-                        }
-                    } else if (part.startsWith('uid:')) {
-                        uid = part.replace('uid:', '');
-                    }
-                });
-
-                if (!packageName) return null;
-
-                // --- 여기서부터 AI 전용 필드 계산 (파싱된 값 활용) ---
-
-                let origin = '외부 설치';
-                let isSideloaded = true;
-                let isSystemApp = false;
-                let isMasquerading = false;
-
-                // 1. 시스템 앱 판정 (Set 목록 대조)
-                if (systemPackages.has(packageName)) {
-                    origin = '시스템 앱';
-                    isSideloaded = false;
-                    isSystemApp = true;
-                }
-                // 2. 공식 스토어 판정
-                else if (installer && TRUSTED_INSTALLERS.includes(installer)) {
-                    origin = '공식 스토어';
-                    isSideloaded = false;
-                    isSystemApp = false;
-                }
-
-                // 3. 위장 앱(Masquerading) 판정 로직
-                // 이름은 시스템Prefix인데, 실제 시스템 앱 목록에 없고 스토어 출처도 아닐 때
-                const hasTrustedName = TRUSTED_PREFIXES.some(pre => packageName.startsWith(pre));
-                if (hasTrustedName && !isSystemApp && isSideloaded) {
-                    isMasquerading = true;
-                }
-
-                // AI 엔진 및 CSV 추출에 필요한 모든 필드 반환
-                return {
-                    packageName,
-                    apkPath,
-                    installer,
-                    isSideloaded,
-                    isSystemApp,      // AI 학습용 핵심 필드
-                    isMasquerading,   // AI 학습용 핵심 필드
-                    uid,
-                    origin,
-                    installDate: '-'
-                };
-            }).filter(item => item !== null);
+            return androidAppInventory.getInstalledApps(serial);
         },
 
 
         // 앱 설치 일시 조회 (firstInstallTime)
         async getAppInstallTime(serial, packageName) {
-            try {
-                const output = await client.shell(serial, `dumpsys package ${packageName}`);
-                const dumpsys = (await adb.util.readAll(output)).toString();
-
-                // 예: firstInstallTime=2024-03-01 12:34:56
-                let m = dumpsys.match(/firstInstallTime=([^\r\n]+)/);
-                if (m && m[1]) return String(m[1]).trim();
-
-                // 다른 포맷 대응
-                m = dumpsys.match(/firstInstallTime:\s*([^\r\n]+)/i);
-                if (m && m[1]) return String(m[1]).trim();
-
-                return '-';
-            } catch (_e) {
-                return '-';
-            }
+            return androidAppInventory.getAppInstallTime(serial, packageName);
         },
 
         // 백그라운드 실행 여부 확인
         async checkIsRunningBackground(serial, packageName) {
-            try {
-                const output = await client.shell(serial, `dumpsys activity services ${packageName}`);
-                const data = (await adb.util.readAll(output)).toString();
-                return !data.includes('(nothing)') && data.length > 0;
-            } catch (e) { return false; }
+            return androidAppInventory.checkIsRunningBackground(serial, packageName);
         },
 
         // 권한 상세 분석
         async getAppPermissions(serial, packageName) {
-            try {
-                const output = await client.shell(serial, `dumpsys package ${packageName}`);
-                const dumpsys = (await adb.util.readAll(output)).toString();
-
-                const reqMatch = dumpsys.match(/requested permissions:\s*([\s\S]*?)(?:install permissions:|runtime permissions:)/);
-                const requestedPerms = new Set();
-                if (reqMatch && reqMatch[1]) {
-                    reqMatch[1].match(/android\.permission\.[A-Z_]+/g)?.forEach(p => requestedPerms.add(p));
-                }
-
-                const grantedPerms = new Set();
-                const installMatch = dumpsys.match(/install permissions:\s*([\s\S]*?)(?:runtime permissions:|\n\n)/);
-                if (installMatch && installMatch[1]) {
-                    installMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)?.forEach(p => grantedPerms.add(p.split(':')[0]));
-                }
-                const runtimeMatch = dumpsys.match(/runtime permissions:\s*([\s\S]*?)(?:Dex opt state:|$)/);
-                if (runtimeMatch && runtimeMatch[1]) {
-                    runtimeMatch[1].match(/android\.permission\.[A-Z_]+: granted=true/g)?.forEach(p => grantedPerms.add(p.split(':')[0]));
-                }
-
-                const componentPattern = new RegExp(`${packageName.replace(/\./g, '\\.')}/[\\w\\.]+\\.[\\w\\.]+`, 'g');
-                const matches = dumpsys.match(componentPattern) || [];
-                const uniqueCount = [...new Set(matches)].length;
-
-                return {
-                    allPermissionsGranted: requestedPerms.size > 0 && [...requestedPerms].every(p => grantedPerms.has(p)),
-                    requestedList: Array.from(requestedPerms),
-                    grantedList: Array.from(grantedPerms),
-                    servicesCount: Math.max(1, Math.ceil(uniqueCount / 2)),
-                    receiversCount: Math.floor(uniqueCount / 2)
-                };
-            } catch (e) {
-                return { requestedList: [], grantedList: [], servicesCount: 0, receiversCount: 0 };
-            }
+            return androidAppInventory.getAppPermissions(serial, packageName);
         },
 
         // 네트워크 사용량 (UID 기반)
         async getNetworkUsageMap(serial) {
-            const usageMap = {};
-            try {
-                // 💡 방법 1: dumpsys netstats detail (기존 방식 유지)
-                let data = '';
-                try {
-                    const output = await client.shell(serial, 'dumpsys netstats detail');
-                    data = (await adb.util.readAll(output)).toString();
-                } catch (e) {
-                    console.warn('⚠️ dumpsys netstats detail 실패, 대체 명령어 시도.');
-                }
-
-                // 💡 방법 2: /proc/net/xt_qtaguid/stats 파일 직접 읽기 (루팅 필요하거나 접근이 막힐 수 있음)
-                if (data.length === 0) {
-                    try {
-                        const output = await client.shell(serial, 'cat /proc/net/xt_qtaguid/stats');
-                        data = (await adb.util.readAll(output)).toString();
-                    } catch (e) {
-                        console.warn('⚠️ /proc/net/xt_qtaguid/stats 접근 실패.');
-                    }
-                }
-
-                let currentUid = null;
-
-                data.split('\n').forEach(line => {
-                    const trimmedLine = line.trim();
-
-                    // 1. UID 식별자 (ident=...) 찾기
-                    if (trimmedLine.startsWith('ident=')) {
-                        const uidMatch = trimmedLine.match(/uid=(\d+)/);
-                        if (uidMatch) {
-                            currentUid = uidMatch[1];
-                            if (!usageMap[currentUid]) {
-                                usageMap[currentUid] = { rx: 0, tx: 0 };
-                            }
-                        } else {
-                            currentUid = null;
-                        }
-                    }
-                    // 2. NetworkStatsHistory 버킷 찾기 (rb=... tb=...)
-                    else if (currentUid && trimmedLine.startsWith('st=')) {
-                        const rbMatch = trimmedLine.match(/rb=(\d+)/);
-                        const tbMatch = trimmedLine.match(/tb=(\d+)/);
-
-                        if (rbMatch && tbMatch) {
-                            const rxBytes = parseInt(rbMatch[1], 10) || 0;
-                            const txBytes = parseInt(tbMatch[1], 10) || 0;
-
-                            usageMap[currentUid].rx += rxBytes;
-                            usageMap[currentUid].tx += txBytes;
-                        }
-                    }
-                });
-
-            } catch (e) {
-                // ... (오류 처리 로직 유지) ...
-            }
-            return usageMap;
+            return androidAppInventory.getNetworkUsageMap(serial);
         },
 
         // APK 파일 검색
         async findApkFiles(serial) {
-
-            // 💡 경로 중복 제거: /sdcard와 /storage/emulated/0는 같은 곳입니다.
-            // 하나만 남기거나, 결과에서 경로 중복을 체크해야 합니다.
-            const searchPaths = ['/sdcard/Download', '/data/local/tmp'];
-
-            // 설치 여부 판별을 위해 설치된 패키지 목록을 먼저 로드
-            const installedApps = await service.getInstalledApps(serial);
-            const installedSet = new Set(installedApps.map(a => a.packageName));
-            let allApkData = [];
-            const seenPaths = new Set(); // 💡 중복 체크를 위한 세트
-
-            for (const searchPath of searchPaths) {
-                try {
-                    const command = `find "${searchPath}" -type f -iname "*.apk" -exec ls -ld {} + 2>/dev/null`;
-                    const output = await client.shell(serial, command);
-                    const data = (await adb.util.readAll(output)).toString().trim();
-
-                    if (!data) continue;
-
-                    const lines = data.split('\n');
-                    for (const line of lines) {
-                        const parts = line.split(/\s+/);
-                        if (parts.length < 7) continue;
-
-                        const filePath = parts[parts.length - 1];
-
-                        if (seenPaths.has(filePath)) continue;
-                        seenPaths.add(filePath);
-
-                        const timePart = parts[parts.length - 2];
-                        const datePart = parts[parts.length - 3];
-                        const rawSize = parts[parts.length - 4];
-
-                        const fileName = filePath.split('/').pop();
-                        // APK의 실제 packageName(Manifest) 추출 (설치 여부 판별용)
-                        let apkManifestPackage = null;
-                        try {
-                            const perms = await service.getApkPermissionsOnly(serial, filePath);
-                            apkManifestPackage = perms && perms.__packageName ? perms.__packageName : null;
-                        } catch (_e) { }
-                        const sizeNum = parseInt(rawSize);
-                        const formattedSize = isNaN(sizeNum) ? "분석 중" : (sizeNum / (1024 * 1024)).toFixed(2) + " MB";
-
-                        allApkData.push({
-                            packageName: fileName,
-                            apkPath: filePath,
-                            fileSize: formattedSize,
-                            installDate: `${datePart} ${timePart}`,
-                            isApkFile: true,
-                            installStatus: (apkManifestPackage && installedSet.has(apkManifestPackage)) ? '현재 설치된 파일' : '현재 미설치된 파일',
-                            isRunningBg: false,
-                            isSideloaded: true,
-                            requestedCount: 3,
-                            requestedList: ['android.permission.INTERNET', 'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.REQUEST_INSTALL_PACKAGES']
-                        });
-                    }
-                } catch (e) {
-                    console.error(`${searchPath} 검색 실패:`, e.message);
-                }
-            }
-            return allApkData;
+            return androidAppInventory.findApkFiles(serial);
         },
 
         // 의심 앱 필터링 로직
@@ -1184,40 +458,7 @@ function createAndroidService({ client, adb, ApkReader, fs, path, os, crypto, lo
         },
 
         async getApkPermissionsOnly(serial, remotePath) {
-            let tempPath = null;
-            try {
-                // 1. 임시 파일 경로 설정
-                tempPath = path.join(os.tmpdir(), `extract_${Date.now()}.apk`);
-
-                // 2. ADB Pull로 기기 내 APK를 PC 임시 폴더로 복사
-                const transfer = await client.pull(serial, remotePath);
-                await new Promise((resolve, reject) => {
-                    const fn = fs.createWriteStream(tempPath);
-                    transfer.on('end', () => fn.end());
-                    transfer.on('error', reject);
-                    fn.on('finish', resolve);
-                    transfer.pipe(fn);
-                });
-
-                // 3. APK Manifest 읽기
-                const reader = await ApkReader.open(tempPath);
-                const manifest = await reader.readManifest();
-
-                // 4. 권한 리스트 추출
-                const permissions = (manifest.usesPermissions || []).map(p => p.name);
-
-
-                // 설치 여부 판별을 위해 packageName도 함께 전달 (배열에 메타 프로퍼티로 부착)
-                try { permissions.__packageName = manifest.package || manifest.packageName || null; } catch (_e) { }
-                // 5. 임시 파일 삭제
-                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-
-                return permissions;
-            } catch (e) {
-                console.error(`APK 권한 추출 실패 (${remotePath}):`, e);
-                if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-                return [];
-            }
+            return androidAppInventory.getApkPermissionsOnly(serial, remotePath);
         }
 
         ,

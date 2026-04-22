@@ -55,6 +55,7 @@ web_modules/
 .npm
 .npm-cache/
 .electron-cache/
+.ts-build-preview/
 
 # Optional eslint cache
 .eslintcache

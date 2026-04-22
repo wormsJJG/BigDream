@@ -1,16 +1,14 @@
 export function renderApkList({ apkFiles, container, clear, showAppDetail }) {
-    if (!container) return;
+    if (!container)
+        return;
     clear(container);
-
     if (!apkFiles || apkFiles.length === 0) {
         container.innerHTML = '<p class="scs-d2055e02">발견된 APK 설치 파일이 없습니다.</p>';
         return;
     }
-
     apkFiles.forEach(apk => {
         const div = document.createElement('div');
         div.className = 'app-item apk-file-item';
-
         div.innerHTML = `
                 <div class="app-icon-wrapper">
                     <img src="./assets/systemAppLogo.png" class="scs-c35a5c87">
@@ -19,20 +17,16 @@ export function renderApkList({ apkFiles, container, clear, showAppDetail }) {
                 <div class="app-package-sub">${apk.installStatus || '미설치 파일'}</div>
                 <div class="scs-72caaa65">요구권한 ${apk.requestedCount}개</div>
             `;
-
         div.addEventListener('click', () => {
             showAppDetail(apk, apk.packageName);
         });
-
         container.appendChild(div);
     });
 }
-
 export function buildIosPrivacyThreatApps(allApps, incomingPrivacyApps) {
     if (Array.isArray(incomingPrivacyApps) && incomingPrivacyApps.length > 0) {
         return incomingPrivacyApps;
     }
-
     const policyBundleIds = new Set([
         'com.life360.safetymapd',
         'com.geozilla.family',
@@ -42,18 +36,14 @@ export function buildIosPrivacyThreatApps(allApps, incomingPrivacyApps) {
         'com.snapchat.Snapchat',
         'com.burbn.instagram'
     ]);
-
     const normalize = (pkg) => String(pkg || '').trim();
-
     const candidates = (Array.isArray(allApps) ? allApps : []).filter(app => {
         const pkg = normalize(app.packageName);
         return policyBundleIds.has(pkg);
     });
-
     return candidates.map(app => {
         const pkg = normalize(app.packageName);
         const isInstagram = pkg === 'com.burbn.instagram';
-
         return {
             ...app,
             riskLevel: 'PRIVACY_RISK',

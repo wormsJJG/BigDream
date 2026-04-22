@@ -8,7 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const gplayRaw = require('google-play-scraper');
 const gplay = gplayRaw.default || gplayRaw;
-const IPC = require('../../shared/ipcChannels');
+const IPC_MODULE = require('../../shared/ipc/ipcChannels');
+const IPC = IPC_MODULE.default || IPC_MODULE;
 
 function registerAndroidHandlers({
   ipcMain,

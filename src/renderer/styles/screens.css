@@ -1,17 +1,17 @@
 /* Screen styles entrypoint (Stage4+).
    NOTE: Keep import order to preserve cascade.
 */
-@import "../screens/login-screen/style.css";
-@import "../screens/support-screen/style.css";
-@import "../screens/create-scan-screen/style.css";
-@import "../screens/device-connection-screen/style.css";
-@import "../screens/scan-progress-screen/style.css";
-@import "../screens/scan-info-screen/style.css";
+@import "../pages/login-screen/style.css";
+@import "../pages/support-screen/style.css";
+@import "../pages/create-scan-screen/style.css";
+@import "../pages/device-connection-screen/style.css";
+@import "../pages/scan-progress-screen/style.css";
+@import "../pages/scan-info-screen/style.css";
 
 /* Results / Admin */
-@import "../screens/scan-results-screen/style.css";
-@import "../screens/admin-screen/style.css";
-@import "../screens/admin-report-detail-screen/style.css";
+@import "../pages/scan-results-screen/style.css";
+@import "../pages/admin-screen/style.css";
+@import "../pages/admin-report-detail-screen/style.css";
 
 @import "./refactor.css";
 /* Global overlays */

@@ -95,20 +95,17 @@ const IOS_CORE_AREA_MAP = [
         aiWarn: '기타 시스템 아티팩트에서 IOC 단서가 확인되어 정밀 분석이 필요합니다.'
     }
 ];
-
 export function createIosCoreAreasRenderer() {
     const renderArea = (area, result) => {
         const container = document.getElementById(area.containerId);
-        if (!container) return;
-
+        if (!container)
+            return;
         const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
         const warningCount = warnings.length;
         const isWarning = warningCount > 0;
-
         const statusBadge = isWarning
             ? `<span class="scs-19b6cd4a">경고</span>`
             : `<span class="scs-186eff43">안전</span>`;
-
         const evidenceHtml = isWarning
             ? `<div class="scs-a9e72425">
                             <div class="scs-a95df9ac">🔎 탐지된 단서</div>
@@ -120,16 +117,13 @@ export function createIosCoreAreasRenderer() {
             : `<div class="scs-29934e59">
                             ✅ 발견된 이상 징후가 없습니다.
                         </div>`;
-
         const aiText = isWarning ? area.aiWarn : area.aiSafe;
         const filesToShow = (Array.isArray(result?.files) && result.files.length)
             ? result.files
             : (Array.isArray(area?.files) ? area.files : []);
-
         const filesHtml = filesToShow.length
             ? filesToShow.map(f => `<span class="ios-major-file">${String(f)}</span>`).join(`<span class="ios-major-file-sep">, </span>`)
             : `<span class="ios-major-file-empty">표시할 파일 목록이 없습니다.</span>`;
-
         container.innerHTML = `
                     <div class="scs-c6adeaee">
                         <div>
@@ -169,7 +163,6 @@ export function createIosCoreAreasRenderer() {
                     ${evidenceHtml}
                 `;
     };
-
     return {
         render(mvtResults) {
             IOS_CORE_AREA_MAP.forEach(area => {
