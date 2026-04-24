@@ -44,4 +44,5 @@ const IPC = {
         UPDATE_ERROR: 'update-error'
     }
 };
-export default IPC;
+module.exports = IPC;
+module.exports.default = IPC;

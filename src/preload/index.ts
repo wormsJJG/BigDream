@@ -1,4 +1,13 @@
-import type { BdScannerApi, ElectronApiCompat } from '../types/preload-api';
+import type {
+  BdScannerApi,
+  ElectronApiCompat,
+  UpdateProgressPayload,
+} from '../types/preload-api';
+import type {
+  FirestoreCreateUserResult,
+  FirestoreLoginResult,
+  FirestoreLogoutResult,
+} from '../main/services/firestoreService';
 
 type IpcRendererLike = {
   invoke(channel: string, args?: unknown, ...rest: unknown[]): Promise<unknown>;
@@ -28,44 +37,52 @@ function invokeWithTimeout(channel: string, args?: unknown, timeoutMs = 15000): 
   ]);
 }
 
+function invokeTyped<T>(channel: string, args?: unknown, ...rest: unknown[]): Promise<T> {
+  return ipcRenderer.invoke(channel, args, ...rest) as Promise<T>;
+}
+
+function invokeWithTimeoutTyped<T>(channel: string, args?: unknown, timeoutMs = 15000): Promise<T> {
+  return invokeWithTimeout(channel, args, timeoutMs) as Promise<T>;
+}
+
 const bdScanner: BdScannerApi = {
   app: {
-    forceWindowReset: () => ipcRenderer.invoke(IPC.APP.FORCE_WINDOW_RESET),
-    saveScanResult: (data) => ipcRenderer.invoke(IPC.APP.SAVE_SCAN_RESULT, data),
-    saveLoginInfo: (data) => ipcRenderer.invoke(IPC.APP.SAVE_LOGIN_INFO, data),
-    getLoginInfo: () => ipcRenderer.invoke(IPC.APP.GET_LOGIN_INFO),
-    readTextFile: (relativePath) => ipcRenderer.invoke(IPC.APP.READ_TEXT_FILE, { relativePath }) as Promise<string>,
+    forceWindowReset: () => invokeTyped(IPC.APP.FORCE_WINDOW_RESET),
+    saveScanResult: (data) => invokeTyped(IPC.APP.SAVE_SCAN_RESULT, data),
+    saveLoginInfo: (data) => invokeTyped(IPC.APP.SAVE_LOGIN_INFO, data),
+    getLoginInfo: () => invokeTyped(IPC.APP.GET_LOGIN_INFO),
+    readTextFile: (relativePath) => invokeTyped<string>(IPC.APP.READ_TEXT_FILE, { relativePath }),
     onUpdateStart: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_START, (_event, version) => callback(version as string)),
-    onUpdateProgress: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_PROGRESS, (_event, data) => callback(data)),
+    onUpdateProgress: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_PROGRESS, (_event, data) => callback(data as UpdateProgressPayload)),
     onUpdateError: (callback) => ipcRenderer.on(IPC.EVENTS.UPDATE_ERROR, (_event, msg) => callback(msg as string))
   },
   android: {
-    checkDeviceConnection: () => ipcRenderer.invoke(IPC.ANDROID.CHECK_DEVICE_CONNECTION),
-    runScan: () => ipcRenderer.invoke(IPC.ANDROID.RUN_SCAN),
-    openScanFile: () => ipcRenderer.invoke(IPC.ANDROID.OPEN_SCAN_FILE),
-    getAppData: (packageName) => ipcRenderer.invoke(IPC.ANDROID.GET_APP_DATA, packageName),
-    uninstallApp: (packageName) => ipcRenderer.invoke(IPC.ANDROID.UNINSTALL_APP, packageName),
-    neutralizeApp: (pkg, perms) => ipcRenderer.invoke(IPC.ANDROID.NEUTRALIZE_APP, pkg, perms),
-    getGrantedPermissions: (pkg) => ipcRenderer.invoke(IPC.ANDROID.GET_GRANTED_PERMISSIONS, pkg),
-    deleteApkFile: (data) => ipcRenderer.invoke(IPC.ANDROID.DELETE_APK_FILE, data),
-    autoPushReportToAndroid: () => ipcRenderer.invoke(IPC.ANDROID.AUTO_PUSH_REPORT),
-    getDashboardData: () => ipcRenderer.invoke(IPC.ANDROID.GET_DASHBOARD_DATA),
-    getDeviceSecurityStatus: () => invokeWithTimeout(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, {}),
-    performDeviceSecurityAction: (payload) => invokeWithTimeout(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, payload || {})
+    checkDeviceConnection: () => invokeTyped(IPC.ANDROID.CHECK_DEVICE_CONNECTION),
+    runScan: () => invokeTyped(IPC.ANDROID.RUN_SCAN),
+    openScanFile: () => invokeTyped(IPC.ANDROID.OPEN_SCAN_FILE),
+    getAppData: (packageName) => invokeTyped(IPC.ANDROID.GET_APP_DATA, packageName),
+    uninstallApp: (packageName) => invokeTyped(IPC.ANDROID.UNINSTALL_APP, packageName),
+    neutralizeApp: (pkg, perms) => invokeTyped(IPC.ANDROID.NEUTRALIZE_APP, pkg, perms),
+    getGrantedPermissions: (pkg) => invokeTyped(IPC.ANDROID.GET_GRANTED_PERMISSIONS, pkg),
+    deleteApkFile: (data) => invokeTyped(IPC.ANDROID.DELETE_APK_FILE, data),
+    autoPushReportToAndroid: () => invokeTyped(IPC.ANDROID.AUTO_PUSH_REPORT),
+    getDashboardData: () => invokeTyped(IPC.ANDROID.GET_DASHBOARD_DATA),
+    getDeviceSecurityStatus: () => invokeWithTimeoutTyped(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, {}),
+    performDeviceSecurityAction: (payload) => invokeWithTimeoutTyped(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, payload || {})
   },
   auth: {
-    login: (email, password) => ipcRenderer.invoke(IPC.AUTH.LOGIN, { email, password }),
-    logout: () => ipcRenderer.invoke(IPC.AUTH.LOGOUT),
-    createUser: (email, password) => ipcRenderer.invoke(IPC.AUTH.CREATE_USER, { email, password })
+    login: (email, password) => invokeTyped(IPC.AUTH.LOGIN, { email, password }),
+    logout: () => invokeTyped(IPC.AUTH.LOGOUT),
+    createUser: (email, password) => invokeTyped(IPC.AUTH.CREATE_USER, { email, password })
   },
   firestore: {
-    call: (payload) => ipcRenderer.invoke(IPC.FIRESTORE.CALL, payload)
+    call: (payload) => invokeTyped(IPC.FIRESTORE.CALL, payload)
   },
   ios: {
-    checkConnection: () => ipcRenderer.invoke(IPC.IOS.CHECK_CONNECTION),
-    runScan: (udid, options = {}) => ipcRenderer.invoke(IPC.IOS.RUN_SCAN, udid, options),
-    deleteBackup: (udid) => ipcRenderer.invoke(IPC.IOS.DELETE_BACKUP, udid),
-    exportReportPdf: (payload = {}) => ipcRenderer.invoke(IPC.IOS.EXPORT_REPORT_PDF, payload),
+    checkConnection: () => invokeTyped(IPC.IOS.CHECK_CONNECTION),
+    runScan: (udid, options = {}) => invokeTyped(IPC.IOS.RUN_SCAN, udid, options),
+    deleteBackup: (udid) => invokeTyped(IPC.IOS.DELETE_BACKUP, udid),
+    exportReportPdf: (payload = {}) => invokeTyped(IPC.IOS.EXPORT_REPORT_PDF, payload),
     onScanProgress: (callback) => {
       const handler = (_event: unknown, payload: unknown) => {
         try { callback(payload); } catch (_e) { /* noop */ }
@@ -103,9 +120,9 @@ const electronAPI: ElectronApiCompat = {
   getAndroidDashboardData: bdScanner.android.getDashboardData,
   getDeviceSecurityStatus: bdScanner.android.getDeviceSecurityStatus,
   performDeviceSecurityAction: bdScanner.android.performDeviceSecurityAction,
-  firebaseAuthLogin: (email, password) => ipcRenderer.invoke(IPC.AUTH.LOGIN, { email, password }),
-  firebaseAuthLogout: () => ipcRenderer.invoke(IPC.AUTH.LOGOUT),
-  firebaseAuthCreateUser: (email, password) => ipcRenderer.invoke(IPC.AUTH.CREATE_USER, { email, password })
+  firebaseAuthLogin: (email, password) => invokeTyped<FirestoreLoginResult>(IPC.AUTH.LOGIN, { email, password }),
+  firebaseAuthLogout: () => invokeTyped<FirestoreLogoutResult>(IPC.AUTH.LOGOUT),
+  firebaseAuthCreateUser: (email, password) => invokeTyped<FirestoreCreateUserResult>(IPC.AUTH.CREATE_USER, { email, password })
 };
 
 contextBridge.exposeInMainWorld('bdScanner', bdScanner);

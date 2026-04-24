@@ -1,7 +1,16 @@
+import type {
+    AndroidRiskEvaluation,
+    PrivacyThreatCard,
+    RiskLevel,
+    RiskReason,
+    RiskRecommendation
+} from '../../shared/risk/riskRules';
+import type { SpywareFinalVerdict } from '../../shared/spyware/spywareFinalFilter';
+
 type RiskLevelMap = {
-    SPYWARE: string;
-    PRIVACY_RISK: string;
-    [key: string]: string;
+    SPYWARE: RiskLevel;
+    PRIVACY_RISK: RiskLevel;
+    [key: string]: RiskLevel;
 };
 
 type PermissionData = {
@@ -15,18 +24,44 @@ type PermissionData = {
 type AndroidApp = {
     packageName: string;
     uid?: string | number;
+    cachedTitle?: string;
+    installer?: string | null;
     isSystemApp?: boolean;
     isSideloaded?: boolean;
     apkPath?: string;
     reason?: string;
-    riskLevel?: string;
+    riskLevel?: RiskLevel;
+    riskReasons?: RiskReason[];
+    recommendation?: RiskRecommendation[];
+    aiNarration?: string;
+    isRunningBg?: boolean;
+    isAccessibilityEnabled?: boolean;
+    isDeviceAdminActive?: boolean;
+    aiScore?: number;
+    aiGrade?: string;
+    dataUsage?: { rx: number; tx: number };
+    installDate?: unknown;
     [key: string]: unknown;
+};
+
+export type AndroidPrivacyThreatApp = AndroidApp & Pick<
+    PrivacyThreatCard,
+    'riskLevel' | 'riskReasons' | 'recommendation' | 'aiNarration'
+> & {
+    reason?: string;
+};
+
+export type AndroidClassifiedAppsResult = {
+    processedApps: AndroidApp[];
+    suspiciousApps: AndroidApp[];
+    privacyThreatApps: AndroidPrivacyThreatApp[];
+    runningCount: number;
 };
 
 type AnalyzePayload = {
     packageName: string;
     permissions: string[];
-    isSideloaded: unknown;
+    isSideloaded: boolean;
     isSystemPath: boolean;
     isMasquerading: boolean;
     services_cnt: number;
@@ -52,13 +87,8 @@ export function createAndroidScanAnalysisHelpers({
     getAppPermissions(serial: string, packageName: string): Promise<PermissionData>;
     getAppInstallTime(serial: string, packageName: string): Promise<unknown>;
     checkIsRunningBackground(serial: string, packageName: string): Promise<boolean>;
-    evaluateAndroidSpywareFinalVerdict(app: AndroidApp): { isSpyware: boolean; reasons?: string[]; narration?: string };
-    evaluateAndroidAppRisk(app: AndroidApp): {
-        riskLevel: string;
-        riskReasons: string[];
-        recommendation: Array<{ action: string; label: string }>;
-        aiNarration: string;
-    };
+    evaluateAndroidSpywareFinalVerdict(app: AndroidApp): SpywareFinalVerdict;
+    evaluateAndroidAppRisk(app: AndroidApp): AndroidRiskEvaluation;
     RISK_LEVELS: RiskLevelMap;
 }) {
     async function analyzeInstalledApps({
@@ -149,7 +179,7 @@ export function createAndroidScanAnalysisHelpers({
         return processedApps;
     }
 
-    function classifyAnalyzedApps(processedApps: AndroidApp[]) {
+    function classifyAnalyzedApps(processedApps: AndroidApp[]): AndroidClassifiedAppsResult {
         processedApps.forEach((app) => {
             const finalVerdict = evaluateAndroidSpywareFinalVerdict(app);
 
@@ -186,7 +216,7 @@ export function createAndroidScanAnalysisHelpers({
         return {
             processedApps,
             suspiciousApps: spywareApps,
-            privacyThreatApps,
+            privacyThreatApps: privacyThreatApps as AndroidPrivacyThreatApp[],
             runningCount
         };
     }

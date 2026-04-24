@@ -1,4 +1,4 @@
-type IosCoreArea = {
+const IOS_CORE_AREA_MAP: Array<{
   key: string;
   sectionId: string;
   containerId: string;
@@ -8,15 +8,7 @@ type IosCoreArea = {
   hacked: string[];
   aiSafe: string;
   aiWarn: string;
-};
-
-type IosCoreAreaResult = {
-  status?: string;
-  warnings?: string[];
-  files?: string[];
-};
-
-const IOS_CORE_AREA_MAP: IosCoreArea[] = [
+}> = [
   {
     key: 'web',
     sectionId: 'res-ios-web',
@@ -115,7 +107,24 @@ const IOS_CORE_AREA_MAP: IosCoreArea[] = [
 ];
 
 export function createIosCoreAreasRenderer() {
-  const renderArea = (area: IosCoreArea, result?: IosCoreAreaResult) => {
+  const renderArea = (
+    area: {
+      key: string;
+      sectionId: string;
+      containerId: string;
+      title: string;
+      files: string[];
+      normal: string[];
+      hacked: string[];
+      aiSafe: string;
+      aiWarn: string;
+    },
+    result?: {
+      status?: string;
+      warnings?: string[];
+      files?: string[];
+    },
+  ) => {
     const container = document.getElementById(area.containerId);
     if (!container) return;
 
@@ -189,7 +198,7 @@ export function createIosCoreAreasRenderer() {
   };
 
   return {
-    render(mvtResults: Record<string, IosCoreAreaResult>) {
+    render(mvtResults: Record<string, { status?: string; warnings?: string[]; files?: string[] }>) {
       IOS_CORE_AREA_MAP.forEach(area => {
         const result = mvtResults?.[area.key] || { status: 'safe', warnings: [] };
         renderArea(area, result);

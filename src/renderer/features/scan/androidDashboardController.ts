@@ -1,53 +1,26 @@
 import { setCircularGauge } from '../../lib/circularGauge.js';
-import type { RendererState } from '../../../types/renderer-context';
+import type { CustomUiLike, RendererState } from '../../../types/renderer-context';
+import type { AndroidDashboardData } from '../../../main/services/androidService';
 
-type DashboardDeps = {
+export function createAndroidDashboardController({
+  State,
+  CustomUI,
+  clear
+}: {
   State: RendererState;
-  CustomUI: {
-    alert(message: string): Promise<void>;
-  };
+  CustomUI: Pick<CustomUiLike, 'alert'>;
   clear(target: Element): void;
-};
-
-type DashboardMetrics = {
-  batteryLevel?: number;
-  memUsagePercent?: number;
-  deviceTempC?: number;
-  connected?: boolean;
-};
-
-type DashboardSpec = {
-  model?: string;
-  android?: string;
-  serial?: string;
-  rooted?: string;
-};
-
-type DashboardTopItem = {
-  pid?: string | number;
-  cpu?: string | number;
-  mem?: string | number;
-  name?: string;
-};
-
-type DashboardPayload = {
-  ok?: boolean;
-  metrics?: DashboardMetrics;
-  spec?: DashboardSpec;
-  top?: DashboardTopItem[];
-};
-
-export function createAndroidDashboardController({ State, CustomUI, clear }: DashboardDeps) {
+}) {
   let timer: ReturnType<typeof setInterval> | null = null;
   let failCount = 0;
   let disconnectedNotified = false;
 
-  const setText = (id: string, val: unknown) => {
+  const setText = (id: string, val: string | number | boolean | null | undefined) => {
     const el = document.getElementById(id);
     if (el) el.textContent = (val === undefined || val === null || val === '') ? '-' : String(val);
   };
 
-  const setGauge = (gaugeId: string, valId: string, percent: unknown) => {
+  const setGauge = (gaugeId: string, valId: string, percent: string | number | boolean | null | undefined) => {
     const el = document.getElementById(gaugeId);
     const valEl = document.getElementById(valId);
     const p = Number(percent);
@@ -71,7 +44,15 @@ export function createAndroidDashboardController({ State, CustomUI, clear }: Das
     }
   };
 
-  const renderView = ({ metrics, spec, top }: { metrics?: DashboardMetrics; spec?: DashboardSpec; top?: DashboardTopItem[] }) => {
+  const renderView = ({
+    metrics,
+    spec,
+    top
+  }: {
+    metrics?: AndroidDashboardData['metrics'] & { connected?: boolean };
+    spec?: AndroidDashboardData['spec'];
+    top?: AndroidDashboardData['top'];
+  }) => {
     if (metrics) {
       const bat = (metrics.batteryLevel !== undefined) ? Number(metrics.batteryLevel) : null;
       setText('live-bat-text', (bat === null || !Number.isFinite(bat)) ? '--%' : `${bat}%`);
@@ -152,7 +133,13 @@ export function createAndroidDashboardController({ State, CustomUI, clear }: Das
 
   const render = async () => {
     try {
-      const res = await window.electronAPI?.getAndroidDashboardData?.() as DashboardPayload | undefined;
+      const res = await window.electronAPI?.getAndroidDashboardData?.() as (
+        AndroidDashboardData & {
+          metrics?: AndroidDashboardData['metrics'] & { connected?: boolean };
+          spec?: AndroidDashboardData['spec'];
+          top?: AndroidDashboardData['top'];
+        }
+      ) | undefined;
       if (!res || !res.ok) {
         failCount += 1;
         if (failCount >= 3) await notifyDisconnectedOnce();

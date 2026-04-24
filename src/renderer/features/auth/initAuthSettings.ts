@@ -1,4 +1,4 @@
-import type { RendererContext } from '../../../types/renderer-context';
+import type { IosProgressMode, RendererContext, RendererUserRole } from '../../../types/renderer-context';
 import {
   checkUserRole as checkUserRoleService,
   fetchUserInfoAndSettings as fetchUserInfoAndSettingsService
@@ -14,10 +14,14 @@ type LoginFormElement = HTMLFormElement & {
 
 type ClientInfoResult = {
   androidTargetMinutes?: number;
-  iosProgressMode?: string;
+  iosProgressMode?: IosProgressMode;
   agencyName?: string;
   quota?: number;
 };
+
+function normalizeUserRole(role: string): RendererUserRole {
+  return role === 'admin' || role === 'distributor' ? role : 'user';
+}
 
 export function initAuthSettings(ctx: RendererContext): void {
   const { State, ViewManager, CustomUI, dom, services, constants } = ctx;
@@ -115,7 +119,7 @@ export function initAuthSettings(ctx: RendererContext): void {
       try {
         const user = await authService.login(email, password);
         const roleRaw = await checkUserRole(user.uid || '');
-        const role = String(roleRaw || '').trim().toLowerCase();
+        const role = normalizeUserRole(String(roleRaw || '').trim().toLowerCase());
         const savedLoginInfo = await window.electronAPI.saveLoginInfo(loginData) as {
           success?: boolean;
           passwordStored?: boolean;

@@ -1,4 +1,4 @@
-import { Utils } from '../../shared/utils.js';
+import { Utils } from '../../shared/utils.actual.js';
 import { renderSuspiciousListView } from './scanView.js';
 import { buildIosPrivacyThreatApps, renderApkList } from './appCollections.js';
 import { renderIosInstalledApps } from './iosInstalledApps.js';
@@ -9,30 +9,24 @@ import { bindOpenScanFileButton, bindScanStartButton } from './scanEntryBindings
 import { createScanLayoutRuntimeHelpers } from './scanLayoutRuntime.js';
 import { createScanMenuLifecycle } from './scanMenuLifecycle.js';
 import { createScanDomHelpers, createScanFeatureBundle } from './scanBootstrapHelpers.js';
-
 export function initializeScanRuntime(ctx) {
     const IOS_TRUST_PROMPT_MESSAGE = "검사를 위해 iPhone에서 PIN 입력 후 '이 컴퓨터 신뢰'를 승인해주세요.";
     const { State, ViewManager, CustomUI, dom, services } = ctx;
     const BD_DOM = createScanDomHelpers();
     const scanLayoutRuntime = createScanLayoutRuntimeHelpers({ BD_DOM, document });
     const scanMenuLifecycle = createScanMenuLifecycle({ State, ViewManager, document });
-
     ctx.helpers = ctx.helpers || {};
     ctx.helpers.renderScanInfo = (payload, fileMeta) => renderScanInfo(payload, fileMeta);
     ctx.helpers.setDashboardScrollLock = (on) => scanLayoutRuntime.setDashboardScrollLock(on);
-
     const { loggedInView } = dom;
     const authService = services.auth;
     const firestore = services.firestore;
-
     scanMenuLifecycle.attachShowScreenHook();
-    try { scanMenuLifecycle.setMenuState('preScan'); } catch (_e) { }
-
-    const {
-        ResultsRenderer,
-        ScanController,
-        firestoreApi
-    } = createScanFeatureBundle(ctx, {
+    try {
+        scanMenuLifecycle.setMenuState('preScan');
+    }
+    catch (_e) { /* noop */ }
+    const { ResultsRenderer, ScanController, firestoreApi } = createScanFeatureBundle(ctx, {
         State,
         ViewManager,
         CustomUI,
@@ -56,17 +50,20 @@ export function initializeScanRuntime(ctx) {
         IOS_TRUST_PROMPT_MESSAGE,
         resetAndroidDashboardUI: () => scanLayoutRuntime.resetAndroidDashboardUI()
     });
-
     const { doc, updateDoc, increment } = firestoreApi;
-
     ctx.helpers.forceRenderIosCoreAreas = () => {
-        try { ResultsRenderer.forceRenderIosCoreAreas(); } catch (e) { }
+        try {
+            ResultsRenderer.forceRenderIosCoreAreas();
+        }
+        catch (_e) { /* noop */ }
     };
     ctx.helpers.resetAndroidDashboardUI = () => scanLayoutRuntime.resetAndroidDashboardUI();
     ctx.helpers.stopAndroidDashboardPolling = () => {
-        try { ScanController.stopAndroidDashboardPolling && ScanController.stopAndroidDashboardPolling(); } catch (_) { }
+        try {
+            ScanController.stopAndroidDashboardPolling && ScanController.stopAndroidDashboardPolling();
+        }
+        catch (_) { /* noop */ }
     };
-
     bindScanStartButton({
         ctx,
         State,
@@ -92,7 +89,6 @@ export function initializeScanRuntime(ctx) {
         normalizeDeviceMode,
         setDashboardScrollLock: (on) => scanLayoutRuntime.setDashboardScrollLock(on)
     });
-
     return {
         IOS_TRUST_PROMPT_MESSAGE,
         ResultsRenderer,

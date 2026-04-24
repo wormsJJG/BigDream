@@ -1,4 +1,5 @@
-import { evaluateAppRisk } from '../../shared/constants/riskRules.js';
+import { evaluateAppRisk } from '../../shared/risk/riskRules.js';
+import type { PlatformRiskEvaluation, PrivacyThreatCard } from '../../shared/risk/riskRules';
 
 type FileSystemLike = {
     existsSync(path: string): boolean;
@@ -37,6 +38,29 @@ type InstalledAppLike = {
     installer: string;
 };
 
+type MvtAreaResult = {
+    status: 'warning' | 'safe';
+    warnings: string[];
+    files: string[];
+};
+
+export type ParsedIosScanResult = {
+    deviceInfo: DeviceInfoLike;
+    suspiciousItems: FindingLike[];
+    allApps: InstalledAppLike[];
+    privacyThreatApps: Array<NonNullable<PlatformRiskEvaluation['card']>>;
+    fileCount: number;
+    mvtResults: {
+        web: MvtAreaResult;
+        messages: MvtAreaResult;
+        system: MvtAreaResult;
+        apps: MvtAreaResult;
+        artifacts: MvtAreaResult;
+    };
+};
+
+export type IosPrivacyThreatCard = NonNullable<PlatformRiskEvaluation['card']>;
+
 export function createIosMvtParser({
     fs,
     path,
@@ -55,7 +79,7 @@ export function createIosMvtParser({
         }
     }
 
-    function parseMvtResults(outputDir: string, fallbackDeviceInfo: DeviceInfoLike) {
+    function parseMvtResults(outputDir: string, fallbackDeviceInfo: DeviceInfoLike): ParsedIosScanResult {
         const findings: FindingLike[] = [];
         let fileCount = 0;
 
@@ -256,17 +280,21 @@ export function createIosMvtParser({
             if (warningText) warningBuckets[area].push(warningText);
         });
 
+        const areaStatus = (warnings: string[]): MvtAreaResult['status'] => (
+            warnings.length ? 'warning' : 'safe'
+        );
+
         const mvtResults = {
-            web: { status: warningBuckets.web.length ? 'warning' : 'safe', warnings: warningBuckets.web, files: ['Safari History', 'Chrome Bookmarks'] },
-            messages: { status: warningBuckets.messages.length ? 'warning' : 'safe', warnings: warningBuckets.messages, files: ['SMS/iMessage DB', 'Call History'] },
-            system: { status: warningBuckets.system.length ? 'warning' : 'safe', warnings: warningBuckets.system, files: ['Configuration Files', 'Log Files'] },
-            apps: { status: warningBuckets.apps.length ? 'warning' : 'safe', warnings: warningBuckets.apps, files: ['Manifest.db', 'App Sandboxes'] },
-            artifacts: { status: warningBuckets.artifacts.length ? 'warning' : 'safe', warnings: warningBuckets.artifacts, files: ['Detected IOCs', 'Caches', 'LocalStorage'] },
+            web: { status: areaStatus(warningBuckets.web), warnings: warningBuckets.web, files: ['Safari History', 'Chrome Bookmarks'] },
+            messages: { status: areaStatus(warningBuckets.messages), warnings: warningBuckets.messages, files: ['SMS/iMessage DB', 'Call History'] },
+            system: { status: areaStatus(warningBuckets.system), warnings: warningBuckets.system, files: ['Configuration Files', 'Log Files'] },
+            apps: { status: areaStatus(warningBuckets.apps), warnings: warningBuckets.apps, files: ['Manifest.db', 'App Sandboxes'] },
+            artifacts: { status: areaStatus(warningBuckets.artifacts), warnings: warningBuckets.artifacts, files: ['Detected IOCs', 'Caches', 'LocalStorage'] },
         };
 
         const privacyThreatApps = (installedApps || [])
-            .map((app) => evaluateAppRisk('ios', app).card)
-            .filter(Boolean);
+            .map((app) => (evaluateAppRisk('ios', app) as PlatformRiskEvaluation).card)
+            .filter(Boolean) as IosPrivacyThreatCard[];
 
         return {
             deviceInfo: finalDeviceInfo,

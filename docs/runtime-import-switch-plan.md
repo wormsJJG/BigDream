@@ -68,9 +68,10 @@ These are the safest first targets because they are low-risk and already have TS
 ## Last Wave
 
 1. `src/renderer/features/scan/initScanController`
-2. `src/main/bootstrap`
-3. `src/main/services/androidService`
-4. `src/main/services/iosService`
+2. `src/main/services/androidService`
+3. `src/main/services/iosService`
+4. `src/main/ipc/*`
+5. `src/main/bootstrap`
 
 ## Acceptance Checks For Each Runtime Switch
 
@@ -143,13 +144,35 @@ Current renderer scan targets:
   - `src/renderer/features/scan/scanBootstrapHelpers.js`
   - sync command: `npm run ts:sync:renderer-scan-orchestration`
 - final held targets:
-  - `src/renderer/features/scan/scanControllerMethods.js`
-  - `src/renderer/features/scan/scanControllerCore.js`
-  - `src/renderer/features/scan/scanInitRuntime.js`
   - `src/renderer/features/scan/initScanController.js`
   - 이유: runtime JS는 안정화됐지만, TS 원본이 아직 일부 wrapper 형태라 지금 바로 sync하면 self-import 회귀가 다시 날 수 있음
+- held release step:
+  - `src/renderer/features/scan/scanControllerMethods.js`
+  - sync command: `npm run ts:sync:renderer-scan-held-methods`
+  - `src/renderer/features/scan/scanControllerCore.js`
+  - sync command: `npm run ts:sync:renderer-scan-held-core`
+  - `src/renderer/features/scan/scanInitRuntime.js`
+  - sync command: `npm run ts:sync:renderer-scan-held-init-runtime`
+  - `src/renderer/features/scan/initScanController.js`
+  - sync command: `npm run ts:sync:renderer-scan-held-init-controller`
 
 Current main helper targets:
+
+- testing wave:
+  - `src/main/testing/mockData.js`
+  - sync command: `npm run ts:sync:main-testing-wave`
+- shell light wave:
+  - `src/main/window/createMainWindow.js`
+  - `src/main/updater/initializeAutoUpdater.js`
+  - sync command: `npm run ts:sync:main-shell-light-wave`
+- core light wave:
+  - `src/main/config/createConfig.js`
+  - `src/main/services/createMainUtils.js`
+  - sync command: `npm run ts:sync:main-core-light-wave`
+- light wave:
+  - `src/main/services/loginStorage.js`
+  - `src/main/services/firestoreService.js`
+  - sync command: `npm run ts:sync:main-service-light-wave`
 
 - first wave:
   - `src/main/services/iosPairing.js`
@@ -170,3 +193,27 @@ Current main helper targets:
   - `src/main/services/androidDeviceSecurity.js`
   - `src/main/services/androidAppInventory.js`
   - sync command: `npm run ts:sync:main-helper-final-wave`
+
+Current main ipc targets:
+
+- completed held release:
+  - `src/main/ipc/authHandlers.js`
+  - `src/main/ipc/firestoreHandlers.js`
+  - `src/main/ipc/appHandlers.js`
+  - `src/main/ipc/iosHandlers.js`
+  - `src/main/ipc/androidHandlers.js`
+  - preparation route that made this safe:
+    - `npm run ts:preview:main-ipc`
+    - `npm run ts:verify:main-ipc`
+
+Current final held target:
+
+- `src/main/bootstrap.js`
+  - status: released
+  - CJS-safe preview route:
+    - `npm run ts:preview:main-bootstrap`
+    - `npm run ts:verify:main-bootstrap`
+  - release step used:
+    - `npm run ts:sync:main-held-bootstrap`
+
+See also: `docs/held-target-switch-plan.md`

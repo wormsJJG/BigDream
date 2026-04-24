@@ -311,13 +311,13 @@ export function initClientDevice(ctx: RendererContext): void {
 
   const DeviceManager = {
     startPolling() {
-      if (State.connectionCheckInterval) clearInterval(State.connectionCheckInterval as number);
+      if (State.connectionCheckInterval) clearInterval(State.connectionCheckInterval);
       this.checkDevice();
       State.connectionCheckInterval = setInterval(() => this.checkDevice(), 1500);
     },
 
     stopPolling() {
-      if (State.connectionCheckInterval) clearInterval(State.connectionCheckInterval as number);
+      if (State.connectionCheckInterval) clearInterval(State.connectionCheckInterval);
       State.connectionCheckInterval = null;
     },
 

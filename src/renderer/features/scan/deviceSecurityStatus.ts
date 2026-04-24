@@ -1,44 +1,18 @@
-type SecurityAction = {
-  kind?: string;
-  target?: string;
-  value?: unknown;
-  intent?: string;
-  component?: string;
-  itemId?: string;
-  label?: string;
-};
-
-type SecurityItem = {
-  id?: string;
-  title?: string;
-  status?: string;
-  level?: string;
-  note?: string;
-  detail?: string;
-  desc?: string;
-  list?: string[];
-  actions?: SecurityAction[];
-};
-
-type SecurityPayload = {
-  ok?: boolean;
-  error?: string;
-  items?: SecurityItem[];
-};
-
-type SecurityContainer = HTMLElement & {
-  __dsBound?: boolean;
-};
+import type { AndroidDeviceSecurityStatus, AndroidSecurityItem } from '../../../main/services/androidService';
+import type { AndroidDeviceSecurityActionObject, AndroidDeviceSecurityActionPayload } from '../../../types/preload-api';
 
 export function createDeviceSecurityStatusController() {
-  const escapeHtml = (v: unknown) => String(v ?? '')
+  const escapeHtml = (v: string | number | boolean | null | undefined) => String(v ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
-  const badge = (status: unknown, level: unknown) => {
+  const badge = (
+    status: string | number | boolean | null | undefined,
+    level: string | number | boolean | null | undefined,
+  ) => {
     const raw = String(status || 'UNKNOWN');
     const upper = raw.toUpperCase();
     const s = upper.startsWith('ON') ? 'ON'
@@ -62,17 +36,17 @@ export function createDeviceSecurityStatusController() {
     return `<span class="${cls}" style="${style}">${s}${suffix ? ` <span style="opacity:.8; font-weight:500;">${suffix}</span>` : ''}</span>`;
   };
 
-  const renderChips = (list: unknown) => {
+  const renderChips = (list: string[] | undefined) => {
     if (!Array.isArray(list) || list.length === 0) return '';
     const chips = list.map((x) => `<span class="ds-chip">${escapeHtml(x)}</span>`).join('');
     return `<div class="ds-chip-row">${chips}</div>`;
   };
 
-  const renderActions = (actions: unknown, itemId: unknown) => {
+  const renderActions = (actions: AndroidDeviceSecurityActionObject[] | undefined, itemId: string | undefined) => {
     if (!Array.isArray(actions) || actions.length === 0) return '';
-    const btns = actions.map((a: SecurityAction) => {
+    const btns = actions.map((a: AndroidDeviceSecurityActionObject) => {
       const kind = String(a.kind || '').toLowerCase();
-      const label = escapeHtml(a.label || (kind === 'opensettings' ? '설정 열기' : '실행'));
+      const label = escapeHtml(String(a.label || (kind === 'opensettings' ? '설정 열기' : '실행')));
       const data = {
         kind: a.kind,
         target: a.target,
@@ -82,17 +56,50 @@ export function createDeviceSecurityStatusController() {
         itemId
       };
       const encoded = encodeURIComponent(JSON.stringify(data));
-      return `<button class="ds-btn ds-action-btn" data-ds-kind="${escapeHtml(kind)}" data-ds-action="${encoded}">${label}</button>`;
+      return `<button class="ds-btn ds-action-btn" data-ds-kind="${escapeHtml(String(kind))}" data-ds-action="${encoded}">${label}</button>`;
     }).join('');
     return `<div class="ds-actions">${btns}</div>`;
   };
 
-  const render = (payload: SecurityPayload | Promise<SecurityPayload>, container: SecurityContainer | null) => {
+  const render = (
+    payload: (
+      Omit<AndroidDeviceSecurityStatus, 'items'> & {
+        items?: Array<AndroidSecurityItem & {
+          note?: string;
+          detail?: string;
+          desc?: string;
+          list?: string[];
+          actions?: AndroidDeviceSecurityActionObject[];
+        }>;
+      }
+    ) | Promise<
+      Omit<AndroidDeviceSecurityStatus, 'items'> & {
+        items?: Array<AndroidSecurityItem & {
+          note?: string;
+          detail?: string;
+          desc?: string;
+          list?: string[];
+          actions?: AndroidDeviceSecurityActionObject[];
+        }>;
+      }
+    >,
+    container: (HTMLElement & { __dsBound?: boolean }) | null,
+  ) => {
     if (!container) return;
 
-    if (payload && typeof (payload as Promise<SecurityPayload>).then === 'function') {
+    if (payload && typeof (payload as Promise<unknown>).then === 'function') {
       container.textContent = '상태 확인 중...';
-      (payload as Promise<SecurityPayload>)
+      (payload as Promise<
+        Omit<AndroidDeviceSecurityStatus, 'items'> & {
+          items?: Array<AndroidSecurityItem & {
+            note?: string;
+            detail?: string;
+            desc?: string;
+            list?: string[];
+            actions?: AndroidDeviceSecurityActionObject[];
+          }>;
+        }
+      >)
         .then((resolved) => render(resolved, container))
         .catch((e) => {
           console.warn('[DeviceSecurityStatus] load failed', e);
@@ -101,7 +108,15 @@ export function createDeviceSecurityStatusController() {
       return;
     }
 
-    const resolvedPayload = payload as SecurityPayload;
+    const resolvedPayload = payload as Omit<AndroidDeviceSecurityStatus, 'items'> & {
+      items?: Array<AndroidSecurityItem & {
+        note?: string;
+        detail?: string;
+        desc?: string;
+        list?: string[];
+        actions?: AndroidDeviceSecurityActionObject[];
+      }>;
+    };
     if (!resolvedPayload || resolvedPayload.ok === false) {
       container.textContent = resolvedPayload?.error ? `불러오기 실패: ${resolvedPayload.error}` : '불러오기 실패';
       return;
@@ -154,7 +169,7 @@ export function createDeviceSecurityStatusController() {
           const raw = btn.getAttribute('data-ds-action');
           if (!raw) return;
 
-          let actionPayload: SecurityAction | null = null;
+          let actionPayload: AndroidDeviceSecurityActionObject | null = null;
           try {
             actionPayload = JSON.parse(decodeURIComponent(raw));
           } catch (_e) {
@@ -173,7 +188,7 @@ export function createDeviceSecurityStatusController() {
           try {
             await window.electronAPI.performDeviceSecurityAction({ action: actionPayload });
             const refreshed = await window.electronAPI.getDeviceSecurityStatus();
-            render(refreshed as SecurityPayload, container);
+            render(refreshed, container);
           } catch (e) {
             console.warn('[DeviceSecurityStatus] action failed', e);
             try { btn.textContent = oldText || '실패'; } catch (_e) { /* noop */ }
@@ -190,12 +205,12 @@ export function createDeviceSecurityStatusController() {
   };
 
   return {
-    async load(container: SecurityContainer | null) {
+    async load(container: (HTMLElement & { __dsBound?: boolean }) | null) {
       if (!container || !window.electronAPI?.getDeviceSecurityStatus) return;
       container.textContent = '상태 확인 중...';
       try {
         const sec = await window.electronAPI.getDeviceSecurityStatus();
-        render(sec as SecurityPayload, container);
+        render(sec, container);
       } catch (e) {
         console.warn('[DeviceSecurityStatus] load failed', e);
         try { container.textContent = '기기 보안 상태를 불러오지 못했습니다.'; } catch (_e) { /* noop */ }

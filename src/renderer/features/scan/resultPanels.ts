@@ -1,27 +1,30 @@
 import type { RendererState } from '../../../types/renderer-context';
+import type { AndroidAppRecord } from '../../../main/services/androidService';
+import type { IosInstalledApp, IosSuspiciousItem } from '../../../main/services/iosService';
+import type { IosPrivacyThreatCard } from '../../../main/services/iosMvtParser';
+import type { RiskReason, RiskRecommendation } from '../../../shared/risk/riskRules';
 
-type InitIosAppListArgs = {
+type ScanDisplayApp = Partial<AndroidAppRecord> & Partial<IosInstalledApp> & Partial<IosSuspiciousItem> & {
+  ai?: string;
+  policy?: string;
+  policyLabel?: string;
+  reasons?: RiskReason[];
+  recommendations?: RiskRecommendation[];
+};
+
+export function initIosAppListControls({
+  State,
+  Utils,
+  apps,
+  container
+}: {
   State: RendererState;
   Utils: {
     formatAppName(name: string): string;
   };
-  apps: any[];
+  apps: ScanDisplayApp[];
   container: HTMLElement | null;
-};
-
-type SuspiciousListArgs = {
-  suspiciousApps: any[];
-  isIos: boolean;
-  formatAppName(name: string): string;
-};
-
-type PrivacyThreatListArgs = {
-  privacyApps: any[];
-  clear(target: Element): void;
-  formatAppName(name: string): string;
-};
-
-export function initIosAppListControls({ State, Utils, apps, container }: InitIosAppListArgs): void {
+}): void {
   if (Array.isArray(State.scanRuntime?.androidListCleanup)) {
     State.scanRuntime.androidListCleanup.forEach(fn => { try { (fn as Function)?.(); } catch (_) { /* noop */ } });
   }
@@ -30,8 +33,9 @@ export function initIosAppListControls({ State, Utils, apps, container }: InitIo
   const input = document.getElementById('apps-search') as HTMLInputElement | null;
   if (!input || !container) return;
 
-  const getName = (app: any) => {
-    const name = app?.cachedTitle || app?.name || app?.displayName || Utils.formatAppName(app?.packageName || app?.bundleId || '');
+  const getName = (app: ScanDisplayApp) => {
+    const packageId = String(app?.packageName || app?.bundleId || '');
+    const name = app?.cachedTitle || app?.name || app?.displayName || Utils.formatAppName(packageId);
     return String(name || '');
   };
   void getName;
@@ -58,7 +62,15 @@ export function initIosAppListControls({ State, Utils, apps, container }: InitIo
   apply();
 }
 
-export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: SuspiciousListArgs): void {
+export function renderSuspiciousList({
+  suspiciousApps,
+  isIos,
+  formatAppName
+}: {
+  suspiciousApps: ScanDisplayApp[];
+  isIos: boolean;
+  formatAppName(name: string): string;
+}): void {
   const container = document.getElementById('spyware-detail-container') || document.getElementById('suspicious-list-container');
   if (!container) return;
 
@@ -78,17 +90,23 @@ export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: S
     return;
   }
 
-  const escapeHtml = (v: unknown) => String(v ?? '')
+  const escapeHtml = (v: string | number | boolean | null | undefined) => String(v ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-  const normalizeReasons = (app: any) => {
+  const normalizeReasons = (app: ScanDisplayApp) => {
     const reasons = Array.isArray(app?.riskReasons) ? app.riskReasons : [];
     if (reasons.length) {
-      return reasons.map((r: any) => {
+      return reasons.map((r: {
+        title?: string;
+        code?: string;
+        detail?: string;
+        description?: string;
+        severity?: string;
+      }) => {
         const title = r?.title || r?.code || '탐지 근거';
         const detail = r?.detail || r?.description || '';
         const sev = String(r?.severity || '').toUpperCase();
@@ -99,7 +117,7 @@ export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: S
     return fallback ? [{ title: '탐지 근거', detail: fallback, sev: 'HIGH' }] : [];
   };
 
-  const sevBadge = (sev: unknown) => {
+  const sevBadge = (sev: string | number | boolean | null | undefined) => {
     const s = String(sev || '').toUpperCase();
     const label = (s === 'HIGH') ? '높음' : (s === 'MEDIUM' ? '중간' : '참고');
     return `<span class="scs-e2f81c9f">${label}</span>`;
@@ -118,8 +136,8 @@ export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: S
 
   const html = ['<div class="evidence-list scs-1be5ad5c">'];
   list.forEach(app => {
-    const name = app.cachedTitle || formatAppName(app.packageName);
-    const pkg = app.packageName || app.bundleId || '-';
+    const name = String(app.cachedTitle || formatAppName(String(app.packageName || '')));
+    const pkg = String(app.packageName || app.bundleId || '-');
     const narration = app.aiNarration || app.ai || app.reason || '';
     const reasons = normalizeReasons(app);
 
@@ -127,7 +145,7 @@ export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: S
                     <div class="scs-5371db16">
                         <div class="scs-481a87d1">🤖 탐지 근거</div>
                         <div class="scs-5ba2fd66">
-                            ${reasons.slice(0, 10).map((r: any) => `
+                            ${reasons.slice(0, 10).map((r) => `
                                 <div class="scs-c2a105f8">
                                     <div class="scs-d03ad3be">
                                         <div class="scs-9e326a8b">${escapeHtml(r.title)}</div>
@@ -146,7 +164,7 @@ export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: S
                             <div class="scs-088b1b25">🚨 ${escapeHtml(name)} <span class="scs-275677d5">(${escapeHtml(pkg)})</span></div>
                             <span class="scs-b169df12">최종 확정</span>
                         </summary>
-                        ${narration ? `<div class="scs-df496d2a"><b>BD_SFA 해석</b><br/>${escapeHtml(narration)}</div>` : ''}
+                        ${narration ? `<div class="scs-df496d2a"><b>BD_SFA 해석</b><br/>${escapeHtml(String(narration))}</div>` : ''}
                         ${reasonsHtml}
                         <div class="scs-002535c2">
                             <div class="scs-9e326a8b">✅ 권장 조치</div>
@@ -159,7 +177,15 @@ export function renderSuspiciousList({ suspiciousApps, isIos, formatAppName }: S
   container.innerHTML = html.join('');
 }
 
-export function renderPrivacyThreatList({ privacyApps, clear, formatAppName }: PrivacyThreatListArgs): void {
+export function renderPrivacyThreatList({
+  privacyApps,
+  clear,
+  formatAppName
+}: {
+  privacyApps: IosPrivacyThreatCard[];
+  clear(target: Element): void;
+  formatAppName(name: string): string;
+}): void {
   const containers = [
     document.getElementById('privacy-threat-detail-container'),
     document.getElementById('privacy-threat-list-container')
@@ -168,7 +194,19 @@ export function renderPrivacyThreatList({ privacyApps, clear, formatAppName }: P
 
   containers.forEach(c => { clear(c); });
 
-  const normalizedApps = (Array.isArray(privacyApps) ? privacyApps : [])
+  const normalizedApps: Array<{
+    packageName: string;
+    cachedTitle: string;
+    aiNarration: string;
+    ai?: string;
+    reason?: string;
+    policy?: string;
+    policyLabel?: string;
+    reasons?: RiskReason[];
+    riskReasons: RiskReason[];
+    recommendation: Array<string | ({ label: string } & Partial<RiskRecommendation>)>;
+    recommendations?: Array<string | ({ label: string } & Partial<RiskRecommendation>)>;
+  }> = (Array.isArray(privacyApps) ? privacyApps : [])
     .filter(Boolean)
     .map((app, index) => {
       if (typeof app !== 'object') {
@@ -201,7 +239,7 @@ export function renderPrivacyThreatList({ privacyApps, clear, formatAppName }: P
         ...app,
         packageName: identifier,
         cachedTitle: displayName,
-        aiNarration: app.aiNarration || app.ai || app.reason || '[개인정보 유출 위협] 세부 안내를 불러오지 못했습니다.',
+        aiNarration: String(app.aiNarration || app.ai || app.reason || '[개인정보 유출 위협] 세부 안내를 불러오지 못했습니다.'),
         riskReasons: Array.isArray(app.riskReasons) ? app.riskReasons : (Array.isArray(app.reasons) ? app.reasons : []),
         recommendation: Array.isArray(app.recommendation) ? app.recommendation : (Array.isArray(app.recommendations) ? app.recommendations : [{ label: '공유 설정/기록 점검' }, { label: '백그라운드 실행 제한' }])
       };
@@ -216,60 +254,34 @@ export function renderPrivacyThreatList({ privacyApps, clear, formatAppName }: P
     return;
   }
 
-  const buildChips = (items: any[], host: HTMLElement | null) => {
+  const buildChips = (
+    items: Array<string | ({ label: string } & Partial<RiskRecommendation>)>,
+    host: HTMLElement | null,
+  ) => {
     if (!Array.isArray(items) || items.length === 0 || !host) return;
     items.forEach((x) => {
       const chip = document.createElement('span');
       chip.className = 'scs-a0b0d84f';
-      chip.textContent = String(x?.label || x || '');
+      chip.textContent = typeof x === 'string' ? x : String(x.label || '');
       host.appendChild(chip);
     });
   };
 
-  const buildReasons = (reasons: any[], host: HTMLElement | null) => {
+  const buildReasons = (reasons: RiskReason[], host: HTMLElement | null) => {
     if (!Array.isArray(reasons) || reasons.length === 0) return '';
 
-    const toReasonText = (r: any) => {
-      if (r == null) return '';
-      if (typeof r === 'string') return r;
-      if (typeof r === 'number' || typeof r === 'boolean') return String(r);
-
-      if (typeof r === 'object') {
-        const title = r.title ?? r.name ?? r.rule ?? r.label ?? r.type ?? r.code ?? '';
-        const detail = r.detail ?? r.desc ?? r.description ?? r.reason ?? r.value ?? '';
-
-        if (title && detail) return `${title} - ${detail}`;
-        if (title) return String(title);
-        if (detail) return String(detail);
-
-        try {
-          return JSON.stringify(r);
-        } catch (_e) {
-          return String(r);
-        }
-      }
-
-      return String(r);
+    const toReasonText = (r: RiskReason): { title: string; detail: string } => {
+      const title = String(r.title || r.code || '탐지 근거').trim();
+      const detail = String(r.detail || '').trim();
+      return { title, detail };
     };
 
     reasons
       .filter(Boolean)
       .slice(0, 8)
       .forEach((r) => {
-        const t = toReasonText(r).trim();
-        if (!t || !host) return;
-
-        let title = t;
-        let desc = '';
-        const separators = [' - ', ' — ', ' – ', ': ', ' : '];
-        for (const sep of separators) {
-          const idx = t.indexOf(sep);
-          if (idx > 0 && idx < t.length - sep.length) {
-            title = t.slice(0, idx).trim();
-            desc = t.slice(idx + sep.length).trim();
-            break;
-          }
-        }
+        const parsed = toReasonText(r);
+        if (!parsed.title || !host) return;
 
         const li = document.createElement('li');
         li.className = 'scs-dddb9c88';
@@ -283,13 +295,13 @@ export function renderPrivacyThreatList({ privacyApps, clear, formatAppName }: P
 
         const titleEl = document.createElement('div');
         titleEl.className = 'scs-a6341b0b';
-        titleEl.textContent = title;
+        titleEl.textContent = parsed.title;
         body.appendChild(titleEl);
 
-        if (desc) {
+        if (parsed.detail) {
           const descEl = document.createElement('div');
           descEl.className = 'scs-56d5d3f9';
-          descEl.textContent = desc;
+          descEl.textContent = parsed.detail;
           body.appendChild(descEl);
         }
 

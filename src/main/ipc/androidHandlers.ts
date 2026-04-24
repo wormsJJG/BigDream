@@ -1,47 +1,241 @@
-import { registerAndroidHandlers as registerAndroidHandlersJs } from './androidHandlers.js';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+type IpcChannelsModule = typeof import('../../shared/ipc/ipcChannels');
+declare function require(name: '../../shared/ipc/ipcChannels.js'): IpcChannelsModule & { default: IpcChannelsModule['default'] };
+const IPC = require('../../shared/ipc/ipcChannels.js').default;
 import type { MainConfig } from '../config/createConfig';
+import type { createMainUtils } from '../services/createMainUtils';
+import type { AndroidSecurityActionPayload, createAndroidService } from '../services/androidService';
 
 type IpcMainLike = {
-    handle(channel: string, handler: (...args: unknown[]) => unknown): void;
+  handle(channel: string, handler: (...args: unknown[]) => unknown): void;
+};
+
+type MockDataLike = {
+  getAndroidConnection(): unknown;
+  getAndroidScanResult(): unknown;
+};
+
+type ClientLike = {
+  listDevices(): Promise<Array<{ id: string }>>;
+  push?(serial: string, localPath: string, remotePath: string): Promise<{
+    on(event: 'end' | 'error', handler: (...args: unknown[]) => void): void;
+  }>;
+};
+
+type UtilsLike = ReturnType<typeof createMainUtils>;
+type AndroidServiceLike = ReturnType<typeof createAndroidService>;
+
+type AppLike = {
+  getPath(name: string): string;
 };
 
 type BrowserWindowLike = {
-    fromWebContents(sender: unknown): {
-        webContents: {
-            printToPDF(options: Record<string, unknown>): Promise<Buffer>;
-        };
+  getAllWindows(): Array<{
+    webContents: {
+      printToPDF(options: Record<string, unknown>): Promise<Buffer>;
     };
+  }>;
 };
 
-type UtilsLike = {
-    sleep(ms: number): Promise<unknown>;
-};
+type GooglePlayModule = typeof import('google-play-scraper');
+type AndroidAppPreview = { title: string; icon: string | null };
 
-type AndroidServiceLike = {
-    checkConnection(): Promise<unknown>;
-    runScan(): Promise<unknown>;
-    getDashboardData(serial?: string): Promise<unknown>;
-    getDeviceSecurityStatus(serial?: string): Promise<unknown>;
-    performDeviceSecurityAction(serial?: string, action?: unknown): Promise<unknown>;
-    setDeviceSecuritySetting(serial?: string, settingId?: string, enabled?: boolean): Promise<unknown>;
-    openAndroidSettings(serial?: string, screen?: string): Promise<unknown>;
-    uninstallApp(packageName: string): Promise<unknown>;
-    deleteApkFile(serial: string, filePath: string): Promise<unknown>;
-    neutralizeApp(packageName: string, perms?: string[]): Promise<unknown>;
-    getGrantedPermissions(packageName: string): Promise<unknown>;
-};
+const playPreviewCache = new Map<string, Promise<AndroidAppPreview | null>>();
 
-export function registerAndroidHandlers(options: {
-    ipcMain: IpcMainLike;
-    CONFIG: MainConfig;
-    MockData: Record<string, unknown>;
-    Utils: UtilsLike;
-    client: unknown;
-    androidService: AndroidServiceLike;
-    log?: unknown;
-    app: { getPath(name: string): string };
-    BrowserWindow: BrowserWindowLike;
-}) {
-    return registerAndroidHandlersJs(options);
+async function loadGooglePlayScraper() {
+  const mod = await import('google-play-scraper');
+  return (mod.default || mod) as GooglePlayModule['default'];
 }
 
+async function getGooglePlayPreview(packageName: string): Promise<AndroidAppPreview | null> {
+  const normalizedPackage = String(packageName || '').trim();
+  if (!normalizedPackage) return null;
+
+  const cached = playPreviewCache.get(normalizedPackage);
+  if (cached) return cached;
+
+  const previewPromise = (async () => {
+    try {
+      const gplay = await loadGooglePlayScraper();
+      const result = await Promise.race([
+        gplay.app({ appId: normalizedPackage, lang: 'ko', country: 'kr' }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PLAY_LOOKUP_TIMEOUT')), 2500))
+      ]);
+
+      return {
+        title: String(result?.title || ''),
+        icon: result?.icon ? String(result.icon) : null
+      };
+    } catch (_error) {
+      return null;
+    }
+  })();
+
+  playPreviewCache.set(normalizedPackage, previewPromise);
+  return previewPromise;
+}
+
+function streamToPromise(stream: { on(event: string, handler: (...args: unknown[]) => void): void }) {
+  return new Promise<void>((resolve, reject) => {
+    stream.on('end', () => resolve());
+    stream.on('error', (error: unknown) => reject(error));
+  });
+}
+
+function fallbackTitle(packageName: string, utils?: UtilsLike) {
+  if (utils?.formatAppName) return utils.formatAppName(packageName);
+  const parts = String(packageName || '').split('.');
+  const raw = parts[parts.length - 1] || packageName || 'Unknown';
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+export function registerAndroidHandlers(options: {
+  ipcMain: IpcMainLike;
+  CONFIG: MainConfig;
+  MockData: MockDataLike;
+  Utils?: UtilsLike;
+  client: ClientLike;
+  androidService: AndroidServiceLike;
+  log?: unknown;
+  app: AppLike;
+  BrowserWindow: BrowserWindowLike;
+}) {
+  const { ipcMain, CONFIG, MockData, Utils, client, androidService, app, BrowserWindow } = options;
+
+  if (!ipcMain) throw new Error('registerAndroidHandlers requires ipcMain');
+  if (!CONFIG) throw new Error('registerAndroidHandlers requires CONFIG');
+  if (!MockData) throw new Error('registerAndroidHandlers requires MockData');
+  if (!client) throw new Error('registerAndroidHandlers requires client');
+  if (!androidService) throw new Error('registerAndroidHandlers requires androidService');
+  if (!app) throw new Error('registerAndroidHandlers requires app');
+  if (!BrowserWindow) throw new Error('registerAndroidHandlers requires BrowserWindow');
+
+  ipcMain.handle(IPC.ANDROID.CHECK_DEVICE_CONNECTION, async () => {
+    if (CONFIG.IS_DEV_MODE) return MockData.getAndroidConnection();
+    return await androidService.checkConnection();
+  });
+
+  ipcMain.handle(IPC.ANDROID.RUN_SCAN, async () => {
+    if (CONFIG.IS_DEV_MODE) return MockData.getAndroidScanResult();
+    return await androidService.runScan();
+  });
+
+  ipcMain.handle(IPC.ANDROID.GET_APP_DATA, async (_event, packageName: string) => {
+    try {
+      if (!packageName) return null;
+      const devices = await client.listDevices();
+      const serial = devices?.[0]?.id;
+      if (!serial) return { title: fallbackTitle(packageName, Utils), icon: null };
+
+      const apps = await androidService.getInstalledApps(serial);
+      const appRecord = Array.isArray(apps)
+        ? apps.find((item) => String(item?.packageName || '') === String(packageName))
+        : null;
+
+      const fallback = {
+        title: String(appRecord?.cachedTitle || fallbackTitle(packageName, Utils)),
+        icon: appRecord?.cachedIconUrl || null
+      };
+
+      if (fallback.icon) return fallback;
+
+      const isStoreApp = Boolean(
+        appRecord &&
+        appRecord.isSystemApp !== true &&
+        appRecord.isSideloaded === false
+      );
+
+      if (!isStoreApp) return fallback;
+
+      const playPreview = await getGooglePlayPreview(packageName);
+      if (!playPreview) return fallback;
+
+      return {
+        title: String(playPreview.title || fallback.title),
+        icon: playPreview.icon || fallback.icon
+      };
+    } catch (_error) {
+      return { title: fallbackTitle(packageName, Utils), icon: null };
+    }
+  });
+
+  ipcMain.handle(IPC.ANDROID.GET_GRANTED_PERMISSIONS, async (_event, packageName: string) => {
+    return await androidService.getGrantedPermissions(packageName);
+  });
+
+  ipcMain.handle(IPC.ANDROID.UNINSTALL_APP, async (_event, packageName: string) => {
+    return await androidService.uninstallApp(packageName);
+  });
+
+  ipcMain.handle(IPC.ANDROID.NEUTRALIZE_APP, async (_event, packageName: string, perms?: string[]) => {
+    return await androidService.neutralizeApp(packageName, perms);
+  });
+
+  ipcMain.handle(IPC.ANDROID.DELETE_APK_FILE, async (_event, payload: { serial: string; filePath: string }) => {
+    return await androidService.deleteApkFile(payload?.serial, payload?.filePath);
+  });
+
+  ipcMain.handle(IPC.ANDROID.AUTO_PUSH_REPORT, async () => {
+    try {
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+      if (!mainWindow?.webContents) {
+        return { success: false, error: '메인 창을 찾을 수 없습니다.' };
+      }
+
+      const devices = await client.listDevices();
+      const serial = devices?.[0]?.id;
+      if (!serial) {
+        return { success: false, error: '연결된 Android 기기가 없습니다.' };
+      }
+
+      if (typeof client.push !== 'function') {
+        return { success: false, error: 'ADB push를 지원하지 않습니다.' };
+      }
+
+      const pdfData = await mainWindow.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4'
+      });
+
+      const now = new Date();
+      const fileName = `BD_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${Date.now()}.pdf`;
+      const tempPath = path.join(app.getPath('temp'), fileName);
+      const remotePath = `/sdcard/Download/${fileName}`;
+
+      fs.writeFileSync(tempPath, pdfData);
+      try {
+        const transfer = await client.push(serial, tempPath, remotePath);
+        await streamToPromise(transfer);
+      } finally {
+        try { fs.unlinkSync(tempPath); } catch (_e) { /* noop */ }
+      }
+
+      return { success: true, filePath: remotePath };
+    } catch (error: any) {
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
+  ipcMain.handle(IPC.ANDROID.GET_DASHBOARD_DATA, async (_event, payload?: { serial?: string }) => {
+    return await androidService.getDashboardData(payload?.serial);
+  });
+
+  ipcMain.handle(IPC.ANDROID.GET_DEVICE_SECURITY_STATUS, async (_event, payload?: { serial?: string }) => {
+    return await androidService.getDeviceSecurityStatus(payload?.serial);
+  });
+
+  ipcMain.handle(IPC.ANDROID.PERFORM_DEVICE_SECURITY_ACTION, async (_event, payload?: { serial?: string; action?: AndroidSecurityActionPayload }) => {
+    const actionPayload = payload?.action ?? (payload ? { ...payload, action: undefined } : undefined);
+    return await androidService.performDeviceSecurityAction(payload?.serial, actionPayload);
+  });
+
+  ipcMain.handle(IPC.ANDROID.SET_DEVICE_SECURITY_SETTING, async (_event, payload?: { serial?: string; settingId?: string; enabled?: boolean }) => {
+    return await androidService.setDeviceSecuritySetting(payload?.serial, payload?.settingId, payload?.enabled);
+  });
+
+  ipcMain.handle(IPC.ANDROID.OPEN_ANDROID_SETTINGS, async (_event, payload?: { serial?: string; screen?: string }) => {
+    return await androidService.openAndroidSettings(payload?.serial, payload?.screen);
+  });
+}

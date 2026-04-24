@@ -1,29 +1,36 @@
-export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellWithTimeout }) {
+function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellWithTimeout }) {
     async function getEnabledAccessibilityPackages(serial) {
         try {
             const raw = await adbShell(serial, 'dumpsys accessibility');
             if (!raw)
                 return new Set();
+
             const pkgs = new Set();
             const lines = raw.split(/\r?\n/);
             let inEnabledBlock = false;
+
             for (const line of lines) {
                 const trimmed = line.trim();
+
                 if (/^Enabled (Accessibility )?services\s*:/i.test(trimmed)) {
                     inEnabledBlock = true;
                     continue;
                 }
+
                 if (inEnabledBlock && (/^[A-Z][A-Za-z\s]+:/.test(trimmed) || trimmed.startsWith('m'))) {
                     if (trimmed === '' || /^[A-Z][A-Za-z\s]+:/.test(trimmed)) {
                         inEnabledBlock = false;
                     }
                 }
+
                 if (!inEnabledBlock)
                     continue;
+
                 const match = trimmed.match(/([a-zA-Z0-9_\.]+)\/[a-zA-Z0-9_\.$]+/);
                 if (match && match[1])
                     pkgs.add(match[1]);
             }
+
             return pkgs;
         }
         catch (error) {
@@ -31,11 +38,13 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
             return new Set();
         }
     }
+
     async function getActiveDeviceAdminPackages(serial) {
         try {
             const raw = await adbShell(serial, 'dumpsys device_policy');
             if (!raw)
                 return new Set();
+
             const pkgs = new Set();
             const re = /ComponentInfo\{([^\/\}\s]+)\//g;
             let match;
@@ -43,6 +52,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 if (match[1])
                     pkgs.add(match[1]);
             }
+
             if (pkgs.size === 0) {
                 try {
                     const out = await adbShell(serial, 'dpm list active-admins');
@@ -55,6 +65,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 }
                 catch (_e) { }
             }
+
             return pkgs;
         }
         catch (error) {
@@ -62,12 +73,14 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
             return new Set();
         }
     }
+
     async function getDeviceSecurityStatus(serial) {
         try {
             const devices = await client.listDevices();
             if (devices.length === 0)
                 throw new Error('기기 연결 안 됨');
             const target = serial || devices[0].id;
+
             const getSetting = async (namespace, key) => {
                 try {
                     const out = await adbShellWithTimeout(target, `settings get ${namespace} ${key}`);
@@ -79,6 +92,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                     return null;
                 }
             };
+
             const asBool = (value) => {
                 if (value == null)
                     return null;
@@ -89,8 +103,15 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                     return false;
                 return null;
             };
-            const devOpt = asBool(await getSetting('global', 'development_settings_enabled'));
-            const usbDebug = asBool(await getSetting('global', 'adb_enabled'));
+
+            const usbDebug =
+                asBool(await getSetting('global', 'adb_enabled')) ??
+                    asBool(await getSetting('secure', 'adb_enabled')) ??
+                    true;
+            const devOpt =
+                asBool(await getSetting('global', 'development_settings_enabled')) ??
+                    asBool(await getSetting('secure', 'development_settings_enabled')) ??
+                    (usbDebug === true ? true : null);
             const wifiDebug = asBool(await getSetting('global', 'adb_wifi_enabled')) ?? asBool(await getSetting('secure', 'adb_wifi_enabled'));
             const unknownSources = asBool(await getSetting('secure', 'install_non_market_apps'));
             const a11yEnabled = asBool(await getSetting('secure', 'accessibility_enabled'));
@@ -98,6 +119,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
             const activeAdminPkgs = await getActiveDeviceAdminPackages(target);
             const notifListenersRaw = await getSetting('secure', 'enabled_notification_listeners');
             const notifListenerPkgs = new Set();
+
             if (notifListenersRaw) {
                 String(notifListenersRaw).split(':').forEach((entry) => {
                     const match = entry.trim().match(/^([a-zA-Z0-9_\.]+)\//);
@@ -105,7 +127,9 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                         notifListenerPkgs.add(match[1]);
                 });
             }
+
             const items = [];
+
             const buildActions = (id, boolVal) => {
                 if (id === 'wifiDebug') {
                     const actions = [];
@@ -127,7 +151,15 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                     return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS' }];
                 return [{ kind: 'openSettings', label: '설정 열기', intent: 'android.settings.SETTINGS' }];
             };
-            const push = (id, title, boolVal, { levelOn = 'warn', levelOff = 'ok', unknown = 'unknown', detailOn = '', detailOff = '', note } = {}) => {
+
+            const push = (id, title, boolVal, {
+                levelOn = 'warn',
+                levelOff = 'ok',
+                unknown = 'unknown',
+                detailOn = '',
+                detailOff = '',
+                note
+            } = {}) => {
                 if (boolVal === true) {
                     items.push({ id, title, status: 'ON', level: levelOn, detail: detailOn, actions: buildActions(id, true), ...(note ? { note } : {}) });
                 }
@@ -138,6 +170,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                     items.push({ id, title, status: 'UNKNOWN', level: unknown, detail: '기기/OS 정책으로 확인할 수 없거나 권한이 부족합니다.', actions: buildActions(id, null), ...(note ? { note } : {}) });
                 }
             };
+
             push('devOptions', '개발자 옵션', devOpt, {
                 levelOn: 'warn',
                 levelOff: 'ok',
@@ -165,6 +198,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 detailOff: '공식 스토어 외 설치가 제한되어 있습니다.',
                 note: '최신 Android는 “앱별로” 알 수 없는 앱 설치 권한을 관리합니다. 이 값이 UNKNOWN일 수 있습니다.'
             });
+
             const a11yCount = enabledA11yPkgs.size;
             items.push({
                 id: 'accessibility',
@@ -178,6 +212,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 note: '접근성 권한은 화면 조작/입력 가로채기에 악용될 수 있어 스파이앱 탐지에서 매우 중요합니다.',
                 actions: buildActions('accessibility', a11yCount > 0)
             });
+
             const adminCount = activeAdminPkgs.size;
             items.push({
                 id: 'deviceAdmin',
@@ -191,6 +226,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 note: '기기 관리자 권한은 삭제 방해/잠금 등 악용될 수 있습니다.',
                 actions: buildActions('deviceAdmin', adminCount > 0)
             });
+
             const notifCount = notifListenerPkgs.size;
             items.push({
                 id: 'notificationAccess',
@@ -204,6 +240,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 note: '알림 접근은 OTP/메신저 알림 가로채기에 악용될 수 있습니다.',
                 actions: buildActions('notificationAccess', notifCount > 0)
             });
+
             if (a11yEnabled === false && a11yCount > 0) {
                 items.push({
                     id: 'accessibilityMismatch',
@@ -213,12 +250,14 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                     detail: 'accessibility_enabled 값은 OFF인데 활성 서비스가 존재합니다. 기기/OS 특성 또는 파싱 차이일 수 있어 재확인이 필요합니다.'
                 });
             }
+
             return { ok: true, items };
         }
         catch (error) {
             return { ok: false, error: error.message, items: [] };
         }
     }
+
     async function setDeviceSecuritySetting(serial, settingId, enabled) {
         try {
             const devices = await client.listDevices();
@@ -227,6 +266,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
             const target = serial || devices[0].id;
             const on = enabled ? '1' : '0';
             const id = String(settingId || '');
+
             if (id === 'devOptions') {
                 try {
                     await adbShellWithTimeout(target, `settings put global development_settings_enabled ${on}`);
@@ -291,12 +331,14 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
             return { ok: false, error: error?.message || String(error) };
         }
     }
+
     async function openAndroidSettings(serial, screen) {
         try {
             const devices = await client.listDevices();
             if (devices.length === 0)
                 throw new Error('기기 연결 안 됨');
             const target = serial || devices[0].id;
+
             const normalized = String(screen || '').toUpperCase();
             let intent = 'android.settings.SETTINGS';
             if (normalized === 'DEVELOPER_OPTIONS')
@@ -311,27 +353,32 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 intent = 'android.settings.MANAGE_UNKNOWN_APP_SOURCES';
             else if (normalized === 'SECURITY_SETTINGS')
                 intent = 'android.settings.SECURITY_SETTINGS';
+
             try {
                 await adbShellWithTimeout(target, `am start --user 0 -W -a ${intent} -f 0x10000000`, 12000);
             }
             catch (_e) {
                 await adbShellWithTimeout(target, `cmd activity start-activity --user 0 -W -a ${intent}`, 12000);
             }
+
             return { ok: true, opened: true, screen: normalized || 'SETTINGS' };
         }
         catch (error) {
             return { ok: false, error: error?.message || String(error) };
         }
     }
+
     async function performDeviceSecurityAction(serial, action) {
         try {
             const act = action || {};
             const kind = String(act.kind || '').toLowerCase();
+
             if (kind === 'opensettings') {
                 const devices = await client.listDevices();
                 if (devices.length === 0)
                     throw new Error('기기 연결 안 됨');
                 const target = serial || devices[0].id;
+
                 const component = act.component ? String(act.component).trim() : '';
                 if (component) {
                     try {
@@ -346,6 +393,7 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                         catch (_e2) { }
                     }
                 }
+
                 const intent = act.intent ? String(act.intent).trim() : '';
                 if (intent) {
                     try {
@@ -361,8 +409,10 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                     }
                     return { ok: true, opened: true, intent };
                 }
+
                 return openAndroidSettings(serial, 'SETTINGS');
             }
+
             if (kind === 'toggle') {
                 const targetName = String(act.target || '').trim();
                 const enabled = act.value === true;
@@ -375,12 +425,14 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
                 const settingId = map[targetName] || targetName;
                 return setDeviceSecuritySetting(serial, settingId, enabled);
             }
+
             return { ok: false, error: 'INVALID_ACTION' };
         }
         catch (error) {
             return { ok: false, error: error?.message || String(error) };
         }
     }
+
     return {
         getDeviceSecurityStatus,
         setDeviceSecuritySetting,
@@ -390,3 +442,5 @@ export function createAndroidDeviceSecurityHelpers({ client, adbShell, adbShellW
         getActiveDeviceAdminPackages
     };
 }
+
+module.exports = { createAndroidDeviceSecurityHelpers };

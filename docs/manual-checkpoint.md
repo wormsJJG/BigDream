@@ -11,8 +11,12 @@ Freeze a practical manual verification baseline before any future runtime import
 - `npm test`
 - `npm run ts:preview`
 - `npm run verify:runtime-sync`
+- `npm run ts:preview:main-bootstrap`
+- `npm run ts:verify:main-bootstrap`
 
 See also: [Pre-Commit Checklist](./pre-commit-checklist.md)
+See also: [Held Target Switch Plan](./held-target-switch-plan.md)
+See also: [TS Conversion Status](./ts-conversion-status.md)
 
 ## Runtime Stability Baseline
 
@@ -83,17 +87,50 @@ The following groups are already on `TS source -> preview -> runtime JS sync`:
 - renderer auth/device
 - renderer app-detail/actions
 - renderer scan small / medium / split / orchestration waves
+- main testing wave
+- main shell light wave
+- main core light wave
+- main service light wave
 - main helper first / second / third / fourth / final waves
+- main ipc auth / firestore / app / ios / android
+- main held services
+  - `androidService.js`
+  - `iosService.js`
 
-The following are still candidate-only and must not be runtime-synced yet:
+There are currently no remaining held runtime targets.
 
-- `src/renderer/features/scan/scanControllerMethods.js`
-- `src/renderer/features/scan/scanControllerCore.js`
-- `src/renderer/features/scan/scanInitRuntime.js`
-- `src/renderer/features/scan/initScanController.js`
-- `src/main/services/androidService.js`
-- `src/main/services/iosService.js`
-- `src/main/bootstrap.js`
+## Current Type-Tightening Focus
+
+The current work is no longer focused on risky runtime switches.
+
+It is mainly focused on:
+
+- `src/types/*` contract consistency
+- renderer scan candidate internals
+- main service candidate payload narrowing
+- commit-sized stabilization after each small type-only batch
+
+Current estimate:
+
+- overall TS migration progress is roughly `95%`
+- current work is mostly final contract tightening rather than runtime migration
+
+This means small changes should usually require:
+
+- `npm run typecheck`
+- `npm test`
+- `npm run verify:runtime-sync`
+
+and should not require full Android/iOS manual scans unless runtime logic changes.
+
+## Current Checkpoint Read
+
+The repository is currently in a good state for another checkpoint commit:
+
+- runtime-held targets are cleared
+- structure verification is green
+- runtime sync safety is green
+- current work is mostly type-tightening, not runtime behavior change
 
 ## Guardrails
 
@@ -102,3 +139,6 @@ The following are still candidate-only and must not be runtime-synced yet:
 - If a blank window appears, check recent runtime-synced JS first before touching unrelated files.
 - Do not runtime-sync large orchestrators before a manual checkpoint pass succeeds.
 - `npm run verify:runtime-sync` must stay green after every sync wave.
+- `src/main/**` runtime JS is still CJS-driven. Any `import ... from` or `export ...` that lands there is a regression.
+- `src/main/bootstrap.js` was the final hold target. Keep `ts:preview:main-bootstrap` and `ts:verify:main-bootstrap` green before any future bootstrap re-sync.
+- `main.js`, `preload.js`, `renderer.js` are currently intentional JS entry shells. Do not remove or rename them as part of routine TS cleanup.

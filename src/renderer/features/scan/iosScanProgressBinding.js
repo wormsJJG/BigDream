@@ -1,6 +1,7 @@
 export function createIosScanProgressBinding({ setIosStep, resolveIosStageMessage, hasMeaningfulBackupSignal, trustPromptMessage }) {
     function bind() {
         let iosBackupStageLatched = false;
+        let iosMvtStageLatched = false;
         try {
             if (!window.electronAPI || typeof window.electronAPI.onIosScanProgress !== 'function') {
                 return () => { };
@@ -17,7 +18,12 @@ export function createIosScanProgressBinding({ setIosStep, resolveIosStageMessag
                             || /백업|데이터 수집/i.test(rawMessage));
                     if (stage === 'mvt') {
                         iosBackupStageLatched = true;
+                        iosMvtStageLatched = true;
                         setIosStep(3, '정밀 분석 진행 중...');
+                        return;
+                    }
+                    if (iosMvtStageLatched) {
+                        setIosStep(3, msg || '정밀 분석 진행 중...');
                         return;
                     }
                     if (stage === 'backup') {

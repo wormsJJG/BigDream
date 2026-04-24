@@ -1,20 +1,9 @@
-type MvtSection = {
+import type { SavedScanMvtResults } from '../../../types/scan-result';
+const MVT_SECTIONS: Array<{
   id: string;
   title: string;
   files: string;
-};
-
-type MvtResultEntry = {
-  status?: string;
-  warnings?: string[];
-};
-
-type RenderMvtArgs = {
-  mvtResults: Record<string, MvtResultEntry>;
-  isIos: boolean;
-};
-
-const MVT_SECTIONS: MvtSection[] = [
+}> = [
   { id: 'web', title: '🌐 1. 브라우저 및 웹 활동', files: 'History.db, Favicons.db, WebKit 데이터' },
   { id: 'messages', title: '💬 2. 메시지 및 통신 기록', files: 'sms.db, ChatStorage.sqlite' },
   { id: 'system', title: '⚙️ 3. 시스템 로그 및 프로세스 활동', files: 'DataUsage.sqlite, Crash Reports' },
@@ -22,7 +11,13 @@ const MVT_SECTIONS: MvtSection[] = [
   { id: 'artifacts', title: '📁 5. 기타 시스템 파일', files: 'shutdown.log, LocalStorage' }
 ];
 
-export function renderMvtAnalysis({ mvtResults, isIos }: RenderMvtArgs): void {
+export function renderMvtAnalysis({
+  mvtResults,
+  isIos
+}: {
+  mvtResults: Partial<SavedScanMvtResults> & Record<string, { status?: string; warnings?: string[] } | undefined>;
+  isIos: boolean;
+}): void {
   const mvtSection = document.getElementById('mvt-analysis-section');
   const mvtContainer = document.getElementById('mvt-analysis-container');
 

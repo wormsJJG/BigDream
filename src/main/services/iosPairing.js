@@ -1,4 +1,4 @@
-export function createIosPairingHelpers({ fs, CONFIG, Utils }) {
+function createIosPairingHelpers({ fs, CONFIG, Utils }) {
     async function validatePairing(udid) {
         const pairTool = CONFIG?.PATHS?.IOS_PAIR;
         if (!pairTool || !fs.existsSync(pairTool)) {
@@ -30,3 +30,5 @@ export function createIosPairingHelpers({ fs, CONFIG, Utils }) {
         validatePairing
     };
 }
+
+module.exports = { createIosPairingHelpers };

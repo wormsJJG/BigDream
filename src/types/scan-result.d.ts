@@ -1,3 +1,19 @@
+import type { RiskReason } from '../shared/risk/riskRules';
+import type {
+  AndroidAppRecord,
+  AndroidDeviceInfo,
+  AndroidScanResult,
+  AndroidPrivacyThreatApp,
+} from '../main/services/androidService';
+import type {
+  IosDeviceInfo,
+  IosInstalledApp,
+  IosMvtAreaResult,
+  IosScanResult,
+  IosPrivacyThreatCard,
+  IosSuspiciousItem,
+} from '../main/services/iosService';
+
 export type DeviceMode = 'android' | 'ios';
 
 export interface SavedScanMeta {
@@ -8,43 +24,32 @@ export interface SavedScanMeta {
   targetPhone?: string;
 }
 
-export interface SavedScanDeviceInfo {
-  model?: string;
-  serial?: string;
-  phoneNumber?: string;
-  os?: string;
-  osMode?: DeviceMode;
-  isRooted?: boolean;
-}
+export type SavedScanDeviceInfo =
+  | (Partial<AndroidDeviceInfo> & { osMode?: DeviceMode })
+  | (Partial<IosDeviceInfo> & { osMode?: DeviceMode });
 
-export interface AppRiskReason {
-  code?: string;
-  title?: string;
-  detail?: string;
-  severity?: string;
-}
+export type AppRiskReason = RiskReason;
 
-export interface ScanAppRecord {
-  packageName?: string;
-  cachedTitle?: string;
-  riskLevel?: string;
-  reason?: string;
-  riskReasons?: AppRiskReason[];
-  grantedList?: string[];
-  requestedList?: string[];
-  permissions?: string[];
-  isRunningBg?: boolean;
-  isSideloaded?: boolean;
-  apkPath?: string;
-  installDate?: string;
-}
+export type SavedAndroidScanResult = Pick<AndroidScanResult, 'deviceInfo' | 'allApps' | 'suspiciousApps' | 'privacyThreatApps' | 'apkFiles' | 'runningCount'>;
+export type SavedIosScanResult = Pick<IosScanResult, 'deviceInfo' | 'allApps' | 'suspiciousItems' | 'privacyThreatApps' | 'mvtResults' | 'fileCount'>;
+export type ScanAppRecord = Partial<AndroidAppRecord>;
+export type SavedIosAppRecord = Partial<IosInstalledApp>;
+export type SavedSuspiciousAppRecord = Partial<AndroidAppRecord> | Partial<IosSuspiciousItem>;
+export type SavedPrivacyThreatRecord = AndroidPrivacyThreatApp | IosPrivacyThreatCard;
 
-export interface ApkFileRecord {
-  packageName?: string;
-  cachedTitle?: string;
+export type ApkFileRecord = Partial<AndroidAppRecord> & {
   apkPath?: string;
   installStatus?: string;
   permissions?: string[];
+};
+
+export interface SavedScanMvtResults {
+  web: IosMvtAreaResult;
+  messages: IosMvtAreaResult;
+  system: IosMvtAreaResult;
+  apps: IosMvtAreaResult;
+  artifacts: IosMvtAreaResult;
+  applications?: SavedIosAppRecord[];
 }
 
 export interface SavedScanPayload {
@@ -52,10 +57,11 @@ export interface SavedScanPayload {
   osMode?: DeviceMode;
   meta?: SavedScanMeta;
   deviceInfo?: SavedScanDeviceInfo;
-  allApps?: ScanAppRecord[];
-  apkFiles?: ApkFileRecord[];
-  privacyThreatApps?: ScanAppRecord[];
-  suspiciousApps?: ScanAppRecord[];
-  mvtResults?: Record<string, unknown>;
-  runningCount?: number;
+  allApps?: Array<ScanAppRecord | SavedIosAppRecord>;
+  apkFiles?: SavedAndroidScanResult['apkFiles'] | ApkFileRecord[];
+  privacyThreatApps?: SavedAndroidScanResult['privacyThreatApps'] | SavedIosScanResult['privacyThreatApps'];
+  suspiciousApps?: SavedAndroidScanResult['suspiciousApps'] | SavedIosScanResult['suspiciousItems'];
+  mvtResults?: SavedIosScanResult['mvtResults'] | Partial<SavedScanMvtResults>;
+  runningCount?: SavedAndroidScanResult['runningCount'];
+  fileCount?: SavedIosScanResult['fileCount'];
 }

@@ -1,4 +1,4 @@
-import type { AuthService, AuthUser } from '../../types/renderer-context';
+import type { AuthCreateUserResult, AuthService, AuthUser } from '../../types/renderer-context';
 
 let currentUser: AuthUser | null = null;
 
@@ -48,7 +48,7 @@ export function createAuthService(): AuthService {
         currentUser = null;
       }
     },
-    async createUser(email: string, password: string) {
+    async createUser(email: string, password: string): Promise<AuthCreateUserResult> {
       if (!window?.bdScanner?.auth?.createUser && !window?.electronAPI?.firebaseAuthCreateUser) {
         throw new Error('AUTH_CREATE_USER_IPC_NOT_AVAILABLE');
       }
@@ -66,7 +66,7 @@ export function createAuthService(): AuthService {
         }
         throw new Error('AUTH_CREATE_USER_INVALID_RESULT');
       }
-      return created;
+      return created as AuthCreateUserResult;
     },
   };
 }

@@ -79,11 +79,15 @@ Do not include these:
 
 ## Held Runtime Targets
 
-These are still candidate-only and must stay out of any direct runtime-sync step:
+There are currently no remaining held runtime targets.
 
-- `src/main/services/androidService.js`
-- `src/main/services/iosService.js`
-- `src/main/bootstrap.js`
+Current caution is different:
+
+- `main.js`
+- `preload.js`
+- `renderer.js`
+
+These are intentional JS entry shells and should not be removed or renamed as part of routine cleanup.
 
 ## Safe Commit Message Scope
 
@@ -91,9 +95,10 @@ This checkpoint is one logical scope:
 
 - renderer/main structure cleanup
 - helper extraction
-- TS candidate setup
-- safe runtime sync waves
+- TS candidate tightening
+- safe runtime sync waves already landed
 - verification / guardrail scripts
+- current type-layer cleanup
 
 If you want to split commits later, split by:
 

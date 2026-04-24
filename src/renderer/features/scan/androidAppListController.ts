@@ -1,22 +1,24 @@
-import type { RendererState } from '../../../types/renderer-context';
+import type { AppDetailTarget, RendererState } from '../../../types/renderer-context';
+import type { AndroidAppRecord } from '../../../main/services/androidService';
 
-type AndroidApp = {
-  packageName?: string;
-  cachedTitle?: string;
+type AndroidApp = Partial<AndroidAppRecord> & AppDetailTarget & {
   cachedIconUrl?: string;
-  reason?: string;
   finalVerdict?: string;
   verdict?: string;
-  riskLevel?: string;
   isSpyware?: boolean;
   isPrivacyRisk?: boolean;
   isRunningBg?: boolean;
   requestedList?: string[];
   grantedList?: string[];
-  [key: string]: any;
 };
 
-type AndroidAppListDeps = {
+export function createAndroidAppListController({
+  State,
+  Utils,
+  clear,
+  showAppDetail,
+  getAppData
+}: {
   State: RendererState;
   Utils: {
     formatAppName(name: string): string;
@@ -24,9 +26,7 @@ type AndroidAppListDeps = {
   clear(target: Element): void;
   showAppDetail(app: AndroidApp, displayName: string): void;
   getAppData(packageName: string): Promise<{ icon?: string; title?: string } | null>;
-};
-
-export function createAndroidAppListController({ State, Utils, clear, showAppDetail, getAppData }: AndroidAppListDeps) {
+}) {
   const elementCache = new WeakMap<AndroidApp, Map<string, HTMLElement>>();
   const fetchPromiseCache = new WeakMap<AndroidApp, Promise<{ icon?: string; title?: string } | null>>();
   const indexCache = new WeakMap<AndroidApp, number>();
@@ -46,7 +46,7 @@ export function createAndroidAppListController({ State, Utils, clear, showAppDet
     const div = document.createElement('div');
     const elementBucket = getElementBucket(app);
     const cachedEl = elementBucket?.get(listKey);
-    if (cachedEl && typeof cachedEl === 'object' && (cachedEl as any).nodeType === 1) {
+    if (cachedEl instanceof HTMLElement) {
       container.appendChild(cachedEl);
       return;
     } else if (cachedEl) {
@@ -117,6 +117,13 @@ export function createAndroidAppListController({ State, Utils, clear, showAppDet
     };
 
     imgTag.onerror = () => handleImageError(false);
+
+    const localPath = getLocalIconPath();
+    if (localPath) {
+      imgTag.src = localPath;
+      imgTag.style.display = 'block';
+      spanTag.style.display = 'none';
+    }
 
     if (app.cachedIconUrl) {
       imgTag.src = app.cachedIconUrl;

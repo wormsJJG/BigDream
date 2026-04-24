@@ -1,4 +1,4 @@
-export function createIosBackupProgressHelpers({ fs, path, Utils, formatBytes, getDirectoryStats, safeEmit, trustPromptMessage }) {
+function createIosBackupProgressHelpers({ fs, path, Utils, formatBytes, getDirectoryStats, safeEmit, trustPromptMessage }) {
     async function getUsedBytes(infoPath, udid) {
         const keyTry = async (key) => {
             try {
@@ -178,3 +178,5 @@ export function createIosBackupProgressHelpers({ fs, path, Utils, formatBytes, g
         computeTheaterTargetPct
     };
 }
+
+module.exports = { createIosBackupProgressHelpers };

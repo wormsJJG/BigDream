@@ -9,27 +9,9 @@ import { createIosScanRunner } from './iosScanRunner.js';
 import { createScanDeviceRuntimeHelpers } from './scanDeviceRuntime.js';
 import { createScanLogSessionHelpers } from './scanLogSession.js';
 import { createScanControllerMethods } from './scanControllerMethods.js';
-
 export function createScanController(ctx, deps) {
     const { State, ViewManager, CustomUI } = ctx;
-    const {
-        ResultsRenderer,
-        Utils,
-        authService,
-        getDoc,
-        doc,
-        updateDoc,
-        collection,
-        addDoc,
-        serverTimestamp,
-        increment,
-        androidDashboardController,
-        bdResetAndroidDashboardUI,
-        IOS_TRUST_PROMPT_MESSAGE,
-        getNormalizedScanApps,
-        loggedInView
-    } = deps;
-
+    const { ResultsRenderer, Utils, authService, getDoc, doc, updateDoc, collection, addDoc, serverTimestamp, increment, androidDashboardController, bdResetAndroidDashboardUI, IOS_TRUST_PROMPT_MESSAGE, getNormalizedScanApps, loggedInView } = deps;
     const androidScanProgress = createAndroidScanProgressHelpers({ ViewManager, Utils });
     const iosScanProgress = createIosScanProgressHelpers({ Utils, IOS_TRUST_PROMPT_MESSAGE });
     const scanLifecycle = createScanLifecycleHelpers({ State, ViewManager, ResultsRenderer, loggedInView });
@@ -62,7 +44,6 @@ export function createScanController(ctx, deps) {
         Utils,
         scanPostActions
     });
-
     return createScanControllerMethods({
         scanDeviceRuntime,
         scanStartUi,

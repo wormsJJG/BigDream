@@ -1,15 +1,31 @@
-type AndroidRunnerDeps = {
+import type { AndroidScanResult } from '../../../main/services/androidService';
+import type { RendererUserRole, ViewManagerLike } from '../../../types/renderer-context';
+
+export interface AndroidScanRunner {
+  run(args: {
+    onSuccess: (scanData: AndroidScanResult) => void;
+    onError: (error: unknown) => void;
+    toggleLaser: (isVisible: boolean) => void;
+  }): Promise<void>;
+}
+
+export function createAndroidScanRunner({
+  State,
+  ViewManager,
+  Utils,
+  getNormalizedScanApps,
+  androidScanProgress,
+  scanPostActions
+}: {
   State: {
-    userRole?: string;
+    userRole?: RendererUserRole;
     androidTargetMinutes?: number;
   };
-  ViewManager: {
-    updateProgress: (percent: number, message: string) => void;
-  };
+  ViewManager: Pick<ViewManagerLike, 'updateProgress'>;
   Utils: {
     formatAppName: (value: string) => string;
   };
-  getNormalizedScanApps: (scanData: unknown) => Array<{ packageName: string }>;
+  getNormalizedScanApps: (scanData: AndroidScanResult) => Array<{ packageName: string }>;
   androidScanProgress: {
     startPhase1AdbProgress: () => { finish: () => void };
     startPhase2TimedProgress: (input: {
@@ -21,25 +37,16 @@ type AndroidRunnerDeps = {
   scanPostActions: {
     scheduleAndroidCleanupNotice: () => void;
   };
-};
-
-export function createAndroidScanRunner({
-  State,
-  ViewManager,
-  Utils,
-  getNormalizedScanApps,
-  androidScanProgress,
-  scanPostActions
-}: AndroidRunnerDeps) {
+}): AndroidScanRunner {
   async function run({
     onSuccess,
     onError,
     toggleLaser
   }: {
-    onSuccess: (scanData: unknown) => void;
+    onSuccess: (scanData: AndroidScanResult) => void;
     onError: (error: unknown) => void;
     toggleLaser: (isVisible: boolean) => void;
-  }) {
+  }): Promise<void> {
     try {
       const phase1 = androidScanProgress.startPhase1AdbProgress();
       const scanData = await window.electronAPI.runScan();

@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".ts-build-preview-main-bootstrap",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": false,
+    "allowJs": false,
+    "checkJs": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node"
+  },
+  "include": [
+    "src/main/bootstrap.ts",
+    "src/main/**/*.d.ts",
+    "src/shared/**/*.d.ts",
+    "src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "release",
+    "node_modules",
+    ".ts-build-preview",
+    ".ts-build-preview-main-ipc",
+    ".ts-build-preview-main-bootstrap"
+  ]
+}

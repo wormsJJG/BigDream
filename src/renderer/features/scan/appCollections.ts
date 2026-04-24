@@ -1,16 +1,20 @@
-type RenderApkListArgs = {
-  apkFiles: any[];
+import type { AppDetailTarget } from '../../../types/renderer-context';
+import type { AndroidAppRecord } from '../../../main/services/androidService';
+import type { IosInstalledApp } from '../../../main/services/iosService';
+import type { IosPrivacyThreatCard } from '../../../main/services/iosMvtParser';
+import type { ApkFileRecord } from '../../../types/scan-result';
+
+export function renderApkList({
+  apkFiles,
+  container,
+  clear,
+  showAppDetail
+}: {
+  apkFiles: ApkFileRecord[];
   container: HTMLElement | null;
   clear(target: Element): void;
-  showAppDetail(app: any, displayName: string): void;
-};
-
-type PrivacyThreatApp = {
-  packageName?: string;
-  [key: string]: any;
-};
-
-export function renderApkList({ apkFiles, container, clear, showAppDetail }: RenderApkListArgs): void {
+  showAppDetail(app: ApkFileRecord, displayName: string): void;
+}): void {
   if (!container) return;
   clear(container);
 
@@ -40,7 +44,14 @@ export function renderApkList({ apkFiles, container, clear, showAppDetail }: Ren
   });
 }
 
-export function buildIosPrivacyThreatApps(allApps: any[], incomingPrivacyApps: PrivacyThreatApp[]): PrivacyThreatApp[] {
+export function buildIosPrivacyThreatApps(
+  allApps: Array<AppDetailTarget & Partial<IosInstalledApp> & Partial<AndroidAppRecord> & {
+    identifier?: string;
+    id?: string;
+    title?: string;
+  }>,
+  incomingPrivacyApps: IosPrivacyThreatCard[]
+): IosPrivacyThreatCard[] {
   if (Array.isArray(incomingPrivacyApps) && incomingPrivacyApps.length > 0) {
     return incomingPrivacyApps;
   }
@@ -55,7 +66,7 @@ export function buildIosPrivacyThreatApps(allApps: any[], incomingPrivacyApps: P
     'com.burbn.instagram'
   ]);
 
-  const normalize = (pkg: unknown) => String(pkg || '').trim();
+  const normalize = (pkg?: string | null) => String(pkg || '').trim();
 
   const candidates = (Array.isArray(allApps) ? allApps : []).filter(app => {
     const pkg = normalize(app.packageName);

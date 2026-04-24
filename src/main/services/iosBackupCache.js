@@ -1,4 +1,4 @@
-export function createIosBackupCacheHelpers({ fs, path, getDirectoryStats, removeDirectorySafe, safeEmit, trustPromptMessage }) {
+function createIosBackupCacheHelpers({ fs, path, getDirectoryStats, removeDirectorySafe, safeEmit, trustPromptMessage }) {
     function emitTrustPrompt(onProgress) {
         safeEmit(onProgress, {
             step: 1,
@@ -80,3 +80,5 @@ export function createIosBackupCacheHelpers({ fs, path, getDirectoryStats, remov
         resolveReusableBackup
     };
 }
+
+module.exports = { createIosBackupCacheHelpers };

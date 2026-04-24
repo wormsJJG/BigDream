@@ -4,39 +4,72 @@ import {
   ANDROID_RUNNING_ALIASES,
   LEGACY_RUNTIME_FIELDS
 } from '../../../shared/contracts/scanResultContract.js';
+import type { AndroidAppRecord, AndroidDeviceInfo } from '../../../main/services/androidService';
+import type { IosDeviceInfo } from '../../../main/services/iosService';
+import type {
+  ApkFileRecord,
+  DeviceMode,
+  SavedScanMeta,
+  SavedScanMvtResults,
+  SavedScanPayload
+} from '../../../types/scan-result';
 
-type DeviceInfo = {
-  isRooted?: boolean;
-  model?: string;
-  os?: string;
-  osVersion?: string;
-  version?: string;
-  serial?: string;
-  root?: string;
-  rootStatus?: string;
+export type GenericPayload = SavedScanPayload & {
+  meta?: SavedScanMeta & {
+    targetUserName?: string;
+    subjectName?: string;
+    personName?: string;
+    examinerName?: string;
+    targetMobile?: string;
+    subjectPhone?: string;
+    subjectMobile?: string;
+    personPhone?: string;
+    examinerPhone?: string;
+  };
+  deviceInfo?: Partial<AndroidDeviceInfo> & Partial<IosDeviceInfo> & {
+    root?: string;
+    rootStatus?: string;
+  };
+  results?: {
+    allApps?: Array<Partial<AndroidAppRecord>>;
+    apps?: Array<Partial<AndroidAppRecord>>;
+    apkFiles?: ApkFileRecord[];
+    apks?: ApkFileRecord[];
+    runningApps?: Array<string | { packageName?: string; pkg?: string; name?: string }>;
+    backgroundApps?: Array<string | { packageName?: string; pkg?: string; name?: string }>;
+  };
+  mvtResults?: Partial<SavedScanMvtResults> & {
+    applications?: Array<Partial<AndroidAppRecord>>;
+  };
+  allApps?: Array<Partial<AndroidAppRecord>>;
+  apkFiles?: ApkFileRecord[];
+  apks?: ApkFileRecord[];
+  apkList?: ApkFileRecord[];
+  foundApks?: ApkFileRecord[];
+  runningApps?: Array<string | { packageName?: string; pkg?: string; name?: string }>;
+  backgroundApps?: Array<string | { packageName?: string; pkg?: string; name?: string }>;
+  targetInfo?: { name?: string; phone?: string; mobile?: string };
+  target?: { name?: string; phone?: string; mobile?: string };
+  subject?: { name?: string; phone?: string; mobile?: string };
+  clientInfo?: { name?: string; phone?: string };
+  client?: { name?: string; phone?: string };
+  clientName?: string;
+  clientPhone?: string;
+  examinerName?: string;
+  examinerPhone?: string;
+  examiner?: { name?: string; phone?: string };
 };
 
-type GenericPayload = {
-  meta?: Record<string, any>;
-  deviceInfo?: DeviceInfo;
-  results?: Record<string, any>;
-  mvtResults?: Record<string, any>;
-  allApps?: any[];
-  apkFiles?: any[];
-  runningCount?: number;
-  [key: string]: any;
-};
-
-export function normalizeDeviceMode(modeValue: unknown): string {
+export function normalizeDeviceMode(modeValue: string | number | boolean | null | undefined): DeviceMode | '' {
   const v = String(modeValue || '').toLowerCase();
   if (v.includes('ios')) return 'ios';
   if (v.includes('android')) return 'android';
   return v === 'ios' ? 'ios' : (v === 'android' ? 'android' : '');
 }
 
-function formatDateTime(value: unknown): string {
+function formatDateTime(value: string | number | Date | null | undefined): string {
   if (!value) return '-';
-  const d = (value instanceof Date) ? value : new Date(value as any);
+  const d = (value instanceof Date) ? value : new Date(value as string | number | Date);
   if (isNaN(d.getTime())) return '-';
 
   const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -49,14 +82,19 @@ function formatDateTime(value: unknown): string {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
-function formatRootStatus(deviceInfo?: DeviceInfo): string {
+function formatRootStatus(
+  deviceInfo?: (Partial<AndroidDeviceInfo> & Partial<IosDeviceInfo> & {
+    root?: string;
+    rootStatus?: string;
+  }),
+): string {
   if (!deviceInfo) return '-';
   if (deviceInfo.isRooted === true) return '위험';
   if (deviceInfo.isRooted === false) return '안전함';
   return '-';
 }
 
-function setText(id: string, text: unknown): void {
+function setText(id: string, text: string | number | boolean | null | undefined): void {
   const el = document.getElementById(id);
   if (el) el.textContent = (text === undefined || text === null || text === '') ? '-' : String(text);
 }
@@ -67,11 +105,11 @@ function toggleHidden(id: string, shouldHide: boolean): void {
   el.classList.toggle('hidden', shouldHide);
 }
 
-function pickFirstArray<T = any>(candidates: unknown[]): T[] {
+function pickFirstArray<T>(candidates: Array<T[] | null | undefined>): T[] {
   return (candidates.find((v) => Array.isArray(v)) as T[]) || [];
 }
 
-export function stripLegacyRuntimeFields<T extends Record<string, any> | null | undefined>(obj: T): T {
+export function stripLegacyRuntimeFields<T extends Record<string, unknown> | null | undefined>(obj: T): T {
   if (!obj || typeof obj !== 'object') return obj;
   for (const field of LEGACY_RUNTIME_FIELDS) {
     delete obj[field];
@@ -79,13 +117,13 @@ export function stripLegacyRuntimeFields<T extends Record<string, any> | null | 
   return obj;
 }
 
-export function stripLegacyRuntimeFieldsFromList<T extends Record<string, any>>(list: T[] | unknown): T[] {
+export function stripLegacyRuntimeFieldsFromList<T extends Record<string, unknown>>(list: T[] | unknown): T[] {
   if (!Array.isArray(list)) return [];
   list.forEach(stripLegacyRuntimeFields);
   return list;
 }
 
-function getNormalizedApkFiles(payload?: GenericPayload): any[] {
+function getNormalizedApkFiles(payload?: GenericPayload): ApkFileRecord[] {
   return pickFirstArray([
     payload?.apkFiles,
     payload?.apks,
@@ -109,7 +147,7 @@ function applyAndroidBackgroundState(payload: GenericPayload): void {
 
   const pkgSet = new Set(
     raw
-      .map((x: any) => (typeof x === 'string') ? x : (x?.packageName || x?.pkg || x?.name))
+      .map((x: string | { packageName?: string; pkg?: string; name?: string }) => (typeof x === 'string') ? x : (x?.packageName || x?.pkg || x?.name))
       .filter(Boolean)
   );
 
@@ -137,7 +175,10 @@ function normalizeAndroidScanPayload(payload: GenericPayload): GenericPayload {
   return payload;
 }
 
-export function renderScanInfo(payload: GenericPayload | null | undefined, fileMeta?: { savedAt?: unknown; mtimeMs?: unknown }): void {
+export function renderScanInfo(
+  payload: GenericPayload | null | undefined,
+  fileMeta?: { savedAt?: string | number | Date | null | undefined; mtimeMs?: number | null },
+): void {
   const hasPayload = !!payload;
   toggleHidden('scan-info-empty', hasPayload);
   toggleHidden('scan-info-wrapper', !hasPayload);
@@ -156,7 +197,20 @@ export function renderScanInfo(payload: GenericPayload | null | undefined, fileM
   const meta = payload?.meta || {};
   const deviceInfo = payload?.deviceInfo || {};
 
-  const pick = (...candidates: unknown[]): string => {
+  const pick = (
+    ...candidates: Array<
+      | string
+      | number
+      | boolean
+      | null
+      | undefined
+      | {
+          name?: string;
+          phone?: string;
+          mobile?: string;
+        }
+    >
+  ): string => {
     for (const v of candidates) {
       if (v === null || v === undefined) continue;
       const s = String(v).trim();
@@ -216,13 +270,16 @@ export function renderScanInfo(payload: GenericPayload | null | undefined, fileM
   setText('scan-info-saved-at', formatDateTime(savedAt));
 }
 
-export function normalizeLoadedScanData(payload: GenericPayload, osMode?: unknown): GenericPayload {
+export function normalizeLoadedScanData(
+  payload: GenericPayload,
+  osMode?: string | number | boolean | null | undefined,
+): GenericPayload {
   const mode = normalizeDeviceMode(osMode || payload?.deviceInfo?.os || payload?.osMode || payload?.deviceMode);
   if (!payload || mode !== DEVICE_MODES.ANDROID) return payload;
   return normalizeAndroidScanPayload(payload);
 }
 
-export function getNormalizedScanApps(payload?: GenericPayload | null): any[] {
+export function getNormalizedScanApps(payload?: GenericPayload | null): Array<Partial<AndroidAppRecord>> {
   if (!payload || typeof payload !== 'object') return [];
 
   const candidates = [

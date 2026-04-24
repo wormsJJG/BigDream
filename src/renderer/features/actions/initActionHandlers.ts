@@ -1,5 +1,5 @@
 import type { RendererContext } from '../../../types/renderer-context';
-import { Utils } from '../../shared/utils.js';
+import { Utils } from '../../shared/utils.actual.js';
 import { createAdminActionHandlers } from '../admin/adminActions.js';
 import { createAdminCommonHelpers } from '../admin/adminCommonHelpers.js';
 import {

@@ -31,6 +31,8 @@ Migrate to TypeScript without losing shipped functionality.
    - `src/types/scan-result.d.ts`
    - `src/types/renderer-context.d.ts`
    - `src/shared/contracts/*`
+   - `src/shared/risk/*`
+   - `src/shared/spyware/*`
 
 2. Renderer bootstrap and service edges
    - `src/renderer/app/bootstrap.js`
@@ -63,6 +65,7 @@ Migrate to TypeScript without losing shipped functionality.
    - use compiled output, not raw `.ts` source
    - start with `shared` and low-risk renderer services
    - leave `scan` and large main services for the end
+   - current stable decision: keep `main.js`, `preload.js`, `renderer.js` as JS entry shells
 
 ## Minimum Acceptance Per Phase
 

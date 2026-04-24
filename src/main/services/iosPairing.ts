@@ -1,31 +1,24 @@
-type FileSystemLike = {
-    existsSync(path: string): boolean;
-};
-
-type ConfigLike = {
-    PATHS?: {
-        IOS_PAIR?: string;
-    };
-};
-
-type UtilsLike = {
-    runCommand(command: string): Promise<string>;
-};
-
-type PairingResult =
-    | { ok: true; skipped?: boolean }
-    | { ok: false; message: string };
-
 export function createIosPairingHelpers({
     fs,
     CONFIG,
     Utils
 }: {
-    fs: FileSystemLike;
-    CONFIG: ConfigLike;
-    Utils: UtilsLike;
+    fs: {
+        existsSync(path: string): boolean;
+    };
+    CONFIG: {
+        PATHS?: {
+            IOS_PAIR?: string;
+        };
+    };
+    Utils: {
+        runCommand(command: string): Promise<string>;
+    };
 }) {
-    async function validatePairing(udid: string): Promise<PairingResult> {
+    async function validatePairing(udid: string): Promise<
+        | { ok: true; skipped?: boolean }
+        | { ok: false; message: string }
+    > {
         const pairTool = CONFIG?.PATHS?.IOS_PAIR;
         if (!pairTool || !fs.existsSync(pairTool)) {
             return { ok: true, skipped: true };

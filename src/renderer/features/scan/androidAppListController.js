@@ -84,6 +84,12 @@ export function createAndroidAppListController({ State, Utils, clear, showAppDet
             }
         };
         imgTag.onerror = () => handleImageError(false);
+        const localPath = getLocalIconPath();
+        if (localPath) {
+            imgTag.src = localPath;
+            imgTag.style.display = 'block';
+            spanTag.style.display = 'none';
+        }
         if (app.cachedIconUrl) {
             imgTag.src = app.cachedIconUrl;
             imgTag.style.display = 'block';

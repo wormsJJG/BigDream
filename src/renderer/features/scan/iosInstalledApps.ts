@@ -1,11 +1,18 @@
-type RenderIosInstalledAppsArgs = {
-  apps: any[];
+import type { AppDetailTarget } from '../../../types/renderer-context';
+import type { AndroidAppRecord } from '../../../main/services/androidService';
+import type { IosInstalledApp } from '../../../main/services/iosService';
+
+export function renderIosInstalledApps({
+  apps,
+  container,
+  clear,
+  formatAppName
+}: {
+  apps: Array<AppDetailTarget & Partial<IosInstalledApp> & Partial<AndroidAppRecord>>;
   container: HTMLElement | null;
   clear(target: Element): void;
   formatAppName(name: string): string;
-};
-
-export function renderIosInstalledApps({ apps, container, clear, formatAppName }: RenderIosInstalledAppsArgs): void {
+}): void {
   if (!container) return;
 
   const list = Array.isArray(apps) ? apps : [];
@@ -30,8 +37,8 @@ export function renderIosInstalledApps({ apps, container, clear, formatAppName }
   grid.className = 'ios-app-grid';
 
   sorted.forEach(app => {
-    const name = app.cachedTitle || app.name || app.displayName || formatAppName(app.packageName || app.bundleId || '');
-    const bundle = app.packageName || app.bundleId || '';
+    const name = String(app.cachedTitle || app.name || app.displayName || formatAppName(String(app.packageName || app.bundleId || '')));
+    const bundle = String(app.packageName || app.bundleId || '');
 
     const card = document.createElement('div');
     card.className = 'ios-app-card';

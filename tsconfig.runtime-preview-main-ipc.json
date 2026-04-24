@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".ts-build-preview-main-ipc",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": false,
+    "allowJs": false,
+    "checkJs": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node"
+  },
+  "include": [
+    "src/main/ipc/**/*.ts",
+    "src/shared/**/*.d.ts",
+    "src/main/**/*.d.ts",
+    "src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "release",
+    "node_modules",
+    ".ts-build-preview",
+    ".ts-build-preview-main-ipc"
+  ]
+}

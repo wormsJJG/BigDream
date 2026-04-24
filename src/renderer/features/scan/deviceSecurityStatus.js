@@ -1,4 +1,8 @@
 export function createDeviceSecurityStatusController() {
+    let cachedPayload = null;
+    let cachedAt = 0;
+    let pendingLoad = null;
+    const CACHE_TTL_MS = 5000;
     const escapeHtml = (v) => String(v ?? '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -167,9 +171,36 @@ export function createDeviceSecurityStatusController() {
         async load(container) {
             if (!container || !window.electronAPI?.getDeviceSecurityStatus)
                 return;
+            const now = Date.now();
+            if (cachedPayload && (now - cachedAt) < CACHE_TTL_MS) {
+                render(cachedPayload, container);
+                return;
+            }
+            if (pendingLoad) {
+                container.textContent = '상태 확인 중...';
+                try {
+                    const sec = await pendingLoad;
+                    if (sec) {
+                        cachedPayload = sec;
+                        cachedAt = Date.now();
+                        render(sec, container);
+                    }
+                }
+                catch (e) {
+                    console.warn('[DeviceSecurityStatus] load failed', e);
+                    try {
+                        container.textContent = '기기 보안 상태를 불러오지 못했습니다.';
+                    }
+                    catch (_e) { /* noop */ }
+                }
+                return;
+            }
             container.textContent = '상태 확인 중...';
             try {
-                const sec = await window.electronAPI.getDeviceSecurityStatus();
+                pendingLoad = window.electronAPI.getDeviceSecurityStatus();
+                const sec = await pendingLoad;
+                cachedPayload = sec;
+                cachedAt = Date.now();
                 render(sec, container);
             }
             catch (e) {
@@ -179,7 +210,15 @@ export function createDeviceSecurityStatusController() {
                 }
                 catch (_e) { /* noop */ }
             }
+            finally {
+                pendingLoad = null;
+            }
         },
-        render
+        render,
+        invalidate() {
+            cachedPayload = null;
+            cachedAt = 0;
+            pendingLoad = null;
+        }
     };
 }

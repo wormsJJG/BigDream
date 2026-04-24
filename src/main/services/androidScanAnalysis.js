@@ -1,4 +1,4 @@
-export function createAndroidScanAnalysisHelpers({ analyzeAppWithStaticModel, getAppPermissions, getAppInstallTime, checkIsRunningBackground, evaluateAndroidSpywareFinalVerdict, evaluateAndroidAppRisk, RISK_LEVELS }) {
+function createAndroidScanAnalysisHelpers({ analyzeAppWithStaticModel, getAppPermissions, getAppInstallTime, checkIsRunningBackground, evaluateAndroidSpywareFinalVerdict, evaluateAndroidAppRisk, RISK_LEVELS }) {
     async function analyzeInstalledApps({ serial, allApps, networkMap, enabledA11yPkgs, activeAdminPkgs }) {
         const processedApps = [];
         const analyze = analyzeAppWithStaticModel;
@@ -108,3 +108,5 @@ export function createAndroidScanAnalysisHelpers({ analyzeAppWithStaticModel, ge
         classifyAnalyzedApps
     };
 }
+
+module.exports = { createAndroidScanAnalysisHelpers };

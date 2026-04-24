@@ -1,4 +1,4 @@
-export function createIosMvtExecutionHelpers({ fs, path, Utils, getDirectoryStats, estimateTotalFromGrowth, clampPercent, randomIntInclusive, safeEmit }) {
+function createIosMvtExecutionHelpers({ fs, path, Utils, getDirectoryStats, estimateTotalFromGrowth, clampPercent, randomIntInclusive, safeEmit }) {
     function createMvtStatsRefresher(outputDir) {
         const mvtStatsCache = {
             bytes: 0,
@@ -163,3 +163,5 @@ export function createIosMvtExecutionHelpers({ fs, path, Utils, getDirectoryStat
         runMvtAnalysis
     };
 }
+
+module.exports = { createIosMvtExecutionHelpers };

@@ -1,5 +1,5 @@
 import type { RendererContext } from '../../../types/renderer-context';
-import { Utils } from '../../shared/utils.js';
+import { Utils } from '../../shared/utils.actual.js';
 
 type DetailApp = {
   packageName?: string;

@@ -10,7 +10,7 @@ const targets = [
     label: 'renderer feature app-detail init',
     preview: path.join(previewRoot, 'app-detail', 'initAppDetail.js'),
     runtime: path.join(runtimeRoot, 'app-detail', 'initAppDetail.js'),
-    markers: ['initAppDetail', '../../shared/utils.js', 'appDetailManager'],
+    markers: ['initAppDetail', '../../shared/utils.actual.js', 'appDetailManager'],
     header: '// Synced from TypeScript preview output. Source of truth: initAppDetail.ts\n'
   },
   {

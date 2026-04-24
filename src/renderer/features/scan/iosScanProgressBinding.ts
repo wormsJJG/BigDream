@@ -1,24 +1,19 @@
-type ProgressPayload = {
-  stage?: string;
-  message?: string;
-  trustConfirmed?: boolean;
-};
-
-type BindingDeps = {
-  setIosStep: (step: number, text: string) => void;
-  resolveIosStageMessage: (payload: ProgressPayload) => string;
-  hasMeaningfulBackupSignal: (payload: ProgressPayload) => boolean;
-  trustPromptMessage: string;
-};
+import type { IosScanProgressPayload } from '../../../types/preload-api';
 
 export function createIosScanProgressBinding({
   setIosStep,
   resolveIosStageMessage,
   hasMeaningfulBackupSignal,
   trustPromptMessage
-}: BindingDeps) {
+}: {
+  setIosStep: (step: number, text: string) => void;
+  resolveIosStageMessage: (payload: IosScanProgressPayload) => string;
+  hasMeaningfulBackupSignal: (payload: IosScanProgressPayload) => boolean;
+  trustPromptMessage: string;
+}) {
   function bind() {
     let iosBackupStageLatched = false;
+    let iosMvtStageLatched = false;
 
     try {
       if (!window.electronAPI || typeof window.electronAPI.onIosScanProgress !== 'function') {
@@ -27,7 +22,7 @@ export function createIosScanProgressBinding({
 
       return window.electronAPI.onIosScanProgress((rawPayload) => {
         try {
-          const payload = (rawPayload || {}) as ProgressPayload;
+          const payload = (rawPayload || {}) as IosScanProgressPayload;
           const stage = String(payload?.stage || '').trim().toLowerCase();
           const msg = resolveIosStageMessage(payload);
           const rawMessage = String(payload?.message || '');
@@ -41,7 +36,13 @@ export function createIosScanProgressBinding({
 
           if (stage === 'mvt') {
             iosBackupStageLatched = true;
+            iosMvtStageLatched = true;
             setIosStep(3, '정밀 분석 진행 중...');
+            return;
+          }
+
+          if (iosMvtStageLatched) {
+            setIosStep(3, msg || '정밀 분석 진행 중...');
             return;
           }
 

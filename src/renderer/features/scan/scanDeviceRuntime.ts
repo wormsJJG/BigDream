@@ -1,20 +1,28 @@
-type ScanDeviceRuntimeDeps = {
-  State: {
-    currentDeviceMode?: string;
-  };
-  androidDashboardController: {
-    start: () => void;
-    stop: () => void;
-    render: (payload: unknown) => void;
-  };
-  document: Document;
-};
+import type { RendererState } from '../../../types/renderer-context';
+import type { AndroidDashboardData } from '../../../main/services/androidService';
+
+export interface AndroidDashboardControllerLike {
+  start(): void;
+  stop(): void;
+  render(payload: AndroidDashboardData): void;
+}
+
+export interface ScanDeviceRuntimeHelpers {
+  toggleLaser(isVisible: boolean): void;
+  startAndroidDashboardPolling(): void;
+  stopAndroidDashboardPolling(): void;
+  renderAndroidDashboard(payload: AndroidDashboardData): void;
+}
 
 export function createScanDeviceRuntimeHelpers({
   State,
   androidDashboardController,
   document
-}: ScanDeviceRuntimeDeps) {
+}: {
+  State: Pick<RendererState, 'currentDeviceMode'>;
+  androidDashboardController: AndroidDashboardControllerLike;
+  document: Document;
+}): ScanDeviceRuntimeHelpers {
   function toggleLaser(isVisible: boolean) {
     const show = !!isVisible;
 
@@ -39,7 +47,7 @@ export function createScanDeviceRuntimeHelpers({
     androidDashboardController.stop();
   }
 
-  function renderAndroidDashboard(payload: unknown) {
+  function renderAndroidDashboard(payload: AndroidDashboardData) {
     androidDashboardController.render(payload);
   }
 

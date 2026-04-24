@@ -1,5 +1,8 @@
-import { evaluateAppRisk } from '../../shared/constants/riskRules.js';
-export function createIosMvtParser({ fs, path, Utils }) {
+const riskRulesModule = require('../../shared/risk/riskRules.js');
+
+const { evaluateAppRisk } = riskRulesModule.default || riskRulesModule;
+
+function createIosMvtParser({ fs, path, Utils }) {
     function decodeUnicode(str) {
         if (!str)
             return '';
@@ -224,3 +227,5 @@ export function createIosMvtParser({ fs, path, Utils }) {
         parseMvtResults
     };
 }
+
+module.exports = { createIosMvtParser };

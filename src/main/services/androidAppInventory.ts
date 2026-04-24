@@ -39,6 +39,54 @@ type OsLike = {
     tmpdir(): string;
 };
 
+type AndroidAppPreview = {
+    title: string;
+    icon: string | null;
+};
+
+const playPreviewCache = new Map<string, Promise<AndroidAppPreview | null>>();
+
+function buildFallbackTitle(packageName: string) {
+    const parts = String(packageName || '').split('.');
+    const raw = parts[parts.length - 1] || packageName || 'Unknown';
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+async function loadGooglePlayScraper() {
+    const mod = await import('google-play-scraper');
+    return (mod.default || mod) as {
+        app(options: { appId: string; lang?: string; country?: string }): Promise<{ title?: string; icon?: string }>;
+    };
+}
+
+async function getGooglePlayPreview(packageName: string): Promise<AndroidAppPreview | null> {
+    const normalizedPackage = String(packageName || '').trim();
+    if (!normalizedPackage) return null;
+
+    const cached = playPreviewCache.get(normalizedPackage);
+    if (cached) return cached;
+
+    const previewPromise = (async () => {
+        try {
+            const gplay = await loadGooglePlayScraper();
+            const result = await Promise.race([
+                gplay.app({ appId: normalizedPackage, lang: 'ko', country: 'kr' }),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PLAY_LOOKUP_TIMEOUT')), 2500))
+            ]);
+
+            return {
+                title: String(result?.title || ''),
+                icon: result?.icon ? String(result.icon) : null
+            };
+        } catch (_error) {
+            return null;
+        }
+    })();
+
+    playPreviewCache.set(normalizedPackage, previewPromise);
+    return previewPromise;
+}
+
 export function createAndroidAppInventoryHelpers({
     client,
     adb,
@@ -54,6 +102,38 @@ export function createAndroidAppInventoryHelpers({
     path: PathLike;
     os: OsLike;
 }) {
+    async function enrichInstalledAppsWithStoreMetadata(apps: Array<Record<string, unknown>>) {
+        const storeApps = apps.filter((app) =>
+            app &&
+            app.isSystemApp !== true &&
+            app.isSideloaded === false &&
+            typeof app.packageName === 'string' &&
+            String(app.packageName).trim().length > 0
+        );
+
+        for (let i = 0; i < storeApps.length; i += 6) {
+            const chunk = storeApps.slice(i, i + 6);
+            const previews = await Promise.all(chunk.map((app) => getGooglePlayPreview(String(app.packageName || ''))));
+
+            chunk.forEach((app, index) => {
+                const preview = previews[index];
+                if (!preview) {
+                    if (!app.cachedTitle) app.cachedTitle = buildFallbackTitle(String(app.packageName || ''));
+                    return;
+                }
+
+                app.cachedTitle = String(preview.title || app.cachedTitle || buildFallbackTitle(String(app.packageName || '')));
+                app.cachedIconUrl = preview.icon || app.cachedIconUrl || null;
+            });
+        }
+
+        apps.forEach((app) => {
+            if (!app.cachedTitle) app.cachedTitle = buildFallbackTitle(String(app.packageName || ''));
+        });
+
+        return apps;
+    }
+
     async function getInstalledApps(serial: string) {
         const sysOutput = await client.shell(serial, 'pm list packages -s');
         const sysData = await adb.util.readAll(sysOutput);
@@ -69,7 +149,7 @@ export function createAndroidAppInventoryHelpers({
         ];
         const TRUSTED_PREFIXES = ['com.android.', 'com.samsung.', 'com.google.', 'com.sec.', 'com.qualcomm.', 'com.qti.', 'android'];
 
-        return lines.map((line) => {
+        const apps = lines.map((line) => {
             if (!line) return null;
             const parts = line.split(/\s+/);
             let packageName = '';
@@ -128,6 +208,8 @@ export function createAndroidAppInventoryHelpers({
                 installDate: '-'
             };
         }).filter((item) => item !== null);
+
+        return await enrichInstalledAppsWithStoreMetadata(apps);
     }
 
     async function getAppInstallTime(serial: string, packageName: string) {
@@ -329,6 +411,7 @@ export function createAndroidAppInventoryHelpers({
     }
 
     return {
+        enrichInstalledAppsWithStoreMetadata,
         getInstalledApps,
         getAppInstallTime,
         checkIsRunningBackground,

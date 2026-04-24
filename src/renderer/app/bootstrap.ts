@@ -11,23 +11,12 @@ import { loadTemplates } from './templateLoader.js';
 
 import type {
   AuthService,
+  CustomUiLike,
   FirestoreService,
+  PromptChoice,
   RendererContext,
   RendererState
 } from '../../types/renderer-context';
-
-type PromptChoice = {
-  value: string;
-  label: string;
-  description?: string;
-};
-
-type CustomUi = {
-  alert(message: string): Promise<void>;
-  confirm(message: string): Promise<boolean>;
-  prompt(message: string, defaultValue?: string): Promise<string | null>;
-  choose(message: string, choices?: PromptChoice[]): Promise<string | null>;
-};
 
 console.log('--- renderer.js: 파일 로드됨 ---');
 
@@ -133,7 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const navLogin = document.getElementById('nav-login');
   if (navLogin) navLogin.classList.add('active');
 
-  const CustomUI: CustomUi = {
+  const CustomUI: CustomUiLike = {
     alert(message) {
       return new Promise((resolve) => {
         const modal = document.getElementById('custom-alert-modal');

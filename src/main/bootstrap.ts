@@ -25,6 +25,8 @@ import { registerIosHandlers } from './ipc/iosHandlers';
 import { registerAppHandlers } from './ipc/appHandlers';
 import { MockData } from './testing/mockData.js';
 import type { MainConfig } from './config/createConfig';
+import type { AndroidServiceOptions } from './services/androidService';
+import type { IosServiceOptions } from './services/iosService';
 import type { createLoginStorage as createLoginStorageTs } from './services/loginStorage';
 import type { createFirestoreService as createFirestoreServiceTs } from './services/firestoreService';
 import type { registerAuthHandlers as registerAuthHandlersTs } from './ipc/authHandlers';
@@ -48,6 +50,14 @@ type RegisterAndroidHandlersLike = typeof registerAndroidHandlersTs;
 type RegisterIosHandlersLike = typeof registerIosHandlersTs;
 type RegisterAppHandlersLike = typeof registerAppHandlersTs;
 
+type AnalyzeStaticModelLike = NonNullable<AndroidServiceOptions['analyzeAppWithStaticModel']>;
+type AndroidHandlerDeps = Parameters<RegisterAndroidHandlersLike>[0];
+type IosHandlerDeps = Parameters<RegisterIosHandlersLike>[0];
+type AppHandlerDeps = Parameters<RegisterAppHandlersLike>[0];
+type AuthHandlerDeps = Parameters<RegisterAuthHandlersLike>[0];
+type FirestoreHandlerDeps = Parameters<RegisterFirestoreHandlersLike>[0];
+type MainWindowLike = ReturnType<typeof createMainWindow>;
+
 declare function require(id: string): any;
 
 export function start({ rootDir }: StartArgs): void {
@@ -57,7 +67,7 @@ export function start({ rootDir }: StartArgs): void {
 
   try { process.chdir(rootDir); } catch (_e) { /* noop */ }
 
-  const { analyzeAppWithStaticModel } = require(path.join(rootDir, 'ai', 'aiStaticAnalyzer'));
+  const { analyzeAppWithStaticModel }: { analyzeAppWithStaticModel: AnalyzeStaticModelLike } = require(path.join(rootDir, 'ai', 'aiStaticAnalyzer'));
 
   autoUpdater.logger = log;
   (autoUpdater.logger as any).transports.file.level = 'info';
@@ -74,15 +84,19 @@ export function start({ rootDir }: StartArgs): void {
 
   const firestoreService: FirestoreServiceLike = createFirestoreService();
 
-  (registerAuthHandlers as RegisterAuthHandlersLike)({ ipcMain, loginStorage });
-  (registerFirestoreHandlers as RegisterFirestoreHandlersLike)({ ipcMain, firestoreService });
+  const authHandlerDeps = { ipcMain, loginStorage } satisfies AuthHandlerDeps;
+  const firestoreHandlerDeps = { ipcMain, firestoreService } satisfies FirestoreHandlerDeps;
+
+  (registerAuthHandlers as RegisterAuthHandlersLike)(authHandlerDeps);
+  (registerFirestoreHandlers as RegisterFirestoreHandlersLike)(firestoreHandlerDeps);
 
   const Utils: MainUtilsLike = createMainUtils({ axios, CONFIG, fs, exec, BrowserWindow, dialog });
 
   const client = adb.createClient({ bin: CONFIG.PATHS.ADB });
 
   app.whenReady().then(async () => {
-    createMainWindow({ baseDir: rootDir });
+    const mainWindow: MainWindowLike = createMainWindow({ baseDir: rootDir });
+    void mainWindow;
     initializeAutoUpdater({ autoUpdater, log, BrowserWindow, CONFIG, Utils });
   }).catch(err => {
     console.log(err);
@@ -92,7 +106,7 @@ export function start({ rootDir }: StartArgs): void {
     app.quit();
   });
 
-  const androidService: AndroidServiceLike = createAndroidService({
+  const androidServiceOptions = {
     client,
     adb,
     ApkReader,
@@ -105,18 +119,20 @@ export function start({ rootDir }: StartArgs): void {
     CONFIG,
     Utils,
     analyzeAppWithStaticModel
-  });
+  } satisfies AndroidServiceOptions;
+  const androidService: AndroidServiceLike = createAndroidService(androidServiceOptions);
 
-  const iosService: IosServiceLike = createIosService({
+  const iosServiceOptions = {
     fs,
     path,
     os,
     log,
     CONFIG,
     Utils
-  });
+  } satisfies IosServiceOptions;
+  const iosService: IosServiceLike = createIosService(iosServiceOptions);
 
-  (registerAndroidHandlers as RegisterAndroidHandlersLike)({
+  const androidHandlerDeps = {
     ipcMain,
     CONFIG,
     MockData,
@@ -126,9 +142,9 @@ export function start({ rootDir }: StartArgs): void {
     log,
     app,
     BrowserWindow
-  });
+  } satisfies AndroidHandlerDeps;
 
-  (registerIosHandlers as RegisterIosHandlersLike)({
+  const iosHandlerDeps = {
     ipcMain,
     CONFIG,
     MockData,
@@ -138,7 +154,11 @@ export function start({ rootDir }: StartArgs): void {
     BrowserWindow,
     dialog,
     Utils
-  });
+  } satisfies IosHandlerDeps;
 
-  (registerAppHandlers as RegisterAppHandlersLike)({ ipcMain, BrowserWindow, dialog, app, fs });
+  const appHandlerDeps = { ipcMain, BrowserWindow, dialog, app, fs } satisfies AppHandlerDeps;
+
+  (registerAndroidHandlers as RegisterAndroidHandlersLike)(androidHandlerDeps);
+  (registerIosHandlers as RegisterIosHandlersLike)(iosHandlerDeps);
+  (registerAppHandlers as RegisterAppHandlersLike)(appHandlerDeps);
 }

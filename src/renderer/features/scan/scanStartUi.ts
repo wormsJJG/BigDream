@@ -1,24 +1,20 @@
-type ScanStartUiDeps = {
-  State: {
-    lastScanData: unknown;
-  };
-  document: Document;
-};
+import type { RendererState } from '../../../types/renderer-context';
 
-type AndroidStartArgs = {
-  toggleLaser: (isVisible: boolean) => void;
-  resetSmartphoneUI: () => void;
-  startAndroidDashboardPolling: () => void;
-  resetAndroidDashboardUI: () => void;
-};
+export interface ScanStartUiHelpers {
+  prepareAndroidScanStart(args: {
+    toggleLaser: (isVisible: boolean) => void;
+    resetSmartphoneUI: () => void;
+    startAndroidDashboardPolling: () => void;
+    resetAndroidDashboardUI: () => void;
+  }): void;
+  prepareIosScanStart(args: {
+    toggleLaser: (isVisible: boolean) => void;
+  }): void;
+  resetScanResultState(): void;
+}
 
-type IosStartArgs = {
-  toggleLaser: (isVisible: boolean) => void;
-};
-
-export function createScanStartUiHelpers({ State, document }: ScanStartUiDeps) {
+export function createScanStartUiHelpers({ State, document }: { State: Pick<RendererState, 'lastScanData'>; document: Document }): ScanStartUiHelpers {
   function resetScanResultState() {
-    State.lastScanData = null;
     State.lastScanData = null;
   }
 
@@ -27,7 +23,12 @@ export function createScanStartUiHelpers({ State, document }: ScanStartUiDeps) {
     resetSmartphoneUI,
     startAndroidDashboardPolling,
     resetAndroidDashboardUI
-  }: AndroidStartArgs) {
+  }: {
+    toggleLaser: (isVisible: boolean) => void;
+    resetSmartphoneUI: () => void;
+    startAndroidDashboardPolling: () => void;
+    resetAndroidDashboardUI: () => void;
+  }) {
     resetAndroidDashboardUI();
     resetScanResultState();
     toggleLaser(true);
@@ -50,7 +51,7 @@ export function createScanStartUiHelpers({ State, document }: ScanStartUiDeps) {
     startAndroidDashboardPolling();
   }
 
-  function prepareIosScanStart({ toggleLaser }: IosStartArgs) {
+  function prepareIosScanStart({ toggleLaser }: { toggleLaser: (isVisible: boolean) => void }) {
     resetScanResultState();
     toggleLaser(true);
   }

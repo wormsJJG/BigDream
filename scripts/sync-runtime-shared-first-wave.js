@@ -60,6 +60,11 @@ for (const target of targets) {
     }
   }
 
-  fs.writeFileSync(target.runtime, `${target.header}${content}`, 'utf8');
+  let runtimeContent = content;
+  if (target.label === 'shared ipc') {
+    runtimeContent = runtimeContent.replace(/export default IPC;\s*$/m, 'module.exports = IPC;\nmodule.exports.default = IPC;\n');
+  }
+
+  fs.writeFileSync(target.runtime, `${target.header}${runtimeContent}`, 'utf8');
   console.log(`synced ${path.relative(rootDir, target.runtime)}`);
 }

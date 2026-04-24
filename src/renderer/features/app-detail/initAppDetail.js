@@ -1,5 +1,5 @@
 // Synced from TypeScript preview output. Source of truth: initAppDetail.ts
-import { Utils } from '../../shared/utils.js';
+import { Utils } from '../../shared/utils.actual.js';
 export function initAppDetail(ctx) {
     const setMainSubText = (el, mainText, subText = '', subClass = 'bd-detail-sub') => {
         if (!el)

@@ -1,8 +1,52 @@
-export function createResultsRenderer(ctx: any, deps: any) {
+import type { RendererContext } from '../../../types/renderer-context';
+import type { AppDetailTarget } from '../../../types/renderer-context';
+import type { ApkFileRecord, SavedScanMvtResults, SavedScanPayload } from '../../../types/scan-result';
+import type { AndroidAppRecord } from '../../../main/services/androidService';
+import type { IosInstalledApp } from '../../../main/services/iosService';
+import type { IosPrivacyThreatCard } from '../../../main/services/iosMvtParser';
+import type {
+    AndroidAppListControllerLike,
+    DeviceSecurityStatusControllerLike,
+    IosCoreAreasRendererLike,
+    ResultsRendererLike
+} from './scanBootstrapHelpers';
+
+export function createResultsRenderer(ctx: Pick<RendererContext, 'State' | 'ViewManager'>, deps: {
+    BD_DOM: {
+        clear(el: Element | null | undefined): void;
+        setBoldText(el: Element | null | undefined, textWithBTags: string): void;
+        emptyMessage(text: string, className?: string): HTMLParagraphElement;
+    };
+    Utils: {
+        formatAppName(name: string): string;
+    };
+    renderSuspiciousListView(args: { suspiciousApps: AppDetailTarget[]; isIos: boolean; Utils: { formatAppName(name: string): string } }): void;
+    buildIosPrivacyThreatApps(apps: Array<Partial<AndroidAppRecord>>, privacyThreatApps: IosPrivacyThreatCard[]): IosPrivacyThreatCard[];
+    renderApkList(args: { apkFiles: ApkFileRecord[]; container: HTMLElement | null; clear(target: Element): void; showAppDetail(appData: ApkFileRecord, displayName: string): void }): void;
+    deviceSecurityStatusController: DeviceSecurityStatusControllerLike;
+    iosCoreAreasRenderer: IosCoreAreasRendererLike;
+    renderIosInstalledApps(args: { apps: Array<AppDetailTarget & Partial<IosInstalledApp> & Partial<AndroidAppRecord>>; container: HTMLElement | null; clear(target: Element): void; formatAppName(name: string): string }): void;
+    renderMvtAnalysisPanel(args: { mvtResults: Partial<SavedScanMvtResults>; isIos: boolean }): void;
+    bindIosAppListControls(args: { State: RendererContext['State']; Utils: { formatAppName(name: string): string }; apps: Array<AppDetailTarget & Partial<IosInstalledApp> & Partial<AndroidAppRecord>>; container: HTMLElement | null }): void;
+    renderPrivacyThreatPanel(args: { privacyApps: IosPrivacyThreatCard[]; clear(target: Element): void; formatAppName(name: string): string }): void;
+    renderSuspiciousPanel(args: { suspiciousApps: AppDetailTarget[]; isIos: boolean; formatAppName(name: string): string }): void;
+    getNormalizedScanApps(scanData: SavedScanPayload): Array<Partial<AndroidAppRecord>>;
+    androidAppListController: AndroidAppListControllerLike;
+    showAppDetail(appData: AppDetailTarget, displayName: string): void;
+}): ResultsRendererLike {
     const { State, ViewManager } = ctx;
     const { BD_DOM, Utils, renderSuspiciousListView, buildIosPrivacyThreatApps, renderApkList, deviceSecurityStatusController, iosCoreAreasRenderer, renderIosInstalledApps, renderMvtAnalysisPanel, bindIosAppListControls, renderPrivacyThreatPanel, renderSuspiciousPanel, getNormalizedScanApps, androidAppListController, showAppDetail } = deps;
-    const ResultsRenderer = {
-        render(data) {
+    const ResultsRenderer: ResultsRendererLike & {
+        renderIosCoreAreas(mvtResults: Partial<SavedScanMvtResults>): void;
+        renderMvtAnalysis(mvtResults: Partial<SavedScanMvtResults>, isIos: boolean): void;
+        renderSuspiciousList(suspiciousApps: AppDetailTarget[], isIos?: boolean): void;
+        renderPrivacyThreatList(privacyApps: IosPrivacyThreatCard[]): void;
+        forceRenderIosCoreAreas(): void;
+    } = {
+        render(data: SavedScanPayload & {
+            mvtAnalysis?: Partial<SavedScanMvtResults> | null;
+            mvt?: Partial<SavedScanMvtResults> | null;
+        }) {
             console.log("ResultsRenderer.render 시작", data);
 
 
@@ -32,7 +76,7 @@ export function createResultsRenderer(ctx: any, deps: any) {
 
             // 2. 모든 결과 섹션을 일단 숨김 처리 
             document.querySelectorAll('.result-content-section').forEach(sec => {
-                (sec as any).style.display = 'none';
+                (sec as HTMLElement).style.display = 'none';
                 sec.classList.remove('active');
             });
 
@@ -43,7 +87,10 @@ export function createResultsRenderer(ctx: any, deps: any) {
             });
 
             // ✅ OS 모드 자동 판별 (검사 열기/로컬 파일 열기에서 State가 꼬여도 iOS/Android를 정확히 분기)
-            const inferDeviceMode = (payload) => {
+                    const inferDeviceMode = (payload: SavedScanPayload & {
+                mvtAnalysis?: Partial<SavedScanMvtResults> | null;
+                mvt?: Partial<SavedScanMvtResults> | null;
+            }) => {
                 const raw = payload?.deviceInfo?.os || payload?.deviceInfo?.osMode || payload?.osMode || payload?.deviceMode || payload?.deviceInfo?.type;
                 const normalized = String(raw || '').toLowerCase();
 
@@ -186,7 +233,7 @@ export function createResultsRenderer(ctx: any, deps: any) {
                     const totalApps = data.allApps ? data.allApps.length : 0;
                     if (appsHeader) appsHeader.textContent = `📲 검사 대상 애플리케이션 목록 (총 ${totalApps}개)`;
                     if (iosAppDesc) {
-                        (iosAppDesc as any).style.display = 'block'; // iOS에서만 노출
+                        (iosAppDesc as HTMLElement).style.display = 'block'; // iOS에서만 노출
                         iosAppDesc.textContent = `${totalApps}개의 앱 데이터베이스 및 파일 흔적**을 검사하는 데 활용되었습니다.`;
                     }
 
@@ -246,7 +293,7 @@ export function createResultsRenderer(ctx: any, deps: any) {
 
                     // 초기 화면 설정: 요약 섹션만 보이고 나머지는 숨김
                     document.querySelectorAll('.result-content-section').forEach(sec => {
-                        (sec as any).style.display = (sec.id === 'res-summary') ? 'block' : 'none';
+                        (sec as HTMLElement).style.display = (sec.id === 'res-summary') ? 'block' : 'none';
                     });
 
                 } else {
@@ -257,7 +304,7 @@ export function createResultsRenderer(ctx: any, deps: any) {
                     // 1. 안드로이드 원래 문구로 복구 
                     if (threatsTitle) threatsTitle.textContent = "🔐 기기 보안 상태";
                     if (threatsDesc) threatsDesc.textContent = "스파이앱 침입 가능성을 높이는 설정을 점검합니다.";
-                    if (iosAppDesc) (iosAppDesc as any).style.display = 'none'; // 안드로이드에선 숨김
+                    if (iosAppDesc) (iosAppDesc as HTMLElement).style.display = 'none'; // 안드로이드에선 숨김
 
                     const totalApps = data.allApps ? data.allApps.length : 0; // 전체 앱 개수 계산
                     const runningApps = data.runningCount || 0;
@@ -367,7 +414,7 @@ export function createResultsRenderer(ctx: any, deps: any) {
 
                     // 초기 화면 설정: 요약 섹션만 보이고 나머지는 숨김
                     document.querySelectorAll('.result-content-section').forEach(sec => {
-                        (sec as any).style.display = (sec.id === 'res-summary') ? 'block' : 'none';
+                        (sec as HTMLElement).style.display = (sec.id === 'res-summary') ? 'block' : 'none';
                     });
                 }
             } catch (err) {
@@ -393,25 +440,25 @@ export function createResultsRenderer(ctx: any, deps: any) {
         // =========================================================
         // [iOS 5대 핵심영역 - 메뉴 분리용 렌더링]
         // =========================================================
-        renderIosCoreAreas(mvtResults) {
+        renderIosCoreAreas(mvtResults: Partial<SavedScanMvtResults>) {
             iosCoreAreasRenderer.render(mvtResults);
         },
 
         // -------------------------------------------------
         // MVT 상세 분석 렌더링 함수 (iOS 전용)
         // -------------------------------------------------
-        renderMvtAnalysis(mvtResults, isIos) {
+        renderMvtAnalysis(mvtResults: Partial<SavedScanMvtResults>, isIos: boolean) {
             renderMvtAnalysisPanel({ mvtResults, isIos });
         },
 
-        renderSuspiciousList(suspiciousApps, isIos = false) {
+        renderSuspiciousList(suspiciousApps: AppDetailTarget[], isIos = false) {
             renderSuspiciousPanel({
                 suspiciousApps,
                 isIos,
                 formatAppName: (name) => Utils.formatAppName(name)
             });
         },
-        renderPrivacyThreatList(privacyApps) {
+        renderPrivacyThreatList(privacyApps: IosPrivacyThreatCard[]) {
             renderPrivacyThreatPanel({
                 privacyApps,
                 clear: (el) => BD_DOM.clear(el),

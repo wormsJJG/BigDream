@@ -17,10 +17,8 @@ type ProgressPayload = {
 
 type UtilsLike = {
     runCommand(command: string): Promise<string>;
-    sleep(ms: number): Promise<void>;
+    sleep(ms: number): Promise<unknown>;
 };
-
-type OnProgress = ((payload: ProgressPayload) => void) | undefined;
 
 export function createIosMvtExecutionHelpers({
     fs,
@@ -39,7 +37,7 @@ export function createIosMvtExecutionHelpers({
     estimateTotalFromGrowth(current: number, prevEstimate: number, options: { base: number; ratio: number }): number;
     clampPercent(value: number): number;
     randomIntInclusive(min: number, max: number): number;
-    safeEmit(onProgress: OnProgress, payload: ProgressPayload): void;
+    safeEmit(onProgress: ((payload: ProgressPayload) => void) | undefined, payload: ProgressPayload): void;
 }) {
     function createMvtStatsRefresher(outputDir: string) {
         const mvtStatsCache: DirectoryStats & { scannedAt: number; running: boolean } = {
@@ -87,7 +85,7 @@ export function createIosMvtExecutionHelpers({
         onProgress,
         outputDir
     }: {
-        onProgress: OnProgress;
+        onProgress: ((payload: ProgressPayload) => void) | undefined;
         outputDir: string;
     }) {
         let mvtTicker: ReturnType<typeof setInterval> | null = null;
@@ -154,7 +152,7 @@ export function createIosMvtExecutionHelpers({
         mvtStageStartedAt,
         initialPercent
     }: {
-        onProgress: OnProgress;
+        onProgress: ((payload: ProgressPayload) => void) | undefined;
         progressPolicy: string;
         backupElapsedSec: number | null;
         mvtStageStartedAt: number;
@@ -227,7 +225,7 @@ export function createIosMvtExecutionHelpers({
         outputDir,
         backupPath
     }: {
-        onProgress: OnProgress;
+        onProgress: ((payload: ProgressPayload) => void) | undefined;
         progressPolicy: string;
         backupElapsedSec: number | null;
         outputDir: string;

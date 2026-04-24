@@ -38,7 +38,7 @@ The following flows must keep working during cleanup:
 
 4. Normalize IPC contracts
    Acceptance:
-   - Main, preload, and renderer use `src/shared/ipcChannels.js`.
+   - Main, preload, and renderer use `src/shared/ipc/ipcChannels.js`.
    - New string literal channel names are not introduced.
 
 5. Retire dead paths

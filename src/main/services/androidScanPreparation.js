@@ -1,4 +1,4 @@
-export function createAndroidScanPreparationHelpers({ getEnabledAccessibilityPackages, getActiveDeviceAdminPackages, getDeviceInfo, getInstalledApps, findApkFiles, getNetworkUsageMap, getApkPermissionsOnly }) {
+function createAndroidScanPreparationHelpers({ getEnabledAccessibilityPackages, getActiveDeviceAdminPackages, getDeviceInfo, getInstalledApps, findApkFiles, getNetworkUsageMap, getApkPermissionsOnly }) {
     async function buildProcessedApks(serial, apkFiles) {
         return await Promise.all(apkFiles.map(async (apk) => {
             const perms = await getApkPermissionsOnly(serial, apk.apkPath);
@@ -36,3 +36,5 @@ export function createAndroidScanPreparationHelpers({ getEnabledAccessibilityPac
         prepareScanArtifacts
     };
 }
+
+module.exports = { createAndroidScanPreparationHelpers };
